@@ -1,0 +1,33 @@
+{
+    "activities": {
+        "15893279201": {
+            "expected_preserves": [
+                "Coal Creek",
+                "Long Ridge",
+                "Monte Bello",
+                "Saratoga Gap",
+                "Skyline Ridge",
+                "Windy Hill"
+            ],
+            "notes": "Long ride traversing multiple preserves"
+        },
+        "16804567307": {
+            "expected_preserves": [],
+            "notes": "Activity outside Midpen preserves"
+        },
+        "16906743520": {
+            "expected_preserves": [
+                "Foothills",
+                "Monte Bello",
+                "Picchetti Ranch"
+            ],
+            "notes": "Hike through Foothills area"
+        },
+        "17015064138": {
+            "expected_preserves": [
+                "Rancho San Antonio"
+            ],
+            "notes": "Trail at Rancho San Antonio"
+        }
+    }
+}

@@ -1,0 +1,20 @@
+/target
+
+# Local development secrets (never commit!)
+.env
+
+# Terraform
+infra/.terraform
+infra/.terraform.lock.hcl
+infra/*.tfstate*
+infra/terraform.tfvars
+
+# Node
+web/node_modules
+web/build
+web/.svelte-kit
+
+# Misc
+*~
+token
+__pycache__/

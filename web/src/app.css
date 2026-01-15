@@ -1,0 +1,85 @@
+:root {
+	--color-bg: #0a0f1a;
+	--color-surface: #141b2d;
+	--color-surface-hover: #1a2340;
+	--color-primary: #fc4c02;
+	/* Strava orange */
+	--color-primary-hover: #ff6b2d;
+	--color-text: #e8eaed;
+	--color-text-muted: #8b95a7;
+	--color-success: #10b981;
+	--color-border: #2a3650;
+	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+	--radius: 12px;
+	--radius-sm: 8px;
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	font-family: var(--font-sans);
+	background: linear-gradient(135deg, var(--color-bg) 0%, var(--color-surface) 100%);
+	background-attachment: fixed;
+	color: var(--color-text);
+	line-height: 1.6;
+}
+
+a {
+	color: var(--color-primary);
+	text-decoration: none;
+	transition: color 0.2s;
+}
+
+a:hover {
+	color: var(--color-primary-hover);
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.875rem 1.5rem;
+	border: none;
+	border-radius: var(--radius);
+	font-size: 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.btn-primary {
+	background: var(--color-primary);
+	color: white;
+}
+
+.btn-primary:hover {
+	background: var(--color-primary-hover);
+	transform: translateY(-2px);
+	box-shadow: 0 8px 24px rgba(252, 76, 2, 0.3);
+}
+
+.btn-secondary {
+	background: var(--color-surface);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+	background: var(--color-surface-hover);
+}
+
+.card {
+	background: var(--color-surface);
+	border-radius: var(--radius);
+	border: 1px solid var(--color-border);
+	padding: 1.5rem;
+}

@@ -1,0 +1,3 @@
+project_id       = "YOUR_PROJECT_ID"  # Replace with your GCP project
+region           = "us-west1"
+strava_client_id = "YOUR_STRAVA_CLIENT_ID"  # Replace with your Strava app client ID
