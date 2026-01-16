@@ -7,9 +7,15 @@ default:
 
 # ─── Configuration ────────────────────────────────────────────
 
-# GCP project ID (set in .env or override with: just --set project YOUR_PROJECT)
-project := env_var_or_default("GCP_PROJECT_ID", "")
+# GCP project ID (set in .env, override with: just --set project YOUR_PROJECT, or uses gcloud config)
+project := env_var_or_default("GCP_PROJECT_ID", `gcloud config get-value project 2>/dev/null || echo ""`)
 region := "us-west1"
+
+# Extract backend URL from web/.env (single source of truth)
+backend_url := `grep VITE_API_URL web/.env | cut -d= -f2`
+
+# Extract Strava client ID from terraform.tfvars (single source of truth)
+strava_client_id := `grep strava_client_id infra/terraform.tfvars | cut -d'"' -f2`
 
 # ─── Development ──────────────────────────────────────────────
 
@@ -114,14 +120,62 @@ generate-jwt-key:
 
 # ─── Strava Webhook ───────────────────────────────────────────
 
-# Register webhook with Strava (run after deploy)
-register-webhook url verify_token:
+# Register webhook with Strava (fetches secrets from Secret Manager)
+register-webhook:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    echo "Fetching secrets from Secret Manager..."
+    CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
+    VERIFY_TOKEN=$(gcloud secrets versions access latest --secret=WEBHOOK_VERIFY_TOKEN --project={{project}})
+    
+    echo "Registering webhook at {{backend_url}}/webhook"
     curl -X POST https://www.strava.com/api/v3/push_subscriptions \
-        -d client_id=$STRAVA_CLIENT_ID \
-        -d client_secret=$STRAVA_CLIENT_SECRET \
-        -d callback_url={{url}}/webhook \
-        -d verify_token={{verify_token}}
+        -d client_id={{strava_client_id}} \
+        -d client_secret=$CLIENT_SECRET \
+        -d callback_url={{backend_url}}/webhook \
+        -d verify_token=$VERIFY_TOKEN
+    echo ""
 
-# List current webhook subscriptions
+# Check webhook subscriptions and verify current backend is registered
+check-webhooks:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    echo "Fetching secrets..."
+    CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
+    
+    echo "Current backend: {{backend_url}}"
+    echo ""
+    echo "Fetching webhook subscriptions..."
+    
+    RESPONSE=$(curl -s "https://www.strava.com/api/v3/push_subscriptions?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET")
+    
+    # Pretty print webhooks using jq if available
+    if command -v jq &> /dev/null; then
+        echo "$RESPONSE" | jq -r '.[] | "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nID: \(.id)\nCallback: \(.callback_url)\nCreated: \(.created_at)\n"'
+    else
+        echo "$RESPONSE"
+    fi
+    
+    # Check if our backend is registered
+    EXPECTED_URL="{{backend_url}}/webhook"
+    if echo "$RESPONSE" | grep -q "$EXPECTED_URL"; then
+        echo "✅ Webhook for $EXPECTED_URL is registered"
+    else
+        echo "⚠️  Webhook for $EXPECTED_URL is NOT registered"
+        echo "Run: just register-webhook"
+    fi
+
+# List current webhook subscriptions (pretty-printed)
 list-webhooks:
-    curl "https://www.strava.com/api/v3/push_subscriptions?client_id=$STRAVA_CLIENT_ID&client_secret=$STRAVA_CLIENT_SECRET"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
+    
+    if command -v jq &> /dev/null; then
+        curl -s "https://www.strava.com/api/v3/push_subscriptions?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET" | jq .
+    else
+        curl -s "https://www.strava.com/api/v3/push_subscriptions?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET"
+    fi
