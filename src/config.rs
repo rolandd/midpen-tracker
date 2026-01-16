@@ -65,11 +65,13 @@ impl Config {
 
             // Secrets - from env for local dev, Secret Manager in prod
             strava_client_secret: env::var("STRAVA_CLIENT_SECRET")
+                .map(|v| v.trim().to_string())
                 .map_err(|_| ConfigError::Missing("STRAVA_CLIENT_SECRET"))?,
             jwt_signing_key: env::var("JWT_SIGNING_KEY")
                 .map_err(|_| ConfigError::Missing("JWT_SIGNING_KEY"))?
                 .into_bytes(),
             webhook_verify_token: env::var("WEBHOOK_VERIFY_TOKEN")
+                .map(|v| v.trim().to_string())
                 .map_err(|_| ConfigError::Missing("WEBHOOK_VERIFY_TOKEN"))?,
         })
     }
@@ -106,9 +108,9 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
-            strava_client_secret: client_secret,
+            strava_client_secret: client_secret.trim().to_string(),
             jwt_signing_key: jwt_key.into_bytes(),
-            webhook_verify_token: webhook_token,
+            webhook_verify_token: webhook_token.trim().to_string(),
         })
     }
 }
