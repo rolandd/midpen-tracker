@@ -1,43 +1,80 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isLoggedIn, fetchPreserveStats, logout as apiLogout, type PreserveSummary } from '$lib/api';
-	
+	import {
+		isLoggedIn,
+		fetchPreserveStats,
+		logout as apiLogout,
+		type PreserveSummary
+	} from '$lib/api';
+	import ActivityList from './ActivityList.svelte';
+
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let preserves = $state<PreserveSummary[]>([]);
-	let totalVisited = $state(0);
+	let allTimePreserves = $state<PreserveSummary[]>([]);
+	let preservesByYear = $state<Record<string, Record<string, number>>>({});
+	let availableYears = $state<string[]>([]);
+	let selectedYear = $state<string | null>(null); // null = "All Time"
 	let totalPreserves = $state(0);
 	let pendingActivities = $state(0);
 	let showUnvisited = $state(false);
 	let expandedPreserve = $state<string | null>(null);
-	
-	onMount(async () => {
+
+	// Computed: get preserves filtered by selected year
+	let preserves = $derived.by(() => {
+		if (!selectedYear) {
+			// All time
+			return allTimePreserves;
+		}
+		// Filter to selected year
+		const yearData = preservesByYear[selectedYear] || {};
+		const yearPreserves: PreserveSummary[] = Object.entries(yearData)
+			.map(([name, count]) => ({ name, count, activities: [] }))
+			.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+		if (showUnvisited) {
+			// Add unvisited preserves with count 0
+			const visitedNames = new Set(yearPreserves.map((p) => p.name));
+			const allNames = allTimePreserves.map((p) => p.name);
+			for (const name of allNames) {
+				if (!visitedNames.has(name)) {
+					yearPreserves.push({ name, count: 0, activities: [] });
+				}
+			}
+			yearPreserves.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+		}
+		return yearPreserves;
+	});
+
+	let totalVisited = $derived(preserves.filter((p) => p.count > 0).length);
+
+	onMount(() => {
 		if (!isLoggedIn()) {
-			await goto('/');
+			goto('/');
 			return;
 		}
-		
+
 		loadStats();
-		
+
 		// Auto-refresh while backfill is in progress
 		const interval = setInterval(() => {
 			if (pendingActivities > 0) {
 				loadStats();
 			}
-		}, 10000); // Refresh every 10 seconds
-		
+		}, 10000);
+
 		return () => clearInterval(interval);
 	});
-	
+
 	async function loadStats() {
-		loading = preserves.length === 0; // Only show spinner on initial load
+		loading = allTimePreserves.length === 0;
 		error = null;
-		
+
 		try {
 			const data = await fetchPreserveStats(showUnvisited);
-			preserves = data.preserves.sort((a, b) => b.count - a.count);
-			totalVisited = data.total_preserves_visited;
+			allTimePreserves = data.preserves.sort((a, b) => b.count - a.count);
+			preservesByYear = data.preserves_by_year;
+			availableYears = data.available_years;
 			totalPreserves = data.total_preserves;
 			pendingActivities = data.pending_activities;
 		} catch (e) {
@@ -46,16 +83,15 @@
 			loading = false;
 		}
 	}
-	
+
 	function togglePreserve(name: string) {
 		expandedPreserve = expandedPreserve === name ? null : name;
 	}
-	
+
 	async function toggleShowUnvisited() {
-		// showUnvisited is updated by bind:checked
 		await loadStats();
 	}
-	
+
 	async function handleLogout() {
 		await apiLogout();
 		await goto('/');
@@ -69,7 +105,7 @@
 			<button class="btn btn-secondary" onclick={handleLogout}>Log out</button>
 		</div>
 	</header>
-	
+
 	<main>
 		<div class="stats-header">
 			<div class="progress-card card">
@@ -77,13 +113,16 @@
 					<span class="progress-count">{totalVisited}</span>
 					<span class="progress-total">/ {totalPreserves}</span>
 				</div>
-				<p class="progress-label">Preserves Visited</p>
+				<p class="progress-label">Preserves Visited{selectedYear ? ` in ${selectedYear}` : ''}</p>
 				<div class="progress-bar">
-					<div class="progress-fill" style="width: {totalPreserves > 0 ? (totalVisited / totalPreserves) * 100 : 0}%"></div>
+					<div
+						class="progress-fill"
+						style="width: {totalPreserves > 0 ? (totalVisited / totalPreserves) * 100 : 0}%"
+					></div>
 				</div>
 			</div>
 		</div>
-		
+
 		{#if pendingActivities > 0}
 			<div class="processing-banner card">
 				<div class="processing-icon">⏳</div>
@@ -93,14 +132,34 @@
 				</div>
 			</div>
 		{/if}
-		
+
 		<div class="controls">
+			{#if availableYears.length > 0}
+				<div class="year-filter">
+					<button
+						class="year-pill"
+						class:active={selectedYear === null}
+						onclick={() => (selectedYear = null)}
+					>
+						All Time
+					</button>
+					{#each availableYears as year}
+						<button
+							class="year-pill"
+							class:active={selectedYear === year}
+							onclick={() => (selectedYear = year)}
+						>
+							{year}
+						</button>
+					{/each}
+				</div>
+			{/if}
 			<label class="toggle">
 				<input type="checkbox" bind:checked={showUnvisited} onchange={toggleShowUnvisited} />
 				<span>Show unvisited preserves</span>
 			</label>
 		</div>
-		
+
 		{#if loading}
 			<div class="loading">
 				<div class="spinner"></div>
@@ -110,36 +169,26 @@
 		{:else}
 			<div class="preserve-list">
 				{#each preserves as preserve (preserve.name)}
-					<div 
-						class="preserve-card card" 
+					<div
+						class="preserve-card card"
 						class:unvisited={preserve.count === 0}
 						role="button"
 						tabindex="0"
 						onclick={() => togglePreserve(preserve.name)}
-						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePreserve(preserve.name); } }}
+						onkeydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								togglePreserve(preserve.name);
+							}
+						}}
 					>
 						<div class="preserve-header">
 							<span class="preserve-name">{preserve.name}</span>
 							<span class="preserve-count">{preserve.count}</span>
 						</div>
-						
-						{#if expandedPreserve === preserve.name && preserve.activities.length > 0}
-							<div class="activity-list">
-								{#each preserve.activities as activity (activity.id)}
-									<a 
-										href="https://www.strava.com/activities/{activity.id}" 
-										target="_blank"
-										rel="noopener"
-										class="activity"
-										onclick={(e) => e.stopPropagation()}
-									>
-										<span class="activity-date">{activity.date}</span>
-										<span class="activity-type">{activity.sport_type}</span>
-										<span class="activity-name">{activity.name}</span>
-										<span class="activity-link">↗</span>
-									</a>
-								{/each}
-							</div>
+
+						{#if expandedPreserve === preserve.name}
+							<ActivityList preserveName={preserve.name} />
 						{/if}
 					</div>
 				{/each}
@@ -152,7 +201,7 @@
 	.dashboard {
 		min-height: 100vh;
 	}
-	
+
 	header {
 		background: var(--color-surface);
 		border-bottom: 1px solid var(--color-border);
@@ -161,7 +210,7 @@
 		top: 0;
 		z-index: 10;
 	}
-	
+
 	.header-content {
 		max-width: 800px;
 		margin: 0 auto;
@@ -169,50 +218,50 @@
 		justify-content: space-between;
 		align-items: center;
 	}
-	
+
 	h1 {
 		font-size: 1.25rem;
 		font-weight: 600;
 	}
-	
+
 	main {
 		max-width: 800px;
 		margin: 0 auto;
 		padding: 1.5rem;
 	}
-	
+
 	.progress-card {
 		text-align: center;
 		margin-bottom: 1.5rem;
 	}
-	
+
 	.progress-text {
 		margin-bottom: 0.25rem;
 	}
-	
+
 	.progress-count {
 		font-size: 3rem;
 		font-weight: 700;
 		color: var(--color-primary);
 	}
-	
+
 	.progress-total {
 		font-size: 1.5rem;
 		color: var(--color-text-muted);
 	}
-	
+
 	.progress-label {
 		color: var(--color-text-muted);
 		margin-bottom: 1rem;
 	}
-	
+
 	.progress-bar {
 		height: 8px;
 		background: var(--color-border);
 		border-radius: 4px;
 		overflow: hidden;
 	}
-	
+
 	.progress-fill {
 		height: 100%;
 		background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
@@ -250,17 +299,55 @@
 		color: var(--color-text-muted);
 		font-size: 0.875rem;
 	}
-	
+
 	@keyframes pulse {
-		0% { box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0.1); }
-		70% { box-shadow: 0 0 0 10px rgba(var(--color-primary-rgb), 0); }
-		100% { box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0); }
+		0% {
+			box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0.1);
+		}
+		70% {
+			box-shadow: 0 0 0 10px rgba(var(--color-primary-rgb), 0);
+		}
+		100% {
+			box-shadow: 0 0 0 0 rgba(var(--color-primary-rgb), 0);
+		}
 	}
-	
+
 	.controls {
-		margin-bottom: 1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		margin-bottom: 1.5rem;
 	}
-	
+
+	.year-filter {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.year-pill {
+		padding: 0.5rem 1rem;
+		border-radius: 999px;
+		border: 1px solid var(--color-border);
+		background: var(--color-surface);
+		color: var(--color-text-muted);
+		font-size: 0.875rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.year-pill:hover {
+		border-color: var(--color-primary);
+		color: var(--color-text);
+	}
+
+	.year-pill.active {
+		background: var(--color-primary);
+		border-color: var(--color-primary);
+		color: white;
+	}
+
 	.toggle {
 		display: flex;
 		align-items: center;
@@ -269,40 +356,40 @@
 		color: var(--color-text-muted);
 		font-size: 0.875rem;
 	}
-	
+
 	.toggle input {
 		accent-color: var(--color-primary);
 	}
-	
+
 	.preserve-list {
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
 	}
-	
+
 	.preserve-card {
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	
+
 	.preserve-card:hover {
 		background: var(--color-surface-hover);
 	}
-	
+
 	.preserve-card.unvisited {
 		opacity: 0.5;
 	}
-	
+
 	.preserve-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
 	}
-	
+
 	.preserve-name {
 		font-weight: 500;
 	}
-	
+
 	.preserve-count {
 		background: var(--color-bg);
 		padding: 0.25rem 0.75rem;
@@ -310,46 +397,14 @@
 		font-size: 0.875rem;
 		font-weight: 600;
 	}
-	
-	.activity-list {
-		margin-top: 1rem;
-		border-top: 1px solid var(--color-border);
-		padding-top: 1rem;
-	}
-	
-	.activity {
-		display: grid;
-		grid-template-columns: auto auto 1fr auto;
-		gap: 1rem;
-		padding: 0.5rem;
-		border-radius: var(--radius-sm);
-		color: var(--color-text);
-		text-decoration: none;
-		font-size: 0.875rem;
-	}
-	
-	.activity:hover {
-		background: var(--color-bg);
-	}
-	
-	.activity-date {
-		color: var(--color-text-muted);
-	}
-	
-	.activity-type {
-		color: var(--color-primary);
-		font-weight: 500;
-	}
-	
-	.activity-link {
-		color: var(--color-text-muted);
-	}
-	
+
+	/* Activity styles moved to ActivityList.svelte */
+
 	.loading {
 		text-align: center;
 		padding: 3rem;
 	}
-	
+
 	.spinner {
 		width: 32px;
 		height: 32px;
@@ -359,11 +414,13 @@
 		animation: spin 1s linear infinite;
 		margin: 0 auto;
 	}
-	
+
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
-	
+
 	.error {
 		color: #ef4444;
 		text-align: center;

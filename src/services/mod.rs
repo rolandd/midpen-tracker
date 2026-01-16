@@ -9,4 +9,5 @@ pub mod tasks;
 pub use activity::ActivityProcessor;
 pub use kms::KmsService;
 pub use preserve::PreserveService;
+pub use strava::{OAuthResult, StravaService};
 pub use tasks::TasksService;

@@ -38,6 +38,8 @@ pub struct ActivityPreserve {
     pub preserve_name: String,
     /// Activity start date (for sorting)
     pub start_date: String,
+    /// Activity name
+    pub activity_name: String,
     /// Sport type
     pub sport_type: String,
 }

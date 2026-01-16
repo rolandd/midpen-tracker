@@ -9,30 +9,22 @@
 
 use crate::db::FirestoreDb;
 use crate::error::{AppError, Result};
-use crate::models::Activity;
-use crate::services::strava::StravaClient;
-use crate::services::{KmsService, PreserveService};
+use crate::models::{Activity, ActivityPreserve};
+use crate::services::{PreserveService, StravaService};
 
 /// Process an activity and detect preserve intersections.
 pub struct ActivityProcessor {
-    strava: StravaClient,
+    strava: StravaService,
     preserves: PreserveService,
     db: FirestoreDb,
-    kms: KmsService,
 }
 
 impl ActivityProcessor {
-    pub fn new(
-        strava: StravaClient,
-        preserves: PreserveService,
-        db: FirestoreDb,
-        kms: KmsService,
-    ) -> Self {
+    pub fn new(strava: StravaService, preserves: PreserveService, db: FirestoreDb) -> Self {
         Self {
             strava,
             preserves,
             db,
-            kms,
         }
     }
 
@@ -50,58 +42,10 @@ impl ActivityProcessor {
     ) -> Result<ProcessResult> {
         tracing::info!(athlete_id, activity_id, source, "Processing activity");
 
-        // 1. Get user tokens
-        let tokens = self
-            .db
-            .get_tokens(athlete_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
+        // 1. Fetch activity from Strava (token management is handled by StravaService)
+        let strava_activity = self.strava.get_activity(athlete_id, activity_id).await?;
 
-        // 2. Decrypt tokens
-        let (mut access_token, refresh_token) = crate::services::kms::decrypt_tokens(
-            &self.kms,
-            &tokens.access_token_encrypted,
-            &tokens.refresh_token_encrypted,
-        )
-        .await?;
-
-        // Check if token is expired (or close to expiring)
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&tokens.expires_at)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
-            .with_timezone(&chrono::Utc);
-
-        // Refresh if expiring within 5 minutes
-        if chrono::Utc::now() + chrono::Duration::minutes(5) >= expires_at {
-            tracing::info!(athlete_id, "Access token expired, refreshing");
-
-            let new_tokens = self.strava.refresh_token(&refresh_token).await?;
-
-            // Re-encrypt new tokens
-            let (new_enc_access, new_enc_refresh) = crate::services::kms::encrypt_tokens(
-                &self.kms,
-                &new_tokens.access_token,
-                &new_tokens.refresh_token,
-            )
-            .await?;
-
-            // Update in DB
-            let mut updated_tokens = tokens.clone();
-            updated_tokens.access_token_encrypted = new_enc_access;
-            updated_tokens.refresh_token_encrypted = new_enc_refresh;
-            updated_tokens.expires_at = chrono::DateTime::from_timestamp(new_tokens.expires_at, 0)
-                .unwrap_or_default()
-                .to_rfc3339();
-
-            self.db.set_tokens(athlete_id, &updated_tokens).await?;
-
-            // Use new token for request
-            access_token = new_tokens.access_token;
-        }
-
-        // 3. Fetch activity from Strava
-        let strava_activity = self.strava.get_activity(&access_token, activity_id).await?;
-
-        // 4. Get polyline and detect preserves
+        // 2. Get polyline and detect preserves
         let polyline = strava_activity
             .get_polyline()
             .ok_or_else(|| AppError::BadRequest("Activity has no polyline".to_string()))?;
@@ -117,7 +61,7 @@ impl ActivityProcessor {
             "Detected preserves"
         );
 
-        // 5. Build annotation if any preserves
+        // 3. Build annotation if any preserves (webhooks only)
         let annotation_added = if !preserves_visited.is_empty() && source == "webhook" {
             let annotation = build_annotation(&preserves_visited);
             let new_description =
@@ -125,14 +69,14 @@ impl ActivityProcessor {
 
             // Update activity description on Strava
             self.strava
-                .update_activity_description(&access_token, activity_id, &new_description)
+                .update_activity_description(athlete_id, activity_id, &new_description)
                 .await?;
             true
         } else {
             false
         };
 
-        // 6. Store activity and update stats
+        // 4. Store activity and update stats
         let now = chrono_now_iso();
         let activity = Activity {
             strava_activity_id: activity_id,
@@ -150,7 +94,33 @@ impl ActivityProcessor {
         // Store activity
         self.db.set_activity(&activity).await?;
 
-        // 7. Update user stats aggregate (idempotent)
+        // 4b. Store activity-preserve join records
+        if !activity.preserves_visited.is_empty() {
+            let join_records: Vec<ActivityPreserve> = activity
+                .preserves_visited
+                .iter()
+                .map(|p_name| ActivityPreserve {
+                    athlete_id,
+                    activity_id,
+                    preserve_name: p_name.clone(),
+                    start_date: activity.start_date.clone(),
+                    activity_name: activity.name.clone(),
+                    sport_type: activity.sport_type.clone(),
+                })
+                .collect();
+
+            if let Err(e) = self.db.batch_set_activity_preserves(&join_records).await {
+                tracing::error!(
+                    athlete_id,
+                    activity_id,
+                    error = %e,
+                    "Failed to store activity-preserve records"
+                );
+                // Non-fatal, but search won't work for this activity
+            }
+        }
+
+        // 5. Update user stats aggregate (idempotent)
         let mut stats = self
             .db
             .get_user_stats(athlete_id)

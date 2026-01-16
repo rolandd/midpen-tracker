@@ -4,7 +4,7 @@
 //! the intersection logic produces correct results.
 
 use midpen_strava::services::PreserveService;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -25,6 +25,7 @@ struct ActivityExpected {
 /// Simple activity structure for loading fixtures.
 #[derive(Debug, Deserialize)]
 struct FixtureActivity {
+    #[allow(dead_code)]
     id: u64,
     map: FixtureMap,
 }

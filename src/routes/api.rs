@@ -3,6 +3,7 @@
 use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::models::preserve::PreserveSummary;
+use crate::models::ActivityPreserve;
 use crate::AppState;
 use axum::{
     extract::{Query, State},
@@ -86,7 +87,7 @@ struct ActivitiesResponse {
     total: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug)]
 struct ActivitySummary {
     id: u64,
     name: String,
@@ -97,7 +98,7 @@ struct ActivitySummary {
 
 /// Get user's activities with optional filtering.
 async fn get_activities(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
     Query(params): Query<ActivitiesQuery>,
 ) -> Result<Json<ActivitiesResponse>> {
@@ -109,12 +110,44 @@ async fn get_activities(
         "Fetching activities"
     );
 
-    // TODO: Query Firestore for user's activities
+    let activities = if let Some(preserve_name) = params.preserve {
+        // Query by preserve using the join collection
+        let results: Vec<ActivityPreserve> = state
+            .db
+            .get_activities_for_preserve(user.athlete_id, &preserve_name)
+            .await?;
+
+        // Map to summaries
+        let summaries: Vec<ActivitySummary> = results
+            .into_iter()
+            .map(|r| ActivitySummary {
+                id: r.activity_id,
+                name: r.activity_name,
+                sport_type: r.sport_type,
+                start_date: r.start_date,
+                preserves: vec![r.preserve_name],
+            })
+            .collect();
+
+        // Pagination (simple in-memory for now since these lists are small per preserve)
+        let start = ((params.page - 1) * params.per_page) as usize;
+        if start < summaries.len() {
+            let end = (start + params.per_page as usize).min(summaries.len());
+            summaries[start..end].to_vec()
+        } else {
+            vec![]
+        }
+    } else {
+        // Fallback for "all activities" (not implemented yet)
+        // TODO: Query Firestore for user's activities
+        vec![]
+    };
+
     Ok(Json(ActivitiesResponse {
-        activities: vec![],
+        total: activities.len() as u32, // Approximation for now
+        activities,
         page: params.page,
         per_page: params.per_page,
-        total: 0,
     }))
 }
 
@@ -130,16 +163,22 @@ struct PreserveStatsQuery {
 /// Preserve stats response.
 #[derive(Serialize)]
 struct PreserveStatsResponse {
+    /// All-time preserve visit counts
     preserves: Vec<PreserveSummary>,
+    /// Preserve visits broken down by year: { "2025": { "Rancho": 5 } }
+    preserves_by_year: std::collections::HashMap<String, std::collections::HashMap<String, u32>>,
     total_preserves_visited: u32,
     total_preserves: u32,
     /// Number of activities still being processed in backfill
     pending_activities: u32,
+    /// Available years for filtering (sorted descending)
+    available_years: Vec<String>,
 }
 
 /// Get preserve visit stats for current user.
 ///
 /// Uses pre-computed aggregates from `user_stats` collection (1 read).
+/// Returns both all-time and per-year preserve counts for frontend filtering.
 async fn get_preserve_stats(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -162,9 +201,12 @@ async fn get_preserve_stats(
         .await?
         .unwrap_or_default();
 
-    // Build preserve summaries from aggregate data
+    // Get available years (sorted descending - most recent first)
+    let mut available_years: Vec<String> = stats.preserves_by_year.keys().cloned().collect();
+    available_years.sort_by(|a, b| b.cmp(a));
+
+    // Build all-time preserve summaries
     let mut preserves: Vec<PreserveSummary> = if params.show_unvisited {
-        // Include all preserves, with counts from stats
         all_preserves
             .iter()
             .map(|p| {
@@ -172,12 +214,11 @@ async fn get_preserve_stats(
                 PreserveSummary {
                     name: p.name.clone(),
                     count,
-                    activities: vec![], // Would require separate query for details
+                    activities: vec![],
                 }
             })
             .collect()
     } else {
-        // Only visited preserves
         stats
             .preserves
             .iter()
@@ -189,15 +230,15 @@ async fn get_preserve_stats(
             .collect()
     };
 
-    // Sort by count descending, then by name
     preserves.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
-
     let visited_count = preserves.iter().filter(|p| p.count > 0).count() as u32;
 
     Ok(Json(PreserveStatsResponse {
         preserves,
+        preserves_by_year: stats.preserves_by_year,
         total_preserves_visited: visited_count,
         total_preserves,
         pending_activities: stats.pending_activities,
+        available_years,
     }))
 }

@@ -3,18 +3,18 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { setToken } from '$lib/api';
-	
+
 	let error = $state<string | null>(null);
-	
+
 	onMount(async () => {
 		const token = $page.url.searchParams.get('token');
 		const errorParam = $page.url.searchParams.get('error');
-		
+
 		if (errorParam) {
 			error = errorParam;
 			return;
 		}
-		
+
 		if (token) {
 			setToken(token);
 			await goto('/dashboard');
@@ -47,11 +47,11 @@
 		justify-content: center;
 		padding: 2rem;
 	}
-	
+
 	.loading {
 		text-align: center;
 	}
-	
+
 	.spinner {
 		width: 48px;
 		height: 48px;
@@ -61,21 +61,23 @@
 		animation: spin 1s linear infinite;
 		margin: 0 auto 1rem;
 	}
-	
+
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
-	
+
 	.error-card {
 		text-align: center;
 		max-width: 400px;
 	}
-	
+
 	.error-card h2 {
 		margin-bottom: 1rem;
 		color: #ef4444;
 	}
-	
+
 	.error-card p {
 		margin-bottom: 1.5rem;
 		color: var(--color-text-muted);

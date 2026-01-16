@@ -3,10 +3,11 @@
 //! These endpoints are called by Cloud Tasks, not directly by users.
 //! They should be protected by OIDC token verification in production.
 
+use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
 use crate::services::kms::KmsService;
-use crate::services::strava::StravaClient;
+use crate::services::strava::StravaService;
 use crate::services::tasks::{ContinueBackfillPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
@@ -24,6 +25,25 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tasks/continue-backfill", post(continue_backfill))
 }
 
+/// Create a StravaService from app state.
+/// Helper to avoid duplicating the KMS initialization logic.
+async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
+    let kms = KmsService::new(
+        &state.config.gcp_project_id,
+        "us-west1",
+        "midpen-strava",
+        "token-encryption",
+    )
+    .await?;
+
+    Ok(StravaService::new(
+        state.config.strava_client_id.clone(),
+        state.config.strava_client_secret.clone(),
+        state.db.clone(),
+        kms,
+    ))
+}
+
 /// Process a single activity (called by Cloud Tasks).
 async fn process_activity(
     State(state): State<Arc<AppState>>,
@@ -36,35 +56,18 @@ async fn process_activity(
         "Processing activity from Cloud Task"
     );
 
-    // Create dependencies for activity processor
-    let strava = StravaClient::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-    );
-
-    // Create KMS service for token decryption
-    let kms = match KmsService::new(
-        &state.config.gcp_project_id,
-        "us-west1",
-        "midpen-strava",
-        "token-encryption",
-    )
-    .await
-    {
-        Ok(k) => k,
+    // Create StravaService
+    let strava = match create_strava_service(&state).await {
+        Ok(s) => s,
         Err(e) => {
-            tracing::error!(error = %e, "Failed to initialize KMS service");
+            tracing::error!(error = %e, "Failed to create StravaService");
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
     };
 
     // Create activity processor
-    let processor = ActivityProcessor::new(
-        strava,
-        state.preserve_service.clone(),
-        state.db.clone(),
-        kms,
-    );
+    let processor =
+        ActivityProcessor::new(strava, state.preserve_service.clone(), state.db.clone());
 
     // Process the activity
     match processor
@@ -110,60 +113,20 @@ async fn continue_backfill(
         "Continuing backfill from Cloud Task"
     );
 
-    // Get user tokens
-    let tokens = match state.db.get_tokens(payload.athlete_id).await {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            tracing::error!(athlete_id = payload.athlete_id, "No tokens for backfill");
-            return StatusCode::OK; // Don't retry - user may have disconnected
-        }
+    // Create StravaService (handles token refresh automatically)
+    let strava = match create_strava_service(&state).await {
+        Ok(s) => s,
         Err(e) => {
-            tracing::error!(error = %e, "Failed to get tokens for backfill");
+            tracing::error!(error = %e, "Failed to create StravaService");
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
     };
 
-    // Initialize KMS service
-    let kms = match KmsService::new(
-        &state.config.gcp_project_id,
-        "us-west1",
-        "midpen-strava",
-        "token-encryption",
-    )
-    .await
-    {
-        Ok(k) => k,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to initialize KMS");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
-
-    // Decrypt access token
-    let access_token = match kms.decrypt(&tokens.access_token_encrypted).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to decrypt access token");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
-
-    // Note: We should ideally check expiration and refresh here as well,
-    // but for immediate backfill after login, the token is likely valid.
-    // Full refresh logic requires re-encrypting and saving the new tokens,
-    // which adds complexity. If backfill takes >6 hours, this might fail,
-    // requiring a more robust "TokenService". For now, we proceed with decrypted token.
-
-    let strava = StravaClient::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-    );
-
-    // Fetch next page of activities
+    // Fetch next page of activities (token refresh is handled by StravaService)
     let per_page = 100u32;
     let activities = match strava
         .list_activities(
-            &access_token,
+            payload.athlete_id,
             payload.after_timestamp,
             payload.next_page,
             per_page,
@@ -171,6 +134,11 @@ async fn continue_backfill(
         .await
     {
         Ok(a) => a,
+        Err(AppError::NotFound(_)) => {
+            // User may have disconnected - don't retry
+            tracing::error!(athlete_id = payload.athlete_id, "No tokens for backfill");
+            return StatusCode::OK;
+        }
         Err(e) => {
             tracing::error!(error = %e, "Failed to fetch activities from Strava for backfill");
             return StatusCode::INTERNAL_SERVER_ERROR;

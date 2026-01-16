@@ -9,7 +9,7 @@
 use crate::db::collections;
 use crate::error::AppError;
 use crate::models::user::UserTokens;
-use crate::models::{Activity, User};
+use crate::models::{Activity, ActivityPreserve, User};
 
 /// Firestore database client.
 ///
@@ -249,6 +249,84 @@ impl FirestoreDb {
         _athlete_id: u64,
     ) -> Result<(), AppError> {
         tracing::debug!(activity_id, "Stub: delete_activity");
+        Ok(())
+    }
+
+    // ─── Activity-Preserve Join Operations ───────────────────────
+
+    /// Get all activities for a specific preserve and user.
+    #[cfg(feature = "gcp")]
+    pub async fn get_activities_for_preserve(
+        &self,
+        athlete_id: u64,
+        preserve_name: &str,
+    ) -> Result<Vec<ActivityPreserve>, AppError> {
+        self.client
+            .fluent()
+            .select()
+            .from(collections::ACTIVITY_PRESERVES)
+            .filter(|q| {
+                q.for_all([
+                    q.field("athlete_id").eq(athlete_id),
+                    q.field("preserve_name").eq(preserve_name),
+                ])
+            })
+            // Sort by date descending
+            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)])
+            .obj()
+            .query()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))
+    }
+
+    #[cfg(not(feature = "gcp"))]
+    pub async fn get_activities_for_preserve(
+        &self,
+        athlete_id: u64,
+        preserve_name: &str,
+    ) -> Result<Vec<ActivityPreserve>, AppError> {
+        tracing::debug!(
+            athlete_id,
+            preserve_name,
+            "Stub: get_activities_for_preserve"
+        );
+        Ok(vec![])
+    }
+
+    /// Store multiple activity-preserve records.
+    ///
+    /// Uses sequential writes since the firestore crate's batch API requires specific setup.
+    /// For small numbers of preserves per activity (typically 1-3), this is acceptable.
+    #[cfg(feature = "gcp")]
+    pub async fn batch_set_activity_preserves(
+        &self,
+        records: &[ActivityPreserve],
+    ) -> Result<(), AppError> {
+        for record in records {
+            // Document ID: combine activity_id and preserve_name to ensure uniqueness
+            let safe_name = urlencoding::encode(&record.preserve_name);
+            let doc_id = format!("{}_{}", record.activity_id, safe_name);
+
+            let _: () = self
+                .client
+                .fluent()
+                .update()
+                .in_col(collections::ACTIVITY_PRESERVES)
+                .document_id(&doc_id)
+                .object(record)
+                .execute()
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    #[cfg(not(feature = "gcp"))]
+    pub async fn batch_set_activity_preserves(
+        &self,
+        _records: &[ActivityPreserve],
+    ) -> Result<(), AppError> {
+        tracing::debug!("Stub: batch_set_activity_preserves");
         Ok(())
     }
 

@@ -12,6 +12,8 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AppError, Result};
+use crate::services::kms::KmsService;
+use crate::services::strava::StravaService;
 use crate::AppState;
 
 pub fn routes() -> Router<Arc<AppState>> {
@@ -128,23 +130,6 @@ pub struct CallbackParams {
     error: Option<String>,
 }
 
-/// Strava's token exchange response.
-#[derive(Deserialize, Debug)]
-struct StravaTokenResponse {
-    access_token: String,
-    refresh_token: String,
-    expires_at: i64,
-    athlete: StravaAthlete,
-}
-
-#[derive(Deserialize, Debug)]
-struct StravaAthlete {
-    id: u64,
-    firstname: String,
-    lastname: String,
-    profile: Option<String>,
-}
-
 /// OAuth callback - exchange code for tokens, create session.
 async fn auth_callback(
     State(state): State<Arc<AppState>>,
@@ -163,6 +148,7 @@ async fn auth_callback(
         "https"
     };
     let service_url = format!("{}://{}", scheme, host);
+
     // Decode frontend URL from state parameter
     let frontend_url =
         decode_state_frontend(&params.state).unwrap_or_else(|| state.config.frontend_url.clone());
@@ -176,42 +162,8 @@ async fn auth_callback(
 
     tracing::info!("Exchanging authorization code for tokens");
 
-    // Exchange authorization code for access token
-    let token_response = exchange_code_for_tokens(
-        &params.code,
-        &state.config.strava_client_id,
-        &state.config.strava_client_secret,
-    )
-    .await?;
-
-    let athlete_id = token_response.athlete.id;
-
-    tracing::info!(
-        athlete_id = athlete_id,
-        firstname = %token_response.athlete.firstname,
-        "OAuth successful, storing user and tokens"
-    );
-
-    // Get current timestamp
-    let now = chrono::Utc::now().to_rfc3339();
-
-    // Store user profile in Firestore
-    let user = crate::models::User {
-        strava_athlete_id: athlete_id,
-        email: None,
-        firstname: token_response.athlete.firstname.clone(),
-        lastname: token_response.athlete.lastname.clone(),
-        profile_picture: token_response.athlete.profile.clone(),
-        created_at: now.clone(),
-        last_active: now.clone(),
-    };
-
-    if let Err(e) = state.db.upsert_user(&user).await {
-        tracing::warn!(error = %e, "Failed to store user profile, continuing anyway");
-    }
-
-    // Create KMS service
-    let kms = crate::services::kms::KmsService::new(
+    // Create StravaService for OAuth handling
+    let kms = KmsService::new(
         &state.config.gcp_project_id,
         "us-west1",
         "midpen-strava",
@@ -223,42 +175,27 @@ async fn auth_callback(
         e
     })?;
 
-    // Store encrypted tokens in Firestore
-    let expires_at = chrono::DateTime::<chrono::Utc>::from_timestamp(token_response.expires_at, 0)
-        .map(|dt| dt.to_rfc3339())
-        .unwrap_or_else(|| now.clone());
+    let strava_service = StravaService::new(
+        state.config.strava_client_id.clone(),
+        state.config.strava_client_secret.clone(),
+        state.db.clone(),
+        kms,
+    );
 
-    // Encrypt tokens
-    let (enc_access, enc_refresh) = crate::services::kms::encrypt_tokens(
-        &kms,
-        &token_response.access_token,
-        &token_response.refresh_token,
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Token encryption failed");
-        e
-    })?;
+    // Handle OAuth callback: exchange code, store user and tokens
+    let oauth_result = strava_service.handle_oauth_callback(&params.code).await?;
 
-    let tokens = crate::models::UserTokens {
-        access_token_encrypted: enc_access,
-        refresh_token_encrypted: enc_refresh,
-        expires_at,
-        scopes: vec![
-            "activity:read_all".to_string(),
-            "activity:write".to_string(),
-        ],
-    };
+    tracing::info!(
+        athlete_id = oauth_result.athlete_id,
+        firstname = %oauth_result.firstname,
+        "OAuth successful, user and tokens stored"
+    );
 
-    if let Err(e) = state.db.set_tokens(athlete_id, &tokens).await {
-        tracing::warn!(error = %e, "Failed to store tokens, continuing anyway");
-    }
-
-    // Queue backfill for activities since 2025-01-01
+    // Trigger backfill for activities since 2025-01-01
     let backfill_result = trigger_backfill(
         &state,
-        athlete_id,
-        &token_response.access_token,
+        &strava_service,
+        oauth_result.athlete_id,
         &service_url,
     )
     .await;
@@ -268,7 +205,7 @@ async fn auth_callback(
     }
 
     // Create JWT session token
-    let jwt = create_jwt(athlete_id, &state.config.jwt_signing_key)
+    let jwt = create_jwt(oauth_result.athlete_id, &state.config.jwt_signing_key)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("JWT creation failed: {}", e)))?;
 
     // Redirect to frontend with token
@@ -282,12 +219,11 @@ async fn auth_callback(
 /// for subsequent pages to spread Strava API calls over time.
 async fn trigger_backfill(
     state: &Arc<AppState>,
+    strava: &StravaService,
     athlete_id: u64,
-    access_token: &str,
     service_url: &str,
 ) -> Result<()> {
     use crate::models::UserStats;
-    use crate::services::strava::StravaClient;
     use crate::services::tasks::ContinueBackfillPayload;
 
     // Backfill activities since 2025-01-01
@@ -298,15 +234,10 @@ async fn trigger_backfill(
         .and_utc()
         .timestamp();
 
-    let strava = StravaClient::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-    );
-
     // Fetch ONLY the first page at login (100 activities max)
     let per_page = 100u32;
     let activities = strava
-        .list_activities(access_token, after_timestamp, 1, per_page)
+        .list_activities(athlete_id, after_timestamp, 1, per_page)
         .await?;
 
     if activities.is_empty() {
@@ -354,7 +285,6 @@ async fn trigger_backfill(
             tracing::warn!(error = %e, "Failed to update pending activities count");
         }
 
-        // Queue only the new activities
         // Queue only the new activities
         if let Err(e) = state
             .tasks_service
@@ -406,42 +336,6 @@ fn decode_state_frontend(state: &str) -> Option<String> {
     // Format is "frontend_url|timestamp_hex"
     let parts: Vec<&str> = state_str.splitn(2, '|').collect();
     parts.first().map(|s| s.to_string())
-}
-
-/// Exchange authorization code for access and refresh tokens.
-async fn exchange_code_for_tokens(
-    code: &str,
-    client_id: &str,
-    client_secret: &str,
-) -> Result<StravaTokenResponse> {
-    let client = reqwest::Client::new();
-
-    let response = client
-        .post("https://www.strava.com/oauth/token")
-        .form(&[
-            ("client_id", client_id),
-            ("client_secret", client_secret),
-            ("code", code),
-            ("grant_type", "authorization_code"),
-        ])
-        .send()
-        .await
-        .map_err(|e| AppError::StravaApi(format!("Strava token exchange failed: {}", e)))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        tracing::error!(status = %status, body = %body, "Strava token exchange failed");
-        return Err(AppError::StravaApi(format!(
-            "Strava token exchange failed with status {}",
-            status
-        )));
-    }
-
-    response
-        .json()
-        .await
-        .map_err(|e| AppError::StravaApi(format!("Failed to parse Strava response: {}", e)))
 }
 
 /// Logout - just a placeholder that clears client-side token.

@@ -21,7 +21,8 @@ fn test_preserve_service_loads() {
 
     // Should have loaded multiple preserves
     assert!(count > 0, "Should load at least one preserve");
-    assert!(count >= 20, "Expected ~26 preserves, got {}", count);
+    // We expect exactly 25 preserves (28 total - 3 closed/null-url)
+    assert_eq!(count, 25, "Expected exactly 25 preserves, got {}", count);
 
     // Spot check some expected preserve names
     let names: Vec<&str> = service
@@ -41,6 +42,16 @@ fn test_preserve_service_loads() {
         names.iter().any(|n| n.contains("Windy")),
         "Should have Windy Hill preserve"
     );
+
+    // Verify closed preserves are NOT present
+    let closed_preserves = ["Felton Station", "Miramontes Ridge", "Tunitas Creek"];
+    for closed in closed_preserves {
+        assert!(
+            !names.iter().any(|n| *n == closed),
+            "Should NOT have closed preserve: {}",
+            closed
+        );
+    }
 }
 
 #[test]

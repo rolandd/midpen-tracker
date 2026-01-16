@@ -19,7 +19,7 @@ async fn create_test_app() -> axum::Router {
     let config = Config::default();
     let db = FirestoreDb::new(&config.gcp_project_id).await.unwrap();
     let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id, "http://localhost:8080");
+    let tasks_service = TasksService::new(&config.gcp_project_id);
 
     let state = Arc::new(AppState {
         config,

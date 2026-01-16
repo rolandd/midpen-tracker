@@ -50,6 +50,11 @@ pub struct UserStats {
     #[serde(default)]
     pub activities_by_year: HashMap<String, u32>,
 
+    // ─── Preserves by Year ───────────────────────────────────────
+    /// Visit count per preserve per year: { "2025": { "Rancho": 5 } }
+    #[serde(default)]
+    pub preserves_by_year: HashMap<String, HashMap<String, u32>>,
+
     // ─── Idempotency ─────────────────────────────────────────────
     /// Set of processed activity IDs (for duplicate detection)
     #[serde(default)]
@@ -78,6 +83,7 @@ impl Default for UserStats {
             distance_by_sport: HashMap::new(),
             activities_by_month: HashMap::new(),
             activities_by_year: HashMap::new(),
+            preserves_by_year: HashMap::new(),
             processed_activity_ids: HashSet::new(),
             pending_activities: 0,
             updated_at: String::new(),
@@ -137,7 +143,13 @@ impl UserStats {
             *self.activities_by_month.entry(month_key).or_insert(0) += 1;
         }
         if let Some(year_key) = extract_year_key(&activity.start_date) {
-            *self.activities_by_year.entry(year_key).or_insert(0) += 1;
+            *self.activities_by_year.entry(year_key.clone()).or_insert(0) += 1;
+
+            // Update preserves_by_year for year-filtered queries
+            let year_preserves = self.preserves_by_year.entry(year_key).or_default();
+            for preserve_name in &activity.preserves_visited {
+                *year_preserves.entry(preserve_name.clone()).or_insert(0) += 1;
+            }
         }
 
         true
@@ -259,5 +271,46 @@ mod tests {
             Some(&"2024-01-20T10:00:00Z".to_string())
         );
         assert_eq!(stats.preserves.get("Rancho"), Some(&2));
+    }
+
+    #[test]
+    fn test_preserves_by_year() {
+        let mut stats = UserStats::default();
+
+        // Activities in different years
+        let activity_2024 = make_activity(
+            1,
+            "Ride",
+            "2024-06-15T10:00:00Z",
+            5000.0,
+            vec!["Rancho", "Fremont"],
+        );
+        let activity_2025 = make_activity(2, "Run", "2025-01-10T10:00:00Z", 3000.0, vec!["Rancho"]);
+        let activity_2025b = make_activity(
+            3,
+            "Hike",
+            "2025-03-20T10:00:00Z",
+            2000.0,
+            vec!["Rancho", "Pulgas"],
+        );
+
+        stats.update_from_activity(&activity_2024, "now");
+        stats.update_from_activity(&activity_2025, "now");
+        stats.update_from_activity(&activity_2025b, "now");
+
+        // Check 2024 preserves
+        let year_2024 = stats.preserves_by_year.get("2024").unwrap();
+        assert_eq!(year_2024.get("Rancho"), Some(&1));
+        assert_eq!(year_2024.get("Fremont"), Some(&1));
+        assert_eq!(year_2024.get("Pulgas"), None);
+
+        // Check 2025 preserves
+        let year_2025 = stats.preserves_by_year.get("2025").unwrap();
+        assert_eq!(year_2025.get("Rancho"), Some(&2)); // Two activities in 2025
+        assert_eq!(year_2025.get("Pulgas"), Some(&1));
+        assert_eq!(year_2025.get("Fremont"), None);
+
+        // Total preserves (across all years) still works
+        assert_eq!(stats.preserves.get("Rancho"), Some(&3));
     }
 }

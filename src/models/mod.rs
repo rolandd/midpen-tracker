@@ -5,7 +5,7 @@ pub mod preserve;
 pub mod stats;
 pub mod user;
 
-pub use activity::Activity;
+pub use activity::{Activity, ActivityPreserve};
 pub use preserve::Preserve;
 pub use stats::UserStats;
 pub use user::{User, UserTokens};
