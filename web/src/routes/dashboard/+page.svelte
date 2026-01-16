@@ -143,7 +143,7 @@
 					>
 						All Time
 					</button>
-					{#each availableYears as year}
+					{#each availableYears as year (year)}
 						<button
 							class="year-pill"
 							class:active={selectedYear === year}
