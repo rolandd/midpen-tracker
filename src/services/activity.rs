@@ -12,6 +12,9 @@ use crate::error::{AppError, Result};
 use crate::models::{Activity, ActivityPreserve};
 use crate::services::{PreserveService, StravaService};
 
+/// Marker used to detect if an activity has already been annotated.
+const ANNOTATION_MARKER: &str = "🌲 Midpen Preserves:";
+
 /// Process an activity and detect preserve intersections.
 pub struct ActivityProcessor {
     strava: StravaService,
@@ -61,20 +64,26 @@ impl ActivityProcessor {
             "Detected preserves"
         );
 
-        // 3. Build annotation if any preserves (webhooks only)
-        let annotation_added = if !preserves_visited.is_empty() && source == "webhook" {
-            let annotation = build_annotation(&preserves_visited);
-            let new_description =
-                append_annotation(strava_activity.description.as_deref(), &annotation);
+        // 3. Build annotation if any preserves (webhooks only, and not already annotated)
+        let already_annotated = strava_activity
+            .description
+            .as_deref()
+            .map_or(false, |d| d.contains(ANNOTATION_MARKER));
 
-            // Update activity description on Strava
-            self.strava
-                .update_activity_description(athlete_id, activity_id, &new_description)
-                .await?;
-            true
-        } else {
-            false
-        };
+        let annotation_added =
+            if !preserves_visited.is_empty() && source == "webhook" && !already_annotated {
+                let annotation = build_annotation(&preserves_visited);
+                let new_description =
+                    append_annotation(strava_activity.description.as_deref(), &annotation);
+
+                // Update activity description on Strava
+                self.strava
+                    .update_activity_description(athlete_id, activity_id, &new_description)
+                    .await?;
+                true
+            } else {
+                false
+            };
 
         // 4. Store activity and update stats
         let now = chrono_now_iso();
@@ -162,8 +171,8 @@ pub struct ProcessResult {
 
 /// Build the annotation text for preserve visits.
 fn build_annotation(preserves: &[String]) -> String {
-    let preserve_list = preserves.join(", ");
-    format!("🌲 Midpen Preserves: {}", preserve_list)
+    let preserve_lines: Vec<String> = preserves.iter().map(|p| format!("  {}", p)).collect();
+    format!("{}\n{}", ANNOTATION_MARKER, preserve_lines.join("\n"))
 }
 
 /// Append annotation to existing description.
@@ -182,4 +191,71 @@ fn chrono_now_iso() -> String {
         .unwrap()
         .as_secs();
     format!("{}", secs) // Simplified - could use chrono crate
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_annotation_single_preserve() {
+        let preserves = vec!["Rancho San Antonio".to_string()];
+        let result = build_annotation(&preserves);
+        assert_eq!(result, "🌲 Midpen Preserves:\n  Rancho San Antonio");
+    }
+
+    #[test]
+    fn test_build_annotation_multiple_preserves() {
+        let preserves = vec!["Rancho San Antonio".to_string(), "Long Ridge".to_string()];
+        let result = build_annotation(&preserves);
+        assert_eq!(
+            result,
+            "🌲 Midpen Preserves:\n  Rancho San Antonio\n  Long Ridge"
+        );
+    }
+
+    #[test]
+    fn test_append_annotation_to_none() {
+        let annotation = "🌲 Midpen Preserves: Rancho";
+        let result = append_annotation(None, annotation);
+        assert_eq!(result, annotation);
+    }
+
+    #[test]
+    fn test_append_annotation_to_empty_string() {
+        let annotation = "🌲 Midpen Preserves: Rancho";
+        let result = append_annotation(Some(""), annotation);
+        assert_eq!(result, annotation);
+    }
+
+    #[test]
+    fn test_append_annotation_to_existing_description() {
+        let existing = "Great ride today!";
+        let annotation = "🌲 Midpen Preserves:\n  Rancho";
+        let result = append_annotation(Some(existing), annotation);
+        assert_eq!(
+            result,
+            "Great ride today!\n\n🌲 Midpen Preserves:\n  Rancho"
+        );
+    }
+
+    #[test]
+    fn test_append_annotation_preserves_multiline_description() {
+        let existing = "Great ride!\nPerfect weather.";
+        let annotation = "🌲 Midpen Preserves:\n  Rancho";
+        let result = append_annotation(Some(existing), annotation);
+        assert_eq!(
+            result,
+            "Great ride!\nPerfect weather.\n\n🌲 Midpen Preserves:\n  Rancho"
+        );
+    }
+
+    #[test]
+    fn test_annotation_marker_detection() {
+        let annotated = "My ride\n\n🌲 Midpen Preserves:\n  Rancho";
+        assert!(annotated.contains(ANNOTATION_MARKER));
+
+        let not_annotated = "Just a normal ride";
+        assert!(!not_annotated.contains(ANNOTATION_MARKER));
+    }
 }
