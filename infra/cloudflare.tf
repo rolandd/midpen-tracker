@@ -1,0 +1,102 @@
+# Cloudflare Pages Configuration
+#
+# This manages the Cloudflare Pages project configuration.
+# Note: The initial project-to-GitHub connection must be done manually in the Cloudflare UI.
+# After that, this terraform manages environment variables and deployment settings.
+
+# Cloudflare account ID (get from Cloudflare dashboard)
+variable "cloudflare_account_id" {
+  description = "Cloudflare Account ID"
+  type        = string
+}
+
+# API token for Cloudflare (should have Pages edit permissions)
+variable "cloudflare_api_token" {
+  description = "Cloudflare API Token with Pages edit permissions"
+  type        = string
+  sensitive   = true
+}
+
+# Backend API URL for production
+variable "production_api_url" {
+  description = "Production API URL for VITE_API_URL"
+  type        = string
+  default     = "https://midpen-strava-api-nynxios3na-uw.a.run.app"
+}
+
+# Preview/staging API URL (optional)
+variable "preview_api_url" {
+  description = "Preview API URL for VITE_API_URL in preview deployments"
+  type        = string
+  default     = "https://midpen-strava-api-nynxios3na-uw.a.run.app" # Can change to staging URL
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
+
+# Cloudflare Pages Project
+# Note: This assumes the project already exists (created via UI with GitHub connection)
+# Terraform is used to manage configuration, not create the initial project
+resource "cloudflare_pages_project" "midpen_strava_frontend" {
+  account_id        = var.cloudflare_account_id
+  name              = "midpen-strava"
+  production_branch = "main"
+
+  # Build configuration
+  build_config {
+    build_command       = "npm run build"
+    destination_dir     = "build"
+    root_dir            = "web"
+  }
+
+  # Source (GitHub connection)
+  source {
+    type = "github"
+    config {
+      owner                         = "rolandd"
+      repo_name                     = "midpen-strava"
+      production_branch             = "main"
+      pr_comments_enabled           = true
+      deployments_enabled           = true
+      production_deployment_enabled = true
+      preview_deployment_setting    = "all"
+      preview_branch_includes       = ["*"]
+      preview_branch_excludes       = []
+    }
+  }
+
+  # Deployment configuration
+  deployment_configs {
+    production {
+      environment_variables = {
+        NODE_VERSION = "24"
+        VITE_API_URL = var.production_api_url
+        NODE_ENV     = "production"
+      }
+
+      compatibility_date = "2024-01-01"
+    }
+
+    preview {
+      environment_variables = {
+        NODE_VERSION = "24"
+        VITE_API_URL = var.preview_api_url
+        NODE_ENV     = "development"
+      }
+
+      compatibility_date = "2024-01-01"
+    }
+  }
+}
+
+# Output the Pages URL
+output "pages_url" {
+  description = "Cloudflare Pages URL"
+  value       = "https://${cloudflare_pages_project.midpen_strava_frontend.subdomain}.pages.dev"
+}
+
+output "pages_project_name" {
+  description = "Cloudflare Pages project name"
+  value       = cloudflare_pages_project.midpen_strava_frontend.name
+}

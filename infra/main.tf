@@ -9,22 +9,7 @@
 # - Cloud Run service
 # - IAM bindings with least privilege
 
-terraform {
-  required_version = ">= 1.0"
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
-    }
-  }
-
-  # Remote state in GCS (uncomment when bucket exists)
-  # backend "gcs" {
-  #   bucket = "midpen-strava-terraform-state"
-  #   prefix = "terraform/state"
-  # }
-}
 
 variable "project_id" {
   description = "GCP Project ID"
