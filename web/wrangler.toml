@@ -1,8 +1,0 @@
-name = "midpen-strava"
-pages_build_output_dir = "build"
-
-[env.production]
-vars = { NODE_ENV = "production" }
-
-[env.preview]
-vars = { NODE_ENV = "development" }
