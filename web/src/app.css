@@ -1,9 +1,10 @@
+@import 'tailwindcss';
+
 :root {
 	--color-bg: #0a0f1a;
 	--color-surface: #141b2d;
 	--color-surface-hover: #1a2340;
 	--color-primary: #fc4c02;
-	/* Strava orange */
 	--color-primary-hover: #ff6b2d;
 	--color-text: #e8eaed;
 	--color-text-muted: #8b95a7;

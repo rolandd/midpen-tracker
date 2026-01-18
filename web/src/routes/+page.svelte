@@ -4,14 +4,12 @@
 	import { isLoggedIn, API_BASE_URL } from '$lib/api';
 
 	onMount(async () => {
-		// If already logged in, go to dashboard
 		if (isLoggedIn()) {
 			await goto('/dashboard');
 		}
 	});
 
 	function connectStrava() {
-		// Redirect to backend OAuth start, passing our origin so backend knows where to redirect back
 		const redirectUri = encodeURIComponent(window.location.origin);
 		window.location.href = `${API_BASE_URL}/auth/strava?redirect_uri=${redirectUri}`;
 	}
@@ -118,6 +116,8 @@
 
 	.strava-connect-btn img {
 		display: block;
+		height: 48px;
+		width: auto;
 	}
 
 	.features {

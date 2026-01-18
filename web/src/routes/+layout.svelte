@@ -17,7 +17,6 @@
 	/>
 
 	<!-- Content Security Policy -->
-	<!-- Added unsafe-inline for SvelteKit hydration and localhost:8080 for local API -->
 	<meta
 		http-equiv="content-security-policy"
 		content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.run.app http://localhost:8080; frame-ancestors 'none';"
