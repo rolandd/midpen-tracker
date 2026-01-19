@@ -51,8 +51,8 @@
 
 		<p class="privacy">
 			<small>
-				We only read your activity data to detect preserves. Your data is stored securely and never
-				shared.
+				We only read your activity data to detect preserves.<br />
+				Your data is stored securely and never shared.
 			</small>
 		</p>
 	</div>
