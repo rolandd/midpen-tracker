@@ -18,3 +18,5 @@ web/.svelte-kit
 *~
 token
 __pycache__/
+data/preserve_comparisons
+cache

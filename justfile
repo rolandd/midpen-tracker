@@ -19,6 +19,15 @@ strava_client_id := `grep strava_client_id infra/terraform.tfvars | cut -d'"' -f
 
 # ─── Development ──────────────────────────────────────────────
 
+# Format / lint preserve downloader script
+lint-python:
+    uvx ruff check --fix scripts/midpen.py
+    uvx ruff format scripts/midpen.py
+
+# Download preserves GeoJSON
+fetch-preserves:
+    uv run scripts/midpen.py
+
 # Run the API server locally
 dev-api:
     cargo run
