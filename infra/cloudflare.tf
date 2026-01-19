@@ -71,8 +71,8 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
     production {
       environment_variables = {
         NODE_VERSION   = "24"
+        NODE_ENV       = "development"
         PUBLIC_API_URL = var.production_api_url
-        NODE_ENV       = "production"
       }
 
       compatibility_date = "2024-01-01"
@@ -81,8 +81,8 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
     preview {
       environment_variables = {
         NODE_VERSION   = "24"
-        PUBLIC_API_URL = var.preview_api_url
         NODE_ENV       = "development"
+        PUBLIC_API_URL = var.preview_api_url
       }
 
       compatibility_date = "2024-01-01"
