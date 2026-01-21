@@ -1,19 +1,25 @@
 <script lang="ts">
 	interface Props {
 		size?: 'sm' | 'md' | 'lg';
+		variant?: 'primary' | 'white';
 	}
 
-	let { size = 'md' }: Props = $props();
+	let { size = 'md', variant = 'primary' }: Props = $props();
 
 	const sizeClasses = {
 		sm: 'w-5 h-5 border-2',
 		md: 'w-8 h-8 border-3',
 		lg: 'w-12 h-12 border-3'
 	};
+
+	const variantClasses = {
+		primary: 'border-border border-t-primary',
+		white: 'border-white/30 border-t-white'
+	};
 </script>
 
 <div
-	class="{sizeClasses[size]} border-border border-t-primary rounded-full animate-spin"
+	class="{sizeClasses[size]} {variantClasses[variant]} rounded-full animate-spin"
 	role="status"
 	aria-label="Loading"
 ></div>
