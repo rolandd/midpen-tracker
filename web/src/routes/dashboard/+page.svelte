@@ -8,6 +8,7 @@
 		type PreserveSummary
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
+	import { Button } from '$lib/components';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -19,6 +20,7 @@
 	let pendingActivities = $state(0);
 	let showUnvisited = $state(false);
 	let expandedPreserve = $state<string | null>(null);
+	let isLoggingOut = $state(false);
 
 	// Computed: get preserves filtered by selected year
 	let preserves = $derived.by(() => {
@@ -93,6 +95,7 @@
 	}
 
 	async function handleLogout() {
+		isLoggingOut = true;
 		await apiLogout();
 		await goto('/');
 	}
@@ -102,7 +105,7 @@
 	<header>
 		<div class="header-content">
 			<h1>🌲 Midpen Tracker</h1>
-			<button class="btn btn-secondary" onclick={handleLogout}>Log out</button>
+			<Button variant="secondary" onclick={handleLogout} isLoading={isLoggingOut}>Log out</Button>
 		</div>
 	</header>
 
@@ -174,6 +177,7 @@
 						class:unvisited={preserve.count === 0}
 						role="button"
 						tabindex="0"
+						aria-expanded={expandedPreserve === preserve.name}
 						onclick={() => togglePreserve(preserve.name)}
 						onkeydown={(e) => {
 							if (e.key === 'Enter' || e.key === ' ') {
