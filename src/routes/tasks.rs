@@ -47,8 +47,20 @@ async fn create_strava_service(state: &AppState) -> Result<StravaService, AppErr
 /// Process a single activity (called by Cloud Tasks).
 async fn process_activity(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<ProcessActivityPayload>,
 ) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    // Cloud Run strips this header from external requests, so its presence guarantees internal origin.
+    if !headers.contains_key("x-cloudtasks-queuename") {
+        tracing::warn!(
+            activity_id = payload.activity_id,
+            athlete_id = payload.athlete_id,
+            "Security Alert: Blocked unauthorized access to process_activity (missing x-cloudtasks-queuename header)"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,
@@ -107,6 +119,15 @@ async fn continue_backfill(
     headers: axum::http::HeaderMap,
     Json(payload): Json<ContinueBackfillPayload>,
 ) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    if !headers.contains_key("x-cloudtasks-queuename") {
+        tracing::warn!(
+            athlete_id = payload.athlete_id,
+            "Security Alert: Blocked unauthorized access to continue_backfill (missing x-cloudtasks-queuename header)"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
     tracing::info!(
         athlete_id = payload.athlete_id,
         page = payload.next_page,
