@@ -36,15 +36,20 @@ struct MeResponse {
 
 /// Get current user profile.
 async fn get_me(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<MeResponse>> {
-    // TODO: Look up user profile from Firestore
+    let user_profile = state
+        .db
+        .get_user(user.athlete_id)
+        .await?
+        .ok_or_else(|| crate::error::AppError::NotFound(format!("User {} not found", user.athlete_id)))?;
+
     Ok(Json(MeResponse {
-        athlete_id: user.athlete_id,
-        firstname: "TODO".to_string(),
-        lastname: "User".to_string(),
-        profile_picture: None,
+        athlete_id: user_profile.strava_athlete_id,
+        firstname: user_profile.firstname,
+        lastname: user_profile.lastname,
+        profile_picture: user_profile.profile_picture,
     }))
 }
 
