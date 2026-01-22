@@ -1,5 +1,20 @@
 @import 'tailwindcss';
 
+@theme {
+	--color-bg: var(--color-bg);
+	--color-surface: var(--color-surface);
+	--color-surface-hover: var(--color-surface-hover);
+	--color-primary: var(--color-primary);
+	--color-primary-hover: var(--color-primary-hover);
+	--color-text: var(--color-text);
+	--color-text-muted: var(--color-text-muted);
+	--color-success: var(--color-success);
+	--color-border: var(--color-border);
+
+	--radius: 12px;
+	--radius-sm: 8px;
+}
+
 :root {
 	--color-bg: #0a0f1a;
 	--color-surface: #141b2d;
@@ -11,15 +26,10 @@
 	--color-success: #10b981;
 	--color-border: #2a3650;
 	--font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-	--radius: 12px;
-	--radius-sm: 8px;
 }
 
-* {
-	margin: 0;
-	padding: 0;
-	box-sizing: border-box;
-}
+/* Remove global reset that conflicts with Tailwind preflight */
+/* * { margin: 0; padding: 0; box-sizing: border-box; } */
 
 html,
 body {
