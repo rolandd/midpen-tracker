@@ -72,7 +72,7 @@ async fn test_process_activity_with_header_allowed() {
                 .method("POST")
                 .uri("/tasks/process-activity")
                 .header("content-type", "application/json")
-                .header("x-cloudtasks-queuename", "test-queue") // Authorization header
+                .header("x-cloudtasks-queuename", "activity-processing") // Authorization header with correct queue
                 .body(Body::from(serde_json::to_string(&payload).unwrap()))
                 .unwrap(),
         )
@@ -84,6 +84,32 @@ async fn test_process_activity_with_header_allowed() {
     // or OK if it mocks out early.
     // The key is that it passed the security check.
     assert_ne!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_process_activity_wrong_queue_name_forbidden() {
+    let app = create_test_app().await;
+
+    let payload = json!({
+        "activity_id": 12345,
+        "athlete_id": 67890,
+        "source": "test"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/tasks/process-activity")
+                .header("content-type", "application/json")
+                .header("x-cloudtasks-queuename", "wrong-queue") // Wrong queue name
+                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

@@ -52,11 +52,19 @@ async fn process_activity(
 ) -> StatusCode {
     // Security Check: Ensure request comes from Cloud Tasks
     // Cloud Run strips this header from external requests, so its presence guarantees internal origin.
-    if !headers.contains_key("x-cloudtasks-queuename") {
+    // We also verify the queue name to ensure it matches our expected queue.
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
         tracing::warn!(
             activity_id = payload.activity_id,
             athlete_id = payload.athlete_id,
-            "Security Alert: Blocked unauthorized access to process_activity (missing x-cloudtasks-queuename header)"
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to process_activity"
         );
         return StatusCode::FORBIDDEN;
     }
@@ -120,10 +128,17 @@ async fn continue_backfill(
     Json(payload): Json<ContinueBackfillPayload>,
 ) -> StatusCode {
     // Security Check: Ensure request comes from Cloud Tasks
-    if !headers.contains_key("x-cloudtasks-queuename") {
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
         tracing::warn!(
             athlete_id = payload.athlete_id,
-            "Security Alert: Blocked unauthorized access to continue_backfill (missing x-cloudtasks-queuename header)"
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to continue_backfill"
         );
         return StatusCode::FORBIDDEN;
     }
