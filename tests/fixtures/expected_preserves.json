@@ -6,10 +6,9 @@
                 "Long Ridge",
                 "Monte Bello",
                 "Saratoga Gap",
-                "Skyline Ridge",
-                "Windy Hill"
+                "Skyline Ridge"
             ],
-            "notes": "Long ride traversing multiple preserves"
+            "notes": "Long ride traversing multiple preserves (Windy Hill removed due to road buffer subtraction)"
         },
         "16804567307": {
             "expected_preserves": [],
@@ -17,11 +16,9 @@
         },
         "16906743520": {
             "expected_preserves": [
-                "Foothills",
-                "Monte Bello",
-                "Picchetti Ranch"
+                "Monte Bello"
             ],
-            "notes": "Hike through Foothills area"
+            "notes": "Hike through Foothills area (Foothills and Picchetti Ranch removed due to road buffer subtraction)"
         },
         "17015064138": {
             "expected_preserves": [
