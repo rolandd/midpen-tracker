@@ -9,6 +9,7 @@
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import { Button } from '$lib/components';
+	import Toggle from 'svelte-switcher';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
@@ -157,10 +158,15 @@
 					{/each}
 				</div>
 			{/if}
-			<label class="toggle">
-				<input type="checkbox" bind:checked={showUnvisited} onchange={toggleShowUnvisited} />
-				<span>Show unvisited preserves</span>
-			</label>
+			<div class="toggle-wrapper">
+				<Toggle
+					bind:checked={showUnvisited}
+					on:toggle={toggleShowUnvisited}
+				/>
+				<button class="toggle-label" onclick={() => (showUnvisited = !showUnvisited)}>
+					Show unvisited preserves
+				</button>
+			</div>
 		</div>
 
 		{#if loading}
@@ -352,17 +358,72 @@
 		color: white;
 	}
 
-	.toggle {
+	.toggle-wrapper {
 		display: flex;
 		align-items: center;
-		gap: 0.5rem;
-		cursor: pointer;
-		color: var(--color-text-muted);
-		font-size: 0.875rem;
+		gap: 0.75rem;
+		margin-top: 0.5rem;
 	}
 
-	.toggle input {
-		accent-color: var(--color-primary);
+	.toggle-label {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--color-text-muted);
+		font-size: 0.875rem;
+		cursor: pointer;
+		font-family: inherit;
+	}
+
+	.toggle-label:hover {
+		color: var(--color-text);
+	}
+
+	/* Override svelte-switcher styles - scoped to wrapper */
+	.toggle-wrapper :global(.svelte-toggle) {
+		font-size: 0; /* Fix vertical alignment issues */
+	}
+
+	.toggle-wrapper :global(.svelte-toggle .svelte-toggle--track) {
+		background-color: var(--color-border) !important;
+		width: 44px !important;
+		height: 24px !important;
+	}
+
+	.toggle-wrapper
+		:global(.svelte-toggle:hover:not(.svelte-toggle--disabled) .svelte-toggle--track) {
+		background-color: var(--color-surface-hover) !important;
+	}
+
+	.toggle-wrapper :global(.svelte-toggle.svelte-toggle--checked .svelte-toggle--track) {
+		background-color: var(--color-primary) !important;
+	}
+
+	.toggle-wrapper
+		:global(
+			.svelte-toggle.svelte-toggle--checked:hover:not(.svelte-toggle--disabled)
+				.svelte-toggle--track
+		) {
+		background-color: var(--color-primary-hover) !important;
+	}
+
+	.toggle-wrapper :global(.svelte-toggle .svelte-toggle--thumb) {
+		border-color: transparent !important;
+		background-color: white !important;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+		width: 20px !important;
+		height: 20px !important;
+		top: 2px !important;
+		left: 2px !important;
+	}
+
+	.toggle-wrapper :global(.svelte-toggle.svelte-toggle--checked .svelte-toggle--thumb) {
+		left: 22px !important;
+		border-color: transparent !important;
+	}
+
+	.toggle-wrapper :global(.svelte-toggle--focus .svelte-toggle--thumb) {
+		box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-primary) !important;
 	}
 
 	.preserve-list {
