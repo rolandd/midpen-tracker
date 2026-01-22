@@ -5,14 +5,17 @@
 		isLoggedIn,
 		fetchPreserveStats,
 		logout as apiLogout,
-		type PreserveSummary
+		fetchMe,
+		type PreserveSummary,
+		type User
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
-	import { Button } from '$lib/components';
+	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
 	import Toggle from 'svelte-switcher';
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let user = $state<User | null>(null);
 	let allTimePreserves = $state<PreserveSummary[]>([]);
 	let preservesByYear = $state<Record<string, Record<string, number>>>({});
 	let availableYears = $state<string[]>([]);
@@ -57,7 +60,10 @@
 			return;
 		}
 
+
+
 		loadStats();
+		fetchUser();
 
 		// Auto-refresh while backfill is in progress
 		const interval = setInterval(() => {
@@ -87,6 +93,15 @@
 		}
 	}
 
+	async function fetchUser() {
+		try {
+			user = await fetchMe();
+		} catch (e) {
+			console.error('Failed to fetch user profile', e);
+			// Non-critical, just don't show profile
+		}
+	}
+
 	function togglePreserve(name: string) {
 		expandedPreserve = expandedPreserve === name ? null : name;
 	}
@@ -106,7 +121,12 @@
 	<header>
 		<div class="header-content">
 			<h1>🌲 Midpen Tracker</h1>
-			<Button variant="secondary" onclick={handleLogout} isLoading={isLoggingOut}>Log out</Button>
+			{#if user}
+				<ProfileDropdown {user} onLogout={handleLogout} {isLoggingOut} />
+			{:else}
+				<!-- Fallback/Skeleton while loading user -->
+				<div class="header-placeholder"></div>
+			{/if}
 		</div>
 	</header>
 

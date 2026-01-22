@@ -11,7 +11,8 @@ export const mockUser: User = {
     athlete_id: 12345678,
     firstname: 'Demo',
     lastname: 'User',
-    profile_picture: null
+    // Realistic placeholder avatar
+    profile_picture: 'https://ui-avatars.com/api/?name=Demo+User&background=random'
 };
 
 // Sample preserves with realistic data
