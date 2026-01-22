@@ -6,8 +6,15 @@
 //!
 //! Uses the official google-cloud-tasks-v2 SDK.
 
-use crate::error::{AppError, Result};
+use crate::error::Result;
+#[cfg(feature = "gcp")]
+use crate::error::AppError;
+#[cfg(feature = "gcp")]
+use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "gcp")]
+const MAX_CONCURRENT_TASKS: usize = 100;
 
 /// Payload sent to the activity processing task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -132,17 +139,19 @@ impl TasksService {
     ) -> Result<usize> {
         let count = activity_ids.len();
 
-        for activity_id in activity_ids {
-            let payload = ProcessActivityPayload {
-                activity_id,
-                athlete_id,
-                source: "backfill".to_string(),
-            };
+        stream::iter(activity_ids)
+            .for_each_concurrent(MAX_CONCURRENT_TASKS, |activity_id| async move {
+                let payload = ProcessActivityPayload {
+                    activity_id,
+                    athlete_id,
+                    source: "backfill".to_string(),
+                };
 
-            if let Err(e) = self.queue_activity(service_url, payload).await {
-                tracing::warn!(activity_id, error = ?e, "Failed to queue activity for backfill");
-            }
-        }
+                if let Err(e) = self.queue_activity(service_url, payload).await {
+                    tracing::warn!(activity_id, error = ?e, "Failed to queue activity for backfill");
+                }
+            })
+            .await;
 
         tracing::info!(athlete_id, count, "Queued activities for backfill");
         Ok(count)
