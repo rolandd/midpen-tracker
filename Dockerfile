@@ -14,7 +14,7 @@ COPY Cargo.toml Cargo.lock ./
 RUN mkdir src && echo 'fn main() {}' > src/main.rs && echo 'pub fn lib() {}' > src/lib.rs
 
 # Build dependencies only (cached layer)
-RUN cargo build --release --features gcp && rm -rf src
+RUN cargo build --release && rm -rf src
 
 # Copy actual source code
 COPY src ./src

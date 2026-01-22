@@ -58,7 +58,7 @@ check-all: lint
 
 # Build release binary locally
 build-release:
-    cargo build --release --features gcp
+    cargo build --release
 
 # Build Docker image locally
 build-docker:
