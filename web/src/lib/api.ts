@@ -1,3 +1,10 @@
+import {
+	DEMO_MODE,
+	mockUser,
+	mockPreserveStats,
+	getMockActivitiesForPreserve
+} from './mockData';
+
 // API configuration
 export const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -16,6 +23,7 @@ export function clearToken(): void {
 }
 
 export function isLoggedIn(): boolean {
+	if (DEMO_MODE) return true;
 	return getToken() !== null;
 }
 
@@ -49,41 +57,30 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 // Types
-export interface User {
-	athlete_id: number;
-	firstname: string;
-	lastname: string;
-	profile_picture: string | null;
-}
-
-export interface PreserveActivity {
-	id: number;
-	date: string;
-	sport_type: string;
-	name: string;
-}
-
-export interface PreserveSummary {
-	name: string;
-	count: number;
-	activities: PreserveActivity[];
-}
-
-export interface PreserveStatsResponse {
-	preserves: PreserveSummary[];
-	preserves_by_year: Record<string, Record<string, number>>;
-	total_preserves_visited: number;
-	total_preserves: number;
-	pending_activities: number;
-	available_years: string[];
-}
+export type {
+	User,
+	PreserveActivity,
+	PreserveSummary,
+	PreserveStatsResponse,
+	ActivitySummary,
+	ActivitiesResponse
+} from './types';
+import type { User, PreserveStatsResponse, ActivitiesResponse } from './types';
 
 // API methods
 export async function fetchMe(): Promise<User> {
+	if (DEMO_MODE) return mockUser;
 	return apiFetch<User>('/api/me');
 }
 
 export async function fetchPreserveStats(showUnvisited = false): Promise<PreserveStatsResponse> {
+	if (DEMO_MODE) {
+		const stats = { ...mockPreserveStats };
+		if (!showUnvisited) {
+			stats.preserves = stats.preserves.filter((p) => p.count > 0);
+		}
+		return stats;
+	}
 	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=${showUnvisited}`);
 }
 
@@ -92,21 +89,7 @@ export async function logout(): Promise<void> {
 	clearToken();
 }
 
-export interface ActivitySummary {
-	id: number;
-	name: string;
-	sport_type: string;
-	start_date: string;
-	preserves: string[];
-}
-
-export interface ActivitiesResponse {
-	activities: ActivitySummary[];
-	total: number;
-	page: number;
-	per_page: number;
-}
-
 export async function fetchActivities(preserve: string): Promise<ActivitiesResponse> {
+	if (DEMO_MODE) return getMockActivitiesForPreserve(preserve);
 	return apiFetch<ActivitiesResponse>(`/api/activities?preserve=${encodeURIComponent(preserve)}`);
 }
