@@ -63,8 +63,6 @@ struct WebhookEvent {
     object_id: u64,
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
-    #[allow(dead_code)]
-    updates: Option<serde_json::Value>,
 }
 
 /// Handle incoming webhook events (POST).

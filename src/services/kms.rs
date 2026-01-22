@@ -11,7 +11,6 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 pub struct KmsService {
     /// Full resource path to the KMS key
     /// Format: projects/{project}/locations/{location}/keyRings/{ring}/cryptoKeys/{key}
-    #[allow(dead_code)]
     key_path: String,
 
     /// GCP KMS client

@@ -18,15 +18,14 @@ struct ExpectedPreserves {
 #[derive(Debug, Deserialize)]
 struct ActivityExpected {
     expected_preserves: Vec<String>,
-    #[allow(dead_code)]
-    notes: String,
+    // notes field removed
 }
 
 /// Simple activity structure for loading fixtures.
 #[derive(Debug, Deserialize)]
 struct FixtureActivity {
-    #[allow(dead_code)]
-    id: u64,
+    // id field removed
+
     map: FixtureMap,
 }
 

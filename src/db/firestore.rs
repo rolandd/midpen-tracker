@@ -14,8 +14,6 @@ use crate::models::{Activity, ActivityPreserve, User};
 /// Firestore database client.
 #[derive(Clone)]
 pub struct FirestoreDb {
-    #[allow(dead_code)]
-    project_id: String,
     client: firestore::FirestoreDb,
 }
 
@@ -31,7 +29,6 @@ impl FirestoreDb {
         tracing::info!(project = project_id, "Connected to Firestore");
 
         Ok(Self {
-            project_id: project_id.to_string(),
             client,
         })
     }
