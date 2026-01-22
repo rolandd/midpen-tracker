@@ -68,7 +68,7 @@ impl ActivityProcessor {
         let already_annotated = strava_activity
             .description
             .as_deref()
-            .map_or(false, |d| d.contains(ANNOTATION_MARKER));
+            .is_some_and(|d| d.contains(ANNOTATION_MARKER));
 
         let annotation_added =
             if !preserves_visited.is_empty() && source == "webhook" && !already_annotated {
