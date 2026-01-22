@@ -132,6 +132,13 @@
 		background: rgba(255, 255, 255, 0.02);
 		border-radius: var(--radius);
 		border: 1px solid rgba(255, 255, 255, 0.05);
+		transition: all 0.2s ease;
+	}
+
+	.feature:hover {
+		background: rgba(255, 255, 255, 0.05);
+		transform: translateY(-2px);
+		border-color: var(--color-primary);
 	}
 
 	.feature-icon {
