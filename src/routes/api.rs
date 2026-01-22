@@ -39,11 +39,9 @@ async fn get_me(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<MeResponse>> {
-    let user_profile = state
-        .db
-        .get_user(user.athlete_id)
-        .await?
-        .ok_or_else(|| crate::error::AppError::NotFound(format!("User {} not found", user.athlete_id)))?;
+    let user_profile = state.db.get_user(user.athlete_id).await?.ok_or_else(|| {
+        crate::error::AppError::NotFound(format!("User {} not found", user.athlete_id))
+    })?;
 
     Ok(Json(MeResponse {
         athlete_id: user_profile.strava_athlete_id,

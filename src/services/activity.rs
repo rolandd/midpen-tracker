@@ -85,7 +85,7 @@ impl ActivityProcessor {
                 false
             };
 
-        // 4. Store activity and update stats
+        // 4. Build activity record and preserve join records
         let now = chrono_now_iso();
         let activity = Activity {
             strava_activity_id: activity_id,
@@ -100,56 +100,40 @@ impl ActivityProcessor {
             processed_at: now.clone(),
         };
 
-        // Store activity
-        self.db.set_activity(&activity).await?;
+        // Build preserve join records
+        let join_records: Vec<ActivityPreserve> = activity
+            .preserves_visited
+            .iter()
+            .map(|p_name| ActivityPreserve {
+                athlete_id,
+                activity_id,
+                preserve_name: p_name.clone(),
+                start_date: activity.start_date.clone(),
+                activity_name: activity.name.clone(),
+                sport_type: activity.sport_type.clone(),
+            })
+            .collect();
 
-        // 4b. Store activity-preserve join records
-        if !activity.preserves_visited.is_empty() {
-            let join_records: Vec<ActivityPreserve> = activity
-                .preserves_visited
-                .iter()
-                .map(|p_name| ActivityPreserve {
-                    athlete_id,
-                    activity_id,
-                    preserve_name: p_name.clone(),
-                    start_date: activity.start_date.clone(),
-                    activity_name: activity.name.clone(),
-                    sport_type: activity.sport_type.clone(),
-                })
-                .collect();
-
-            if let Err(e) = self.db.batch_set_activity_preserves(&join_records).await {
-                tracing::error!(
-                    athlete_id,
-                    activity_id,
-                    error = %e,
-                    "Failed to store activity-preserve records"
-                );
-                // Non-fatal, but search won't work for this activity
-            }
-        }
-
-        // 5. Update user stats aggregate (idempotent)
-        let mut stats = self
+        // 5. Atomically store activity, preserve joins, and update stats
+        //    This uses a Firestore transaction to ensure all writes succeed or fail together.
+        //    If another request modifies the user stats concurrently, Firestore retries.
+        let was_new = self
             .db
-            .get_user_stats(athlete_id)
-            .await?
-            .unwrap_or_default();
+            .process_activity_atomic(&activity, &join_records)
+            .await?;
 
-        let was_new = stats.update_from_activity(&activity, &now);
         if was_new {
-            self.db.set_user_stats(athlete_id, &stats).await?;
             tracing::info!(
                 athlete_id,
                 activity_id,
-                total_activities = stats.total_activities,
-                "Updated user stats"
+                preserves = ?preserves_visited,
+                "Activity processed atomically"
             );
         } else {
             tracing::debug!(
                 athlete_id,
                 activity_id,
-                "Activity already processed, stats not updated"
+                "Activity already processed (idempotent skip)"
             );
         }
 

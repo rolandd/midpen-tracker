@@ -6,9 +6,9 @@
 //!
 //! Uses the official google-cloud-tasks-v2 SDK.
 
-use crate::error::Result;
 #[cfg(feature = "gcp")]
 use crate::error::AppError;
+use crate::error::Result;
 #[cfg(feature = "gcp")]
 use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};

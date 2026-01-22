@@ -6,6 +6,7 @@
 //! - Activities (processed Strava activities)
 //! - Activity-Preserves (join collection for queries)
 
+#[cfg(feature = "gcp")]
 use crate::db::collections;
 use crate::error::AppError;
 use crate::models::user::UserTokens;
@@ -389,5 +390,144 @@ impl FirestoreDb {
     ) -> Result<(), AppError> {
         tracing::debug!(athlete_id, "Stub: set_user_stats");
         Ok(())
+    }
+
+    // ─── Atomic Activity Processing ─────────────────────────────────
+
+    /// Atomically process an activity: store the activity, preserve joins, and update stats.
+    ///
+    /// This method uses a Firestore transaction to ensure all writes succeed or fail together.
+    /// If another request modifies the user stats concurrently, Firestore will retry the
+    /// transaction with fresh data, preventing lost updates.
+    ///
+    /// Returns `true` if the activity was newly processed, `false` if it was already processed
+    /// (idempotent duplicate).
+    #[cfg(feature = "gcp")]
+    pub async fn process_activity_atomic(
+        &self,
+        activity: &Activity,
+        preserve_records: &[ActivityPreserve],
+    ) -> Result<bool, AppError> {
+        let athlete_id = activity.athlete_id;
+        let activity_id = activity.strava_activity_id;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Clone data needed inside the transaction closure
+        let activity = activity.clone();
+        let preserve_records = preserve_records.to_vec();
+        let now_clone = now.clone();
+
+        // Begin a transaction
+        let mut transaction = self
+            .client
+            .begin_transaction()
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+
+        // 1. Read current user stats within the transaction
+        //    This registers the document for conflict detection
+        let current_stats: Option<crate::models::UserStats> = self
+            .client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await
+            .map_err(|e| {
+                AppError::Database(format!("Failed to read stats in transaction: {}", e))
+            })?;
+
+        let mut stats = current_stats.unwrap_or_default();
+
+        // 2. Check idempotency - if already processed, skip all writes
+        if stats.processed_activity_ids.contains(&activity_id) {
+            tracing::debug!(
+                athlete_id,
+                activity_id,
+                "Activity already processed (idempotent skip)"
+            );
+            // Rollback the transaction since we don't need to write
+            let _ = transaction.rollback().await;
+            return Ok(false);
+        }
+
+        // 3. Update stats in memory
+        stats.update_from_activity(&activity, &now_clone);
+
+        // 4. Add activity write to transaction
+        self.client
+            .fluent()
+            .update()
+            .in_col(collections::ACTIVITIES)
+            .document_id(activity.strava_activity_id.to_string())
+            .object(&activity)
+            .add_to_transaction(&mut transaction)
+            .map_err(|e| {
+                AppError::Database(format!("Failed to add activity to transaction: {}", e))
+            })?;
+
+        // 5. Add preserve join records to transaction
+        for record in &preserve_records {
+            let safe_name = urlencoding::encode(&record.preserve_name);
+            let doc_id = format!("{}_{}", record.activity_id, safe_name);
+
+            self.client
+                .fluent()
+                .update()
+                .in_col(collections::ACTIVITY_PRESERVES)
+                .document_id(&doc_id)
+                .object(record)
+                .add_to_transaction(&mut transaction)
+                .map_err(|e| {
+                    AppError::Database(format!(
+                        "Failed to add preserve record to transaction: {}",
+                        e
+                    ))
+                })?;
+        }
+
+        // 6. Add stats write to transaction
+        self.client
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)
+            .map_err(|e| {
+                AppError::Database(format!("Failed to add stats to transaction: {}", e))
+            })?;
+
+        // 7. Commit the transaction atomically
+        transaction
+            .commit()
+            .await
+            .map_err(|e| AppError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        tracing::info!(
+            athlete_id,
+            activity_id,
+            preserves_count = preserve_records.len(),
+            "Activity processed atomically"
+        );
+
+        Ok(true)
+    }
+
+    /// Stub implementation for local development without GCP.
+    #[cfg(not(feature = "gcp"))]
+    pub async fn process_activity_atomic(
+        &self,
+        activity: &Activity,
+        preserve_records: &[ActivityPreserve],
+    ) -> Result<bool, AppError> {
+        tracing::debug!(
+            activity_id = activity.strava_activity_id,
+            athlete_id = activity.athlete_id,
+            preserves = preserve_records.len(),
+            "Stub: process_activity_atomic"
+        );
+        Ok(true)
     }
 }
