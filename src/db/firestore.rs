@@ -6,30 +6,23 @@
 //! - Activities (processed Strava activities)
 //! - Activity-Preserves (join collection for queries)
 
-#[cfg(feature = "gcp")]
 use crate::db::collections;
 use crate::error::AppError;
 use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
 
 /// Firestore database client.
-///
-/// When the `gcp` feature is enabled, this connects to Firestore.
-/// Without the feature, it provides stub implementations for local dev.
 #[derive(Clone)]
 pub struct FirestoreDb {
     #[allow(dead_code)]
     project_id: String,
-    #[cfg(feature = "gcp")]
     client: firestore::FirestoreDb,
 }
 
 impl FirestoreDb {
     /// Create a new Firestore client.
     ///
-    /// In production, this connects to Firestore.
     /// For local development with emulator, set FIRESTORE_EMULATOR_HOST.
-    #[cfg(feature = "gcp")]
     pub async fn new(project_id: &str) -> Result<Self, AppError> {
         let client = firestore::FirestoreDb::new(project_id)
             .await
@@ -43,22 +36,9 @@ impl FirestoreDb {
         })
     }
 
-    /// Create a stub client for local development without GCP.
-    #[cfg(not(feature = "gcp"))]
-    pub async fn new(project_id: &str) -> Result<Self, AppError> {
-        tracing::warn!(
-            project = project_id,
-            "Firestore GCP feature not enabled - using stub client"
-        );
-        Ok(Self {
-            project_id: project_id.to_string(),
-        })
-    }
-
     // ─── User Operations ─────────────────────────────────────────
 
     /// Get a user by their Strava athlete ID.
-    #[cfg(feature = "gcp")]
     pub async fn get_user(&self, athlete_id: u64) -> Result<Option<User>, AppError> {
         self.client
             .fluent()
@@ -70,14 +50,7 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn get_user(&self, athlete_id: u64) -> Result<Option<User>, AppError> {
-        tracing::debug!(athlete_id, "Stub: get_user");
-        Ok(None)
-    }
-
     /// Create or update a user.
-    #[cfg(feature = "gcp")]
     pub async fn upsert_user(&self, user: &User) -> Result<(), AppError> {
         let _: () = self
             .client
@@ -92,16 +65,9 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn upsert_user(&self, _user: &User) -> Result<(), AppError> {
-        tracing::debug!("Stub: upsert_user");
-        Ok(())
-    }
-
     // ─── Token Operations ────────────────────────────────────────
 
     /// Get encrypted tokens for a user.
-    #[cfg(feature = "gcp")]
     pub async fn get_tokens(&self, athlete_id: u64) -> Result<Option<UserTokens>, AppError> {
         self.client
             .fluent()
@@ -113,14 +79,7 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn get_tokens(&self, athlete_id: u64) -> Result<Option<UserTokens>, AppError> {
-        tracing::debug!(athlete_id, "Stub: get_tokens");
-        Ok(None)
-    }
-
     /// Store encrypted tokens for a user.
-    #[cfg(feature = "gcp")]
     pub async fn set_tokens(&self, athlete_id: u64, tokens: &UserTokens) -> Result<(), AppError> {
         let _: () = self
             .client
@@ -135,14 +94,7 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn set_tokens(&self, athlete_id: u64, _tokens: &UserTokens) -> Result<(), AppError> {
-        tracing::debug!(athlete_id, "Stub: set_tokens");
-        Ok(())
-    }
-
     /// Delete tokens (for deauthorization).
-    #[cfg(feature = "gcp")]
     pub async fn delete_tokens(&self, athlete_id: u64) -> Result<(), AppError> {
         self.client
             .fluent()
@@ -155,16 +107,9 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn delete_tokens(&self, athlete_id: u64) -> Result<(), AppError> {
-        tracing::debug!(athlete_id, "Stub: delete_tokens");
-        Ok(())
-    }
-
     // ─── Activity Operations ─────────────────────────────────────
 
     /// Get an activity by Strava ID.
-    #[cfg(feature = "gcp")]
     pub async fn get_activity(&self, activity_id: u64) -> Result<Option<Activity>, AppError> {
         self.client
             .fluent()
@@ -176,14 +121,7 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn get_activity(&self, activity_id: u64) -> Result<Option<Activity>, AppError> {
-        tracing::debug!(activity_id, "Stub: get_activity");
-        Ok(None)
-    }
-
     /// Store a processed activity.
-    #[cfg(feature = "gcp")]
     pub async fn set_activity(&self, activity: &Activity) -> Result<(), AppError> {
         let _: () = self
             .client
@@ -197,14 +135,8 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))?;
         Ok(())
     }
-    #[cfg(not(feature = "gcp"))]
-    pub async fn set_activity(&self, _activity: &Activity) -> Result<(), AppError> {
-        tracing::debug!("Stub: set_activity");
-        Ok(())
-    }
 
     /// Delete an activity and update user stats.
-    #[cfg(feature = "gcp")]
     pub async fn delete_activity(&self, activity_id: u64, athlete_id: u64) -> Result<(), AppError> {
         // Delete the activity document
         self.client
@@ -243,20 +175,9 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn delete_activity(
-        &self,
-        activity_id: u64,
-        _athlete_id: u64,
-    ) -> Result<(), AppError> {
-        tracing::debug!(activity_id, "Stub: delete_activity");
-        Ok(())
-    }
-
     // ─── Activity-Preserve Join Operations ───────────────────────
 
     /// Get all activities for a specific preserve and user.
-    #[cfg(feature = "gcp")]
     pub async fn get_activities_for_preserve(
         &self,
         athlete_id: u64,
@@ -280,25 +201,10 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn get_activities_for_preserve(
-        &self,
-        athlete_id: u64,
-        preserve_name: &str,
-    ) -> Result<Vec<ActivityPreserve>, AppError> {
-        tracing::debug!(
-            athlete_id,
-            preserve_name,
-            "Stub: get_activities_for_preserve"
-        );
-        Ok(vec![])
-    }
-
     /// Store multiple activity-preserve records.
     ///
     /// Uses sequential writes since the firestore crate's batch API requires specific setup.
     /// For small numbers of preserves per activity (typically 1-3), this is acceptable.
-    #[cfg(feature = "gcp")]
     pub async fn batch_set_activity_preserves(
         &self,
         records: &[ActivityPreserve],
@@ -322,21 +228,11 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn batch_set_activity_preserves(
-        &self,
-        _records: &[ActivityPreserve],
-    ) -> Result<(), AppError> {
-        tracing::debug!("Stub: batch_set_activity_preserves");
-        Ok(())
-    }
-
     // ─── User Stats Operations ──────────────────────────────────
 
     /// Get user stats aggregate document.
     ///
     /// Stored in `user_stats` collection, keyed by athlete_id.
-    #[cfg(feature = "gcp")]
     pub async fn get_user_stats(
         &self,
         athlete_id: u64,
@@ -351,19 +247,9 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn get_user_stats(
-        &self,
-        athlete_id: u64,
-    ) -> Result<Option<crate::models::UserStats>, AppError> {
-        tracing::debug!(athlete_id, "Stub: get_user_stats");
-        Ok(None)
-    }
-
     /// Store user stats aggregate document.
     ///
     /// Stored in `user_stats` collection, keyed by athlete_id.
-    #[cfg(feature = "gcp")]
     pub async fn set_user_stats(
         &self,
         athlete_id: u64,
@@ -382,16 +268,6 @@ impl FirestoreDb {
         Ok(())
     }
 
-    #[cfg(not(feature = "gcp"))]
-    pub async fn set_user_stats(
-        &self,
-        athlete_id: u64,
-        _stats: &crate::models::UserStats,
-    ) -> Result<(), AppError> {
-        tracing::debug!(athlete_id, "Stub: set_user_stats");
-        Ok(())
-    }
-
     // ─── Atomic Activity Processing ─────────────────────────────────
 
     /// Atomically process an activity: store the activity, preserve joins, and update stats.
@@ -402,7 +278,6 @@ impl FirestoreDb {
     ///
     /// Returns `true` if the activity was newly processed, `false` if it was already processed
     /// (idempotent duplicate).
-    #[cfg(feature = "gcp")]
     pub async fn process_activity_atomic(
         &self,
         activity: &Activity,
@@ -512,22 +387,6 @@ impl FirestoreDb {
             "Activity processed atomically"
         );
 
-        Ok(true)
-    }
-
-    /// Stub implementation for local development without GCP.
-    #[cfg(not(feature = "gcp"))]
-    pub async fn process_activity_atomic(
-        &self,
-        activity: &Activity,
-        preserve_records: &[ActivityPreserve],
-    ) -> Result<bool, AppError> {
-        tracing::debug!(
-            activity_id = activity.strava_activity_id,
-            athlete_id = activity.athlete_id,
-            preserves = preserve_records.len(),
-            "Stub: process_activity_atomic"
-        );
         Ok(true)
     }
 }

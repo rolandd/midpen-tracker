@@ -6,14 +6,11 @@
 //!
 //! Uses the official google-cloud-tasks-v2 SDK.
 
-#[cfg(feature = "gcp")]
 use crate::error::AppError;
 use crate::error::Result;
-#[cfg(feature = "gcp")]
 use futures_util::{stream, StreamExt};
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "gcp")]
 const MAX_CONCURRENT_TASKS: usize = 100;
 
 /// Payload sent to the activity processing task.
@@ -36,11 +33,8 @@ pub struct ContinueBackfillPayload {
 
 /// Cloud Tasks client wrapper.
 pub struct TasksService {
-    #[allow(dead_code)]
     project_id: String,
-    #[allow(dead_code)]
     location: String,
-    #[allow(dead_code)]
     queue_name: String,
 }
 
@@ -54,7 +48,6 @@ impl TasksService {
     }
 
     /// Queue a single activity for processing.
-    #[cfg(feature = "gcp")]
     pub async fn queue_activity(
         &self,
         service_url: &str,
@@ -65,7 +58,6 @@ impl TasksService {
     }
 
     /// Queue a continue-backfill task for the next page.
-    #[cfg(feature = "gcp")]
     pub async fn queue_continue_backfill(
         &self,
         service_url: &str,
@@ -76,7 +68,6 @@ impl TasksService {
     }
 
     /// Generic task queuing helper.
-    #[cfg(feature = "gcp")]
     async fn queue_task<T: Serialize>(
         &self,
         service_url: &str,
@@ -130,7 +121,6 @@ impl TasksService {
     }
 
     /// Queue multiple activities for backfill.
-    #[cfg(feature = "gcp")]
     pub async fn queue_backfill(
         &self,
         service_url: &str,
@@ -154,52 +144,6 @@ impl TasksService {
             .await;
 
         tracing::info!(athlete_id, count, "Queued activities for backfill");
-        Ok(count)
-    }
-
-    // Non-GCP stub implementations for local development
-    #[cfg(not(feature = "gcp"))]
-    pub async fn queue_activity(
-        &self,
-        _service_url: &str,
-        payload: ProcessActivityPayload,
-    ) -> Result<()> {
-        tracing::info!(
-            activity_id = payload.activity_id,
-            athlete_id = payload.athlete_id,
-            source = %payload.source,
-            "[STUB] Would queue activity for processing"
-        );
-        Ok(())
-    }
-
-    #[cfg(not(feature = "gcp"))]
-    pub async fn queue_continue_backfill(
-        &self,
-        _service_url: &str,
-        payload: ContinueBackfillPayload,
-    ) -> Result<()> {
-        tracing::info!(
-            athlete_id = payload.athlete_id,
-            next_page = payload.next_page,
-            "[STUB] Would queue continue-backfill task"
-        );
-        Ok(())
-    }
-
-    #[cfg(not(feature = "gcp"))]
-    pub async fn queue_backfill(
-        &self,
-        _service_url: &str,
-        athlete_id: u64,
-        activity_ids: Vec<u64>,
-    ) -> Result<usize> {
-        let count = activity_ids.len();
-        tracing::info!(
-            athlete_id,
-            count,
-            "[STUB] Would queue activities for backfill"
-        );
         Ok(count)
     }
 }

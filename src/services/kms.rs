@@ -7,9 +7,6 @@ use crate::error::AppError;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
 /// KMS encryption service.
-///
-/// When the `gcp` feature is enabled, calls Google Cloud KMS.
-/// Without the feature, provides stub implementations for local dev.
 #[derive(Clone)]
 pub struct KmsService {
     /// Full resource path to the KMS key
@@ -17,14 +14,13 @@ pub struct KmsService {
     #[allow(dead_code)]
     key_path: String,
 
-    /// GCP KMS client (only present when feature enabled)
-    #[cfg(feature = "gcp")]
+    /// GCP KMS client
     client: Option<std::sync::Arc<google_cloud_kms::client::Client>>,
 }
 
 impl KmsService {
     /// Create a new KMS service.
-    /// Connects to GCP KMS if the `gcp` feature is enabled.
+    /// Connects to GCP KMS.
     pub async fn new(
         project_id: &str,
         location: &str,
@@ -36,36 +32,27 @@ impl KmsService {
             project_id, location, key_ring, key_name
         );
 
-        #[cfg(feature = "gcp")]
-        {
-            let config = google_cloud_kms::client::ClientConfig::default()
-                .with_auth()
-                .await
-                .map_err(|e| {
-                    AppError::Internal(anyhow::anyhow!("Failed to create KMS auth config: {}", e))
-                })?;
+        let config = google_cloud_kms::client::ClientConfig::default()
+            .with_auth()
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to create KMS auth config: {}", e))
+            })?;
 
-            let client = google_cloud_kms::client::Client::new(config)
-                .await
-                .map_err(|e| {
-                    AppError::Internal(anyhow::anyhow!("Failed to create KMS client: {}", e))
-                })?;
+        let client = google_cloud_kms::client::Client::new(config)
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to create KMS client: {}", e))
+            })?;
 
-            Ok(Self {
-                key_path,
-                client: Some(std::sync::Arc::new(client)),
-            })
-        }
-
-        #[cfg(not(feature = "gcp"))]
-        {
-            Ok(Self { key_path })
-        }
+        Ok(Self {
+            key_path,
+            client: Some(std::sync::Arc::new(client)),
+        })
     }
 
     /// Encrypt plaintext data using KMS.
     /// Returns base64-encoded ciphertext.
-    #[cfg(feature = "gcp")]
     pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
@@ -89,17 +76,8 @@ impl KmsService {
         Ok(BASE64.encode(ciphertext))
     }
 
-    /// Encrypt plaintext data (stub for local dev).
-    #[cfg(not(feature = "gcp"))]
-    pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
-        tracing::warn!("Using stub KMS encryption - NOT SECURE FOR PRODUCTION");
-        // For local dev, just base64 encode (NOT SECURE - development only)
-        Ok(BASE64.encode(plaintext.as_bytes()))
-    }
-
     /// Decrypt ciphertext using KMS.
     /// Expects base64-encoded ciphertext.
-    #[cfg(feature = "gcp")]
     pub async fn decrypt(&self, ciphertext_b64: &str) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
@@ -125,18 +103,6 @@ impl KmsService {
 
         // response.plaintext is Vec<u8>
         String::from_utf8(response.plaintext)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
-    }
-
-    /// Decrypt ciphertext (stub for local dev).
-    #[cfg(not(feature = "gcp"))]
-    pub async fn decrypt(&self, ciphertext_b64: &str) -> Result<String, AppError> {
-        tracing::warn!("Using stub KMS decryption - NOT SECURE FOR PRODUCTION");
-        // For local dev, just base64 decode
-        let bytes = BASE64
-            .decode(ciphertext_b64)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Base64 decode failed: {}", e)))?;
-        String::from_utf8(bytes)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
     }
 }

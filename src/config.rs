@@ -84,7 +84,6 @@ impl Config {
     ///
     /// This is the recommended method for production deployments.
     /// Secrets are fetched once at startup and cached in memory.
-    #[cfg(feature = "gcp")]
     pub async fn load_with_secrets() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok();
 
@@ -124,7 +123,6 @@ impl Config {
 /// NOTE: This is commented out because Cloud Run injects secrets as environment
 /// variables via secret bindings in Terraform. Direct Secret Manager API calls
 /// are not needed - the secrets are already in env vars when the app starts.
-#[cfg(feature = "gcp")]
 async fn fetch_secret(_project_id: &str, secret_name: &str) -> Result<String, ConfigError> {
     // Cloud Run secret bindings inject secrets as env vars, so we just read from env
     std::env::var(secret_name)
