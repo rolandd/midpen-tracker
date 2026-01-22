@@ -5,6 +5,10 @@
 
 use std::env;
 
+/// The name of the Cloud Task queue for activity processing.
+/// This constant is used for both task creation and header validation.
+pub const ACTIVITY_QUEUE_NAME: &str = "activity-processing";
+
 /// Application configuration, loaded once at startup.
 /// Secrets are cached in memory after being fetched from Secret Manager.
 #[derive(Debug, Clone)]

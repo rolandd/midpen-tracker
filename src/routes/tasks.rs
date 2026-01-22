@@ -47,8 +47,28 @@ async fn create_strava_service(state: &AppState) -> Result<StravaService, AppErr
 /// Process a single activity (called by Cloud Tasks).
 async fn process_activity(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Json(payload): Json<ProcessActivityPayload>,
 ) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    // Cloud Run strips this header from external requests, so its presence guarantees internal origin.
+    // We also verify the queue name to ensure it matches our expected queue.
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
+        tracing::warn!(
+            activity_id = payload.activity_id,
+            athlete_id = payload.athlete_id,
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to process_activity"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,
@@ -107,6 +127,22 @@ async fn continue_backfill(
     headers: axum::http::HeaderMap,
     Json(payload): Json<ContinueBackfillPayload>,
 ) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
+        tracing::warn!(
+            athlete_id = payload.athlete_id,
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to continue_backfill"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
     tracing::info!(
         athlete_id = payload.athlete_id,
         page = payload.next_page,

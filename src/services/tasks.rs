@@ -42,7 +42,7 @@ impl TasksService {
         Self {
             project_id: project_id.to_string(),
             location: "us-west1".to_string(),
-            queue_name: "activity-processing".to_string(),
+            queue_name: crate::config::ACTIVITY_QUEUE_NAME.to_string(),
         }
     }
 
