@@ -21,7 +21,7 @@ COPY src ./src
 COPY data ./data
 
 # Build the real binary
-RUN touch src/main.rs src/lib.rs && cargo build --release --features gcp
+RUN touch src/main.rs src/lib.rs && cargo build --release
 
 # Runtime stage - minimal distroless image
 FROM gcr.io/distroless/static-debian13:nonroot
