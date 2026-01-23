@@ -31,15 +31,22 @@
 	</main>
 
 	<footer class="site-footer">
-		<button class="footer-link" onclick={() => (uiState.isAboutOpen = true)}>About</button>
-		<span class="separator">•</span>
-		<span>
-			made with ❤️ in mountain view, ca by <a
-				href="https://github.com/rolandd"
-				target="_blank"
-				rel="noopener">roland</a
-			>
-		</span>
+		<div class="footer-text">
+			<button class="footer-link" onclick={() => (uiState.isAboutOpen = true)}>About</button>
+			<span class="separator">•</span>
+			<span>
+				made with ❤️ in mountain view, ca by <a
+					href="https://github.com/rolandd"
+					target="_blank"
+					rel="noopener">roland</a
+				>
+			</span>
+		</div>
+		<img
+			src="/api_logo_pwrdBy_strava_horiz_white.svg"
+			alt="Powered by Strava"
+			class="strava-logo"
+		/>
 	</footer>
 </div>
 
@@ -59,6 +66,7 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
+		padding-bottom: 10rem; /* Space for fixed footer */
 	}
 
 	.site-footer {
@@ -79,6 +87,23 @@
 		background: rgba(var(--color-bg-rgb, 10, 15, 26), 0.8);
 		backdrop-filter: blur(8px);
 		border-top: 1px solid var(--color-border);
+
+		/* Layout */
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem; /* 24px */
+	}
+
+	.strava-logo {
+		height: 24px;
+		width: auto;
+		opacity: 0.8;
+		transition: opacity 0.2s;
+	}
+
+	.strava-logo:hover {
+		opacity: 1;
 	}
 
 	.site-footer a,

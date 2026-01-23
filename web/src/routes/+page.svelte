@@ -64,7 +64,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: 2rem;
+		padding: 1.5rem 1rem;
 	}
 
 	.hero {
@@ -73,17 +73,17 @@
 	}
 
 	.logo {
-		margin-bottom: 1.5rem;
+		margin-bottom: 0.25rem;
 	}
 
 	.logo-icon {
-		font-size: 4rem;
+		font-size: 2rem;
 	}
 
 	h1 {
-		font-size: 2.5rem;
+		font-size: 2.25rem;
 		font-weight: 700;
-		margin-bottom: 0.5rem;
+		margin-bottom: 0.25rem;
 		background: linear-gradient(135deg, #fff 0%, #8b95a7 100%);
 		-webkit-background-clip: text;
 		-webkit-text-fill-color: transparent;
@@ -93,9 +93,9 @@
 
 	.subtitle {
 		color: var(--color-text-muted);
-		font-size: 1.125rem;
-		margin-bottom: 1.25rem;
-		line-height: 1.6;
+		font-size: 1rem;
+		margin-bottom: 0.75rem;
+		line-height: 1.4;
 		text-wrap: pretty;
 	}
 
@@ -123,12 +123,12 @@
 	.features {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
-		gap: 1.5rem;
-		margin-top: 2rem;
+		gap: 1rem;
+		margin-top: 1rem;
 	}
 
 	.feature {
-		padding: 1.5rem 1rem;
+		padding: 1rem 0.75rem;
 		background: rgba(255, 255, 255, 0.02);
 		border-radius: var(--radius);
 		border: 1px solid rgba(255, 255, 255, 0.05);
@@ -142,9 +142,9 @@
 	}
 
 	.feature-icon {
-		font-size: 2rem;
+		font-size: 1.5rem;
 		display: block;
-		margin-bottom: 0.75rem;
+		margin-bottom: 0.5rem;
 	}
 
 	.feature h3 {
