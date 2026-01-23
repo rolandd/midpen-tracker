@@ -77,6 +77,7 @@ async fn test_delete_user_data_removes_all_records() {
         source: "test".to_string(),
         annotation_added: false,
         processed_at: now.clone(),
+        device_name: None,
     };
     db.set_activity(&activity).await.unwrap();
 

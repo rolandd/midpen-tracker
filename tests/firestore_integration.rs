@@ -192,6 +192,7 @@ async fn test_new_activity_processing() {
         source: "webhook".to_string(),
         annotation_added: false,
         processed_at: "2024-01-15T08:30:00Z".to_string(),
+        device_name: None,
     };
 
     // Create preserve records
@@ -252,6 +253,7 @@ async fn test_activity_idempotency() {
         source: "webhook".to_string(),
         annotation_added: false,
         processed_at: "2024-01-15T09:30:00Z".to_string(),
+        device_name: None,
     };
 
     // First processing
@@ -298,6 +300,7 @@ async fn test_multiple_activities_accumulate_stats() {
         source: "backfill".to_string(),
         annotation_added: false,
         processed_at: "2024-01-15T10:00:00Z".to_string(),
+        device_name: None,
     };
     db.process_activity_atomic(&activity1, &[]).await.unwrap();
 
@@ -313,6 +316,7 @@ async fn test_multiple_activities_accumulate_stats() {
         source: "backfill".to_string(),
         annotation_added: false,
         processed_at: "2024-01-15T10:00:00Z".to_string(),
+        device_name: None,
     };
     db.process_activity_atomic(&activity2, &[]).await.unwrap();
 
@@ -328,6 +332,7 @@ async fn test_multiple_activities_accumulate_stats() {
         source: "webhook".to_string(),
         annotation_added: false,
         processed_at: "2024-01-15T10:00:00Z".to_string(),
+        device_name: None,
     };
     db.process_activity_atomic(&activity3, &[]).await.unwrap();
 
@@ -383,6 +388,7 @@ async fn test_activity_with_multiple_preserves() {
         source: "webhook".to_string(),
         annotation_added: true,
         processed_at: "2024-01-15T12:00:00Z".to_string(),
+        device_name: None,
     };
 
     // Create preserve records for each preserve visited
@@ -453,6 +459,7 @@ async fn test_preserves_by_year_tracking() {
         source: "backfill".to_string(),
         annotation_added: false,
         processed_at: "2024-06-15T12:00:00Z".to_string(),
+        device_name: None,
     };
     db.process_activity_atomic(&activity_2024, &[]).await.unwrap();
 
@@ -468,6 +475,7 @@ async fn test_preserves_by_year_tracking() {
         source: "webhook".to_string(),
         annotation_added: false,
         processed_at: "2025-01-10T12:00:00Z".to_string(),
+        device_name: None,
     };
     db.process_activity_atomic(&activity_2025, &[]).await.unwrap();
 

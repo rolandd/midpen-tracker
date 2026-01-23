@@ -197,6 +197,7 @@ mod tests {
             source: "test".to_string(),
             annotation_added: false,
             processed_at: "2024-01-15T12:00:00Z".to_string(),
+            device_name: None,
         }
     }
 

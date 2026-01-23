@@ -21,6 +21,8 @@ pub struct Activity {
     pub preserves_visited: Vec<String>,
     /// Source: "webhook" or "backfill"
     pub source: String,
+    /// Device name (e.g. "Garmin Edge 530")
+    pub device_name: Option<String>,
     /// Whether the description was annotated
     pub annotation_added: bool,
     /// When this activity was processed

@@ -218,6 +218,7 @@ pub struct StravaActivity {
     pub start_date: String,
     pub distance: f64,
     pub description: Option<String>,
+    pub device_name: Option<String>,
     pub map: StravaMap,
 }
 

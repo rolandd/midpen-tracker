@@ -96,6 +96,7 @@ impl ActivityProcessor {
             distance_meters: strava_activity.distance,
             preserves_visited: preserves_visited.clone(),
             source: source.to_string(),
+            device_name: strava_activity.device_name,
             annotation_added,
             processed_at: now.clone(),
         };
