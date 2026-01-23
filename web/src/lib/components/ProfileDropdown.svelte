@@ -1,9 +1,9 @@
 <script lang="ts">
     import { onMount } from 'svelte';
-    import type { User } from '../types';
+    import type { UserResponse } from '../generated';
 
     interface Props {
-        user: User | null;
+        user: UserResponse | null;
         onLogout: () => Promise<void>;
         isLoggingOut: boolean;
     }

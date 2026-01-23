@@ -2,6 +2,7 @@
 
 use geo::{MultiPolygon, Polygon};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// A Midpen Open Space Preserve with its boundary geometry.
 #[derive(Debug, Clone)]
@@ -33,7 +34,8 @@ impl PreserveGeometry {
 }
 
 /// Summary of a preserve for API responses.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
 pub struct PreserveSummary {
     pub name: String,
     pub count: u32,
@@ -41,8 +43,10 @@ pub struct PreserveSummary {
 }
 
 /// Activity summary within a preserve context.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
 pub struct PreserveActivity {
+    #[ts(type = "number")]
     pub id: u64,
     pub date: String,
     pub sport_type: String,

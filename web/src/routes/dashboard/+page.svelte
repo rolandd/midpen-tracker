@@ -7,7 +7,8 @@
 		logout as apiLogout,
 		fetchMe,
 		type PreserveSummary,
-		type User
+		type PreserveStatsResponse,
+		type UserResponse
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
@@ -16,9 +17,9 @@
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let user = $state<User | null>(null);
+	let user = $state<UserResponse | null>(null);
 	let allTimePreserves = $state<PreserveSummary[]>([]);
-	let preservesByYear = $state<Record<string, Record<string, number>>>({});
+	let preservesByYear = $state<PreserveStatsResponse['preserves_by_year']>({});
 	let availableYears = $state<string[]>([]);
 	let selectedYear = $state<string | null>(null); // null = "All Time"
 	let totalPreserves = $state(0);
@@ -34,9 +35,10 @@
 			return allTimePreserves;
 		}
 		// Filter to selected year
-		const yearData = preservesByYear[selectedYear] || {};
+		const yearData = preservesByYear[selectedYear] ?? {};
 		const yearPreserves: PreserveSummary[] = Object.entries(yearData)
-			.map(([name, count]) => ({ name, count, activities: [] }))
+			.filter(([, count]) => count !== undefined)
+			.map(([name, count]) => ({ name, count: count ?? 0, activities: [] }))
 			.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
 		if (showUnvisited) {

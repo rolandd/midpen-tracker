@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Pre-commit hook to auto-regenerate TypeScript bindings when Rust DTOs change
+set -euo pipefail
+
+# Check if any Rust files with DTOs changed
+if git diff --cached --name-only | grep -qE '^src/(routes/api|models/preserve)\.rs$'; then
+    echo "🔄 DTO changes detected, regenerating TypeScript bindings..."
+    
+    # Regenerate bindings
+    rm -rf bindings
+    cargo test export_bindings -- 2>/dev/null
+    cp bindings/web/src/lib/generated/*.ts web/src/lib/generated/
+    rm -rf bindings
+    
+    # Stage the updated bindings
+    git add web/src/lib/generated/
+    
+    echo "✅ TypeScript bindings updated and staged"
+fi

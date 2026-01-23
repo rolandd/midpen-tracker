@@ -12,6 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use ts_rs::TS;
 
 /// API routes (require authentication via JWT).
 /// The auth middleware is applied in routes/mod.rs for these routes.
@@ -26,24 +27,26 @@ pub fn routes() -> Router<Arc<AppState>> {
 // ─── User Profile ────────────────────────────────────────────
 
 /// Current user response.
-#[derive(Serialize)]
-struct MeResponse {
-    athlete_id: u64,
-    firstname: String,
-    lastname: String,
-    profile_picture: Option<String>,
+#[derive(Serialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
+pub struct UserResponse {
+    #[ts(type = "number")]
+    pub athlete_id: u64,
+    pub firstname: String,
+    pub lastname: String,
+    pub profile_picture: Option<String>,
 }
 
 /// Get current user profile.
 async fn get_me(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
-) -> Result<Json<MeResponse>> {
+) -> Result<Json<UserResponse>> {
     let user_profile = state.db.get_user(user.athlete_id).await?.ok_or_else(|| {
         crate::error::AppError::NotFound(format!("User {} not found", user.athlete_id))
     })?;
 
-    Ok(Json(MeResponse {
+    Ok(Json(UserResponse {
         athlete_id: user_profile.strava_athlete_id,
         firstname: user_profile.firstname,
         lastname: user_profile.lastname,
@@ -82,21 +85,24 @@ fn default_per_page() -> u32 {
     20
 }
 
-#[derive(Serialize)]
-struct ActivitiesResponse {
-    activities: Vec<ActivitySummary>,
-    page: u32,
-    per_page: u32,
-    total: u32,
+#[derive(Serialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
+pub struct ActivitiesResponse {
+    pub activities: Vec<ActivitySummary>,
+    pub page: u32,
+    pub per_page: u32,
+    pub total: u32,
 }
 
-#[derive(Serialize, Clone, Debug)]
-struct ActivitySummary {
-    id: u64,
-    name: String,
-    sport_type: String,
-    start_date: String,
-    preserves: Vec<String>,
+#[derive(Serialize, Clone, Debug, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
+pub struct ActivitySummary {
+    #[ts(type = "number")]
+    pub id: u64,
+    pub name: String,
+    pub sport_type: String,
+    pub start_date: String,
+    pub preserves: Vec<String>,
 }
 
 /// Get user's activities with optional filtering.
@@ -164,18 +170,19 @@ struct PreserveStatsQuery {
 }
 
 /// Preserve stats response.
-#[derive(Serialize)]
-struct PreserveStatsResponse {
+#[derive(Serialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
+pub struct PreserveStatsResponse {
     /// All-time preserve visit counts
-    preserves: Vec<PreserveSummary>,
+    pub preserves: Vec<PreserveSummary>,
     /// Preserve visits broken down by year: { "2025": { "Rancho": 5 } }
-    preserves_by_year: std::collections::HashMap<String, std::collections::HashMap<String, u32>>,
-    total_preserves_visited: u32,
-    total_preserves: u32,
+    pub preserves_by_year: std::collections::HashMap<String, std::collections::HashMap<String, u32>>,
+    pub total_preserves_visited: u32,
+    pub total_preserves: u32,
     /// Number of activities still being processed in backfill
-    pending_activities: u32,
+    pub pending_activities: u32,
     /// Available years for filtering (sorted descending)
-    available_years: Vec<String>,
+    pub available_years: Vec<String>,
 }
 
 /// Get preserve visit stats for current user.

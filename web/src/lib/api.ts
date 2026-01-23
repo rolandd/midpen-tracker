@@ -56,21 +56,21 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 	return response.json();
 }
 
-// Types
+// Types - re-exported from generated bindings
 export type {
-	User,
+	UserResponse,
 	PreserveActivity,
 	PreserveSummary,
 	PreserveStatsResponse,
 	ActivitySummary,
 	ActivitiesResponse
-} from './types';
-import type { User, PreserveStatsResponse, ActivitiesResponse } from './types';
+} from './generated';
+import type { UserResponse, PreserveStatsResponse, ActivitiesResponse } from './generated';
 
 // API methods
-export async function fetchMe(): Promise<User> {
+export async function fetchMe(): Promise<UserResponse> {
 	if (DEMO_MODE) return mockUser;
-	return apiFetch<User>('/api/me');
+	return apiFetch<UserResponse>('/api/me');
 }
 
 export async function fetchPreserveStats(showUnvisited = false): Promise<PreserveStatsResponse> {

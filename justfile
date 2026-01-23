@@ -54,6 +54,39 @@ check-all: lint
     cargo fmt -- --check
     @echo "✅ All checks passed"
 
+# ─── TypeScript Bindings ──────────────────────────────────────
+
+# Generate TypeScript bindings from Rust DTOs
+generate-bindings:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf bindings
+    cargo test export_bindings --
+    cp bindings/web/src/lib/generated/*.ts web/src/lib/generated/
+    rm -rf bindings
+    echo "✅ TypeScript bindings generated in web/src/lib/generated/"
+
+# Check bindings are up-to-date (CI safety net)
+check-bindings:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf bindings
+    cargo test export_bindings -- 2>/dev/null
+    for f in bindings/web/src/lib/generated/*.ts; do
+        name=$(basename "$f")
+        if ! diff -q "$f" "web/src/lib/generated/$name" >/dev/null 2>&1; then
+            echo "❌ Binding $name is stale! Run: just generate-bindings"
+            exit 1
+        fi
+    done
+    rm -rf bindings
+    echo "✅ TypeScript bindings are up-to-date"
+
+# Setup git hooks for automatic binding generation
+setup-hooks:
+    git config core.hooksPath .githooks
+    @echo "✅ Git hooks configured"
+
 # ─── Build ────────────────────────────────────────────────────
 
 # Build release binary locally

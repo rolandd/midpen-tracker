@@ -3,11 +3,11 @@
  * Enable by setting PUBLIC_DEMO_MODE=true in .env or environment.
  */
 
-import type { User, PreserveStatsResponse, ActivitiesResponse } from './types';
+import type { UserResponse, PreserveStatsResponse, ActivitiesResponse } from './generated';
 
 export const DEMO_MODE = import.meta.env.PUBLIC_DEMO_MODE === 'true';
 
-export const mockUser: User = {
+export const mockUser: UserResponse = {
     athlete_id: 12345678,
     firstname: 'Demo',
     lastname: 'User',
