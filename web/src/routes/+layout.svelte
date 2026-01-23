@@ -1,5 +1,7 @@
 <script lang="ts">
 	import '../app.css';
+	import { uiState } from '$lib/state.svelte';
+	import { AboutModal } from '$lib/components';
 
 	let { children } = $props();
 </script>
@@ -29,13 +31,21 @@
 	</main>
 
 	<footer class="site-footer">
-		made with ❤️ in mountain view, ca by <a
-			href="https://github.com/rolandd"
-			target="_blank"
-			rel="noopener">roland</a
-		>
+		<button class="footer-link" onclick={() => (uiState.isAboutOpen = true)}>About</button>
+		<span class="separator">•</span>
+		<span>
+			made with ❤️ in mountain view, ca by <a
+				href="https://github.com/rolandd"
+				target="_blank"
+				rel="noopener">roland</a
+			>
+		</span>
 	</footer>
 </div>
+
+{#if uiState.isAboutOpen}
+	<AboutModal />
+{/if}
 
 <style>
 	.app-wrapper {
@@ -53,23 +63,49 @@
 
 	.site-footer {
 		text-align: center;
-		padding: 1.5rem 1rem;
+		padding: 1rem;
 		font-size: 0.8rem;
 		color: #6b7280;
 		letter-spacing: 0.02em;
+		
+		/* Fixed positioning */
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		z-index: 5;
+		
+		/* Visuals */
+		background: rgba(var(--color-bg-rgb, 10, 15, 26), 0.8);
+		backdrop-filter: blur(8px);
+		border-top: 1px solid var(--color-border);
 	}
 
-	.site-footer a {
+	.site-footer a,
+	.footer-link {
 		color: #e8856c;
 		text-decoration: none;
 		border-bottom: 1px dotted #e8856c;
 		transition:
 			color 0.2s,
 			border-color 0.2s;
+		background: none;
+		border-top: none;
+		border-left: none;
+		border-right: none;
+		padding: 0;
+		font: inherit;
+		cursor: pointer;
 	}
 
-	.site-footer a:hover {
+	.site-footer a:hover,
+	.footer-link:hover {
 		color: #fc5200;
 		border-bottom-color: #fc5200;
+	}
+
+	.separator {
+		margin: 0 0.5rem;
+		color: var(--color-border);
 	}
 </style>

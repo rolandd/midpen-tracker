@@ -11,6 +11,7 @@
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
+	import { uiState } from '$lib/state.svelte';
 	import Toggle from 'svelte-switcher';
 
 	let loading = $state(true);
@@ -120,13 +121,21 @@
 <div class="dashboard">
 	<header>
 		<div class="header-content">
-			<h1>🌲 Midpen Tracker</h1>
-			{#if user}
-				<ProfileDropdown {user} onLogout={handleLogout} {isLoggingOut} />
-			{:else}
-				<!-- Fallback/Skeleton while loading user -->
-				<div class="header-placeholder"></div>
-			{/if}
+			<div class="header-left">
+				<h1>🌲 Midpen Tracker</h1>
+			</div>
+			<div class="header-right">
+				<button class="about-trigger" onclick={() => (uiState.isAboutOpen = true)}>
+					<span class="icon">ⓘ</span>
+					<span>About</span>
+				</button>
+				{#if user}
+					<ProfileDropdown {user} onLogout={handleLogout} {isLoggingOut} />
+				{:else}
+					<!-- Fallback/Skeleton while loading user -->
+					<div class="header-placeholder"></div>
+				{/if}
+			</div>
 		</div>
 	</header>
 
@@ -247,6 +256,41 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+	}
+
+	.header-left {
+		display: flex;
+		align-items: center;
+	}
+
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+	}
+
+	.about-trigger {
+		background: none;
+		border: 1px solid var(--color-border);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.35rem 0.75rem;
+		border-radius: var(--radius-sm);
+		font-size: 0.875rem;
+		transition: all 0.2s;
+	}
+
+	.about-trigger:hover {
+		background: var(--color-surface-hover);
+		color: var(--color-text);
+		border-color: var(--color-primary);
+	}
+
+	.about-trigger .icon {
+		font-style: normal;
 	}
 
 	h1 {

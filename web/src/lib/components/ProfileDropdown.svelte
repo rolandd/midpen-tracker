@@ -51,7 +51,7 @@
 <div class="relative flex items-center">
     <!-- Trigger Button -->
     <button
-        class="bg-transparent border-none p-0 cursor-pointer rounded-full transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2"
+        class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
         onclick={toggleDropdown}
         bind:this={triggerRef}
         aria-expanded={isOpen}
@@ -61,15 +61,15 @@
             <img
                 src={user.profile_picture}
                 alt="{user.firstname} {user.lastname}"
-                class="w-10 h-10 rounded-full object-cover border-2 border-[var(--color-surface)] shadow-md"
+                class="w-full h-full object-cover"
             />
         {:else if user}
-            <div class="w-10 h-10 rounded-full bg-linear-to-br from-[var(--color-primary)] to-[var(--color-primary-hover)] text-white flex items-center justify-center font-semibold text-sm border-2 border-[var(--color-surface)] shadow-md [text-shadow:0_1px_2px_rgba(0,0,0,0.1)]">
+            <div class="w-full h-full bg-linear-to-br from-[var(--color-primary)] to-[var(--color-primary-hover)] text-white flex items-center justify-center font-semibold text-xs text-shadow-sm">
                 {getInitials(user.firstname, user.lastname)}
             </div>
         {:else}
             <!-- Loading/Fallback state -->
-            <div class="w-10 h-10 rounded-full bg-[var(--color-surface-hover)] border-2 border-[var(--color-surface)]"></div>
+            <div class="w-full h-full bg-[var(--color-surface-hover)]"></div>
         {/if}
     </button>
 
