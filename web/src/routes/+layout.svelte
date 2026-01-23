@@ -32,7 +32,7 @@
 
 	<footer class="site-footer">
 		<div class="footer-text">
-			<button class="footer-link" onclick={() => (uiState.isAboutOpen = true)}>About</button>
+			<button class="footer-link" onclick={() => (uiState.isAboutOpen = true)}>about</button>
 			<span class="separator">•</span>
 			<span>
 				made with ❤️ in mountain view, ca by <a
@@ -41,6 +41,8 @@
 					rel="noopener">roland</a
 				>
 			</span>
+			<span class="separator">•</span>
+			<a href="/legal" class="footer-link">privacy & terms</a>
 		</div>
 		<img
 			src="/api_logo_pwrdBy_strava_horiz_white.svg"
@@ -75,14 +77,14 @@
 		font-size: 0.8rem;
 		color: #6b7280;
 		letter-spacing: 0.02em;
-		
+
 		/* Fixed positioning */
 		position: fixed;
 		bottom: 0;
 		left: 0;
 		right: 0;
 		z-index: 5;
-		
+
 		/* Visuals */
 		background: rgba(var(--color-bg-rgb, 10, 15, 26), 0.8);
 		backdrop-filter: blur(8px);

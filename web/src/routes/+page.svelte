@@ -23,13 +23,18 @@
 
 		<h1>Midpen Strava Tracker</h1>
 		<p class="subtitle">
-			Track your activities across all 26 Midpen Open Space Preserves. Connect your Strava account
+			Track your activities across all 25 Midpen Open Space Preserves. Connect your Strava account
 			to automatically detect which preserves you've visited.
 		</p>
 
 		<button class="strava-connect-btn" onclick={connectStrava}>
 			<img src="/btn_strava_connect_with_orange.svg" alt="Connect with Strava" height="48" />
 		</button>
+
+		<p class="legal-disclaimer">
+			By connecting your Strava account, you agree to our <a href="/legal">Privacy Policy & Terms</a
+			>.
+		</p>
 
 		<div class="features">
 			<div class="feature">
@@ -159,9 +164,32 @@
 	}
 
 	.privacy {
-		margin-top: 1.5rem;
+		margin-top: 1rem;
 		color: var(--color-text-muted);
 		text-wrap: balance;
+	}
+
+	.legal-disclaimer {
+		margin-top: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		max-width: 300px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.legal-disclaimer a {
+		color: #e8856c;
+		text-decoration: none;
+		border-bottom: 1px dotted #e8856c;
+		transition:
+			color 0.2s,
+			border-color 0.2s;
+	}
+
+	.legal-disclaimer a:hover {
+		color: #fc5200;
+		border-bottom-color: #fc5200;
 	}
 
 	@media (max-width: 640px) {
