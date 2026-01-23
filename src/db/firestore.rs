@@ -386,4 +386,114 @@ impl FirestoreDb {
 
         Ok(true)
     }
+
+    // ─── User Data Deletion (GDPR) ─────────────────────────────────
+
+    /// Delete ALL data for a user (GDPR compliance).
+    ///
+    /// Deletes from all collections:
+    /// - `activity_preserves` (query by athlete_id)
+    /// - `activities` (query by athlete_id)
+    /// - `user_stats/{athlete_id}`
+    /// - `users/{athlete_id}`
+    ///
+    /// Note: Tokens should be deleted separately by the caller after
+    /// using them for Strava deauthorization.
+    ///
+    /// Returns the number of documents deleted.
+    pub async fn delete_user_data(&self, athlete_id: u64) -> Result<usize, AppError> {
+        let mut deleted_count = 0;
+
+        // 1. Delete all activity-preserve join records
+        let preserve_records: Vec<ActivityPreserve> = self
+            .client
+            .fluent()
+            .select()
+            .from(collections::ACTIVITY_PRESERVES)
+            .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
+            .obj()
+            .query()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        for record in &preserve_records {
+            let safe_name = urlencoding::encode(&record.preserve_name);
+            let doc_id = format!("{}_{}", record.activity_id, safe_name);
+            self.client
+                .fluent()
+                .delete()
+                .from(collections::ACTIVITY_PRESERVES)
+                .document_id(&doc_id)
+                .execute()
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+        deleted_count += preserve_records.len();
+        tracing::debug!(
+            athlete_id,
+            count = preserve_records.len(),
+            "Deleted activity-preserve records"
+        );
+
+        // 2. Delete all activities
+        let activities: Vec<Activity> = self
+            .client
+            .fluent()
+            .select()
+            .from(collections::ACTIVITIES)
+            .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
+            .obj()
+            .query()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        for activity in &activities {
+            self.client
+                .fluent()
+                .delete()
+                .from(collections::ACTIVITIES)
+                .document_id(activity.strava_activity_id.to_string())
+                .execute()
+                .await
+                .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+        deleted_count += activities.len();
+        tracing::debug!(
+            athlete_id,
+            count = activities.len(),
+            "Deleted activities"
+        );
+
+        // 3. Delete user stats
+        self.client
+            .fluent()
+            .delete()
+            .from(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .execute()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        deleted_count += 1;
+        tracing::debug!(athlete_id, "Deleted user stats");
+
+        // 4. Delete user profile
+        self.client
+            .fluent()
+            .delete()
+            .from(collections::USERS)
+            .document_id(athlete_id.to_string())
+            .execute()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        deleted_count += 1;
+        tracing::debug!(athlete_id, "Deleted user profile");
+
+        tracing::info!(
+            athlete_id,
+            deleted_count,
+            "User data deletion complete"
+        );
+
+        Ok(deleted_count)
+    }
 }

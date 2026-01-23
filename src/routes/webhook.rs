@@ -1,6 +1,6 @@
 //! Webhook routes for Strava events.
 
-use crate::services::tasks::ProcessActivityPayload;
+use crate::services::tasks::{DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
     extract::{Json, Query, State},
@@ -126,14 +126,33 @@ async fn handle_event(
             }
         }
         ("athlete", "deauthorize") => {
-            // Delete user tokens from Firestore
-            if let Err(e) = state.db.delete_tokens(event.owner_id).await {
-                tracing::error!(error = %e, athlete_id = event.owner_id, "Failed to delete tokens");
+            // Queue user deletion via Cloud Tasks (respond immediately to Strava)
+            let payload = DeleteUserPayload {
+                athlete_id: event.owner_id,
+                source: "webhook".to_string(),
+            };
+
+            // Construct service URL for Cloud Tasks
+            let host = headers
+                .get(axum::http::header::HOST)
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or("localhost:8080");
+
+            let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
+                "http"
             } else {
-                tracing::info!(
-                    athlete_id = event.owner_id,
-                    "User deauthorized, tokens removed"
-                );
+                "https"
+            };
+            let service_url = format!("{}://{}", scheme, host);
+
+            if let Err(e) = state
+                .tasks_service
+                .queue_delete_user(&service_url, payload)
+                .await
+            {
+                tracing::error!(error = %e, athlete_id = event.owner_id, "Failed to queue user deletion");
+            } else {
+                tracing::info!(athlete_id = event.owner_id, "User deletion queued");
             }
         }
         _ => {

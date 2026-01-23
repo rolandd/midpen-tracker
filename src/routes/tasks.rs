@@ -8,7 +8,7 @@ use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
 use crate::services::kms::KmsService;
 use crate::services::strava::StravaService;
-use crate::services::tasks::{ContinueBackfillPayload, ProcessActivityPayload};
+use crate::services::tasks::{ContinueBackfillPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
     extract::{Json, State},
@@ -23,6 +23,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/tasks/process-activity", post(process_activity))
         .route("/tasks/continue-backfill", post(continue_backfill))
+        .route("/tasks/delete-user", post(delete_user))
 }
 
 /// Create a StravaService from app state.
@@ -347,4 +348,145 @@ async fn increment_pending(
     state.db.set_user_stats(athlete_id, &stats).await?;
 
     Ok(())
+}
+
+/// Delete a user and all their data (GDPR compliance).
+/// Called by Cloud Tasks from webhook deauthorization or user-initiated deletion.
+///
+/// Flow:
+/// 1. Get tokens from DB → hold in memory
+/// 2. DELETE tokens from DB immediately (blocks concurrent activity processing)
+/// 3. Delete all user data (activities, preserves, stats, user)
+/// 4. Call Strava deauthorize using in-memory tokens
+async fn delete_user(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<DeleteUserPayload>,
+) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
+        tracing::warn!(
+            athlete_id = payload.athlete_id,
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to delete_user"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
+    tracing::info!(
+        athlete_id = payload.athlete_id,
+        source = %payload.source,
+        "Processing user deletion from Cloud Task"
+    );
+
+    // 1. Get tokens from DB (hold in memory for later Strava deauth)
+    let tokens_result = state.db.get_tokens(payload.athlete_id).await;
+    let held_tokens = match tokens_result {
+        Ok(Some(tokens)) => Some(tokens),
+        Ok(None) => {
+            tracing::warn!(
+                athlete_id = payload.athlete_id,
+                "No tokens found - user may have already been deleted"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to get tokens");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
+    // 2. Delete tokens FIRST (blocks concurrent activity processing)
+    if let Err(e) = state.db.delete_tokens(payload.athlete_id).await {
+        tracing::error!(error = %e, "Failed to delete tokens");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    }
+    tracing::debug!(athlete_id = payload.athlete_id, "Tokens deleted");
+
+    // 3. Delete all user data
+    match state.db.delete_user_data(payload.athlete_id).await {
+        Ok(count) => {
+            tracing::info!(
+                athlete_id = payload.athlete_id,
+                deleted_count = count,
+                "User data deleted successfully"
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to delete user data");
+            // Continue to Strava deauth anyway - tokens are already gone
+        }
+    }
+
+    // 4. Deauthorize with Strava using held-in-memory tokens
+    if let Some(tokens) = held_tokens {
+        // Create KMS service for token decryption
+        let kms = match KmsService::new(
+            &state.config.gcp_project_id,
+            "us-west1",
+            "midpen-strava",
+            "token-encryption",
+        )
+        .await
+        {
+            Ok(k) => k,
+            Err(e) => {
+                tracing::error!(error = %e, "Failed to create KMS service for deauth");
+                // Data is deleted, just can't deauth - still consider success
+                return StatusCode::OK;
+            }
+        };
+
+        // Decrypt access token
+        match crate::services::kms::decrypt_tokens(
+            &kms,
+            &tokens.access_token_encrypted,
+            &tokens.refresh_token_encrypted,
+        )
+        .await
+        {
+            Ok((access_token, _refresh_token)) => {
+                // Create Strava client and deauthorize
+                let client = crate::services::strava::StravaClient::new(
+                    state.config.strava_client_id.clone(),
+                    state.config.strava_client_secret.clone(),
+                );
+
+                if let Err(e) = client.deauthorize(&access_token).await {
+                    tracing::warn!(
+                        error = %e,
+                        athlete_id = payload.athlete_id,
+                        "Failed to deauthorize with Strava (non-fatal)"
+                    );
+                    // Non-fatal - user may have already revoked from Strava side
+                } else {
+                    tracing::info!(
+                        athlete_id = payload.athlete_id,
+                        "Strava deauthorization successful"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    athlete_id = payload.athlete_id,
+                    "Failed to decrypt tokens for deauth (non-fatal)"
+                );
+            }
+        }
+    }
+
+    tracing::info!(
+        athlete_id = payload.athlete_id,
+        source = %payload.source,
+        "User deletion complete"
+    );
+
+    StatusCode::OK
 }

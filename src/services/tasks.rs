@@ -31,6 +31,13 @@ pub struct ContinueBackfillPayload {
     pub after_timestamp: i64, // Unix timestamp for "activities after this date"
 }
 
+/// Payload for user deletion task (GDPR compliance).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteUserPayload {
+    pub athlete_id: u64,
+    pub source: String, // "webhook" or "user_request"
+}
+
 /// Cloud Tasks client wrapper.
 pub struct TasksService {
     project_id: String,
@@ -64,6 +71,21 @@ impl TasksService {
         payload: ContinueBackfillPayload,
     ) -> Result<()> {
         self.queue_task(service_url, "/tasks/continue-backfill", &payload)
+            .await
+    }
+
+    /// Queue a user deletion task (GDPR compliance).
+    pub async fn queue_delete_user(
+        &self,
+        service_url: &str,
+        payload: DeleteUserPayload,
+    ) -> Result<()> {
+        tracing::info!(
+            athlete_id = payload.athlete_id,
+            source = %payload.source,
+            "Queuing user deletion task"
+        );
+        self.queue_task(service_url, "/tasks/delete-user", &payload)
             .await
     }
 

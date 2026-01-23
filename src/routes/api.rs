@@ -4,10 +4,12 @@ use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::models::preserve::PreserveSummary;
 use crate::models::ActivityPreserve;
+use crate::services::tasks::DeleteUserPayload;
 use crate::AppState;
 use axum::{
     extract::{Query, State},
-    routing::{get, post},
+    http::HeaderMap,
+    routing::{delete, get, post},
     Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -21,6 +23,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/api/me", get(get_me))
         .route("/api/activities", get(get_activities))
         .route("/api/stats/preserves", get(get_preserve_stats))
+        .route("/api/account", delete(delete_account))
         .route("/auth/logout", post(logout))
 }
 
@@ -60,6 +63,60 @@ async fn logout(Extension(user): Extension<AuthUser>) -> Result<Json<serde_json:
     // JWT is stateless, so we just return success
     // Client is responsible for discarding the token
     Ok(Json(serde_json::json!({ "success": true })))
+}
+
+// ─── Account Deletion ────────────────────────────────────────
+
+/// Response for account deletion.
+#[derive(Serialize, TS)]
+#[ts(export, export_to = "web/src/lib/generated/")]
+pub struct DeleteAccountResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// Delete user's account and all associated data (GDPR compliance).
+///
+/// This queues a deletion task and returns immediately.
+/// The task will:
+/// 1. Delete tokens from DB (blocks concurrent activity processing)
+/// 2. Delete all user data from Firestore
+/// 3. Deauthorize with Strava
+async fn delete_account(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Extension(user): Extension<AuthUser>,
+) -> Result<Json<DeleteAccountResponse>> {
+    tracing::info!(athlete_id = user.athlete_id, "User-initiated account deletion");
+
+    // Queue deletion task
+    let payload = DeleteUserPayload {
+        athlete_id: user.athlete_id,
+        source: "user_request".to_string(),
+    };
+
+    // Construct service URL for Cloud Tasks
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("localhost:8080");
+
+    let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
+        "http"
+    } else {
+        "https"
+    };
+    let service_url = format!("{}://{}", scheme, host);
+
+    state
+        .tasks_service
+        .queue_delete_user(&service_url, payload)
+        .await?;
+
+    Ok(Json(DeleteAccountResponse {
+        success: true,
+        message: "Account deletion initiated. All data will be removed.".to_string(),
+    }))
 }
 
 // ─── Activities ──────────────────────────────────────────────

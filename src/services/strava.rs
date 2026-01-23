@@ -112,6 +112,27 @@ impl StravaClient {
         self.check_response_json(response).await
     }
 
+    /// Deauthorize the application for a user.
+    ///
+    /// POST https://www.strava.com/oauth/deauthorize
+    /// Authorization: Bearer {access_token}
+    ///
+    /// This invalidates all access and refresh tokens for the user
+    /// and removes the app from their Strava settings.
+    pub async fn deauthorize(&self, access_token: &str) -> Result<(), AppError> {
+        let response = self
+            .http
+            .post("https://www.strava.com/oauth/deauthorize")
+            .bearer_auth(access_token)
+            .send()
+            .await
+            .map_err(|e| AppError::StravaApi(format!("Deauthorization request failed: {}", e)))?;
+
+        self.check_response(response).await?;
+        tracing::info!("Strava deauthorization successful");
+        Ok(())
+    }
+
     /// Generic GET request with JSON response.
     async fn get_json<T: for<'de> Deserialize<'de>>(
         &self,

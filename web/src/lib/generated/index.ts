@@ -8,3 +8,4 @@ export type { PreserveSummary } from './PreserveSummary';
 export type { PreserveStatsResponse } from './PreserveStatsResponse';
 export type { ActivitySummary } from './ActivitySummary';
 export type { ActivitiesResponse } from './ActivitiesResponse';
+export type { DeleteAccountResponse } from './DeleteAccountResponse';

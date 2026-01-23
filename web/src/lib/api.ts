@@ -63,9 +63,15 @@ export type {
 	PreserveSummary,
 	PreserveStatsResponse,
 	ActivitySummary,
-	ActivitiesResponse
+	ActivitiesResponse,
+	DeleteAccountResponse
 } from './generated';
-import type { UserResponse, PreserveStatsResponse, ActivitiesResponse } from './generated';
+import type {
+	UserResponse,
+	PreserveStatsResponse,
+	ActivitiesResponse,
+	DeleteAccountResponse
+} from './generated';
 
 // API methods
 export async function fetchMe(): Promise<UserResponse> {
@@ -92,4 +98,10 @@ export async function logout(): Promise<void> {
 export async function fetchActivities(preserve: string): Promise<ActivitiesResponse> {
 	if (DEMO_MODE) return getMockActivitiesForPreserve(preserve);
 	return apiFetch<ActivitiesResponse>(`/api/activities?preserve=${encodeURIComponent(preserve)}`);
+}
+
+export async function deleteAccount(): Promise<DeleteAccountResponse> {
+	const response = await apiFetch<DeleteAccountResponse>('/api/account', { method: 'DELETE' });
+	clearToken();
+	return response;
 }

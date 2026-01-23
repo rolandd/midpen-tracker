@@ -1,6 +1,8 @@
-<script lang="ts">
     import { onMount } from 'svelte';
+    import { goto } from '$app/navigation';
     import type { UserResponse } from '../generated';
+    import { DeleteAccountModal } from '$lib/components';
+    import { deleteAccount } from '$lib/api';
 
     interface Props {
         user: UserResponse | null;
@@ -10,6 +12,7 @@
 
     let { user, onLogout, isLoggingOut }: Props = $props();
     let isOpen = $state(false);
+    let showDeleteConfirmation = $state(false);
     let dropdownRef = $state<HTMLDivElement>();
     let triggerRef = $state<HTMLButtonElement>();
 
@@ -126,6 +129,28 @@
                     Log Out
                 {/if}
             </button>
+
+             <button
+                class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-colors border-none bg-transparent cursor-pointer text-left text-red-500 hover:bg-red-500/10 hover:text-red-700 font-medium mt-1"
+                onclick={() => {
+                    showDeleteConfirmation = true;
+                    closeDropdown();
+                }}
+                disabled={isLoggingOut}
+            >
+                Delete My Account
+            </button>
         </div>
     {/if}
 </div>
+
+{#if showDeleteConfirmation}
+    <DeleteAccountModal
+        onConfirm={async () => {
+             await deleteAccount();
+             // API will 401 on next request, but we proactively clear token and redirect
+             goto('/');
+        }}
+        onCancel={() => showDeleteConfirmation = false}
+    />
+{/if}
