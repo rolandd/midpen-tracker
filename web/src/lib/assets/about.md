@@ -41,8 +41,9 @@ Inspired by Judy Cooks's story in [One Year, 25 Preserves](https://www.openspace
 We take your privacy seriously. Here is exactly how we handle your data:
 
 *   **Read**: We read your Strava profile (to identify you) and your activities (to check if they match preserve boundaries).
-*   **Store**: We store your authentication tokens (encrypted), your activity summary stats (e.g., "visited Windy Hill"), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
+*   **Store**: We store your authentication tokens (encrypted), your activity metadata (e.g., date, device type, visit status), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
 *   **Modify**: We modify your Strava activity descriptions *only* to add preserve visit annotations (e.g., "🌲 Visited Rancho San Antonio").
+*   **No Data Sharing**: We will never sell, rent, or voluntarily share your data with third parties for any purpose.
 *   **Delete**: All data associated with you is permanently deleted if you disconnect the app in Strava or select "Delete my account" in this app.
 
 ### Credits & Data Sources
