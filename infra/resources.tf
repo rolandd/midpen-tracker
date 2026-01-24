@@ -81,5 +81,35 @@ resource "google_artifact_registry_repository" "main" {
   repository_id = "midpen-strava"
   format        = "DOCKER"
 
+  # Set to true to test the policy before actual deletion
+  cleanup_policy_dry_run = false
+
+  # Policy 1: Keep any tagged image (e.g. 'latest', 'production', 'v1.0')
+  cleanup_policies {
+    id     = "keep-tagged"
+    action = "KEEP"
+    condition {
+      tag_state = "TAGGED"
+    }
+  }
+
+  # Policy 2: Always keep the last 4 uploaded versions (safety buffer)
+  cleanup_policies {
+    id     = "keep-recent-buffer"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 4
+    }
+  }
+
+  # Policy 3: Delete everything else older than 30 days
+  cleanup_policies {
+    id     = "delete-stale"
+    action = "DELETE"
+    condition {
+      older_than = "2592000s" # 30 days
+    }
+  }
+
   depends_on = [google_project_service.apis]
 }
