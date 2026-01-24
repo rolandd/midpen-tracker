@@ -57,4 +57,8 @@ google-cloud-googleapis = "0.16"
 futures-util = "0.3.31"
 
 # TypeScript bindings generation
-ts-rs = { version = "11.1", features = ["serde-compat"] }
+# TypeScript bindings generation
+ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }
+
+[features]
+binding-generation = ["ts-rs"]

@@ -104,21 +104,29 @@ async fn test_delete_user_data_removes_all_records() {
     assert!(db.get_user(athlete_id).await.unwrap().is_some());
     assert!(db.get_tokens(athlete_id).await.unwrap().is_some());
     assert!(db.get_activity(1001).await.unwrap().is_some());
-    assert!(!db.get_activities_for_preserve(athlete_id, "Rancho San Antonio").await.unwrap().is_empty());
+    assert!(!db
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .await
+        .unwrap()
+        .is_empty());
     assert!(db.get_user_stats(athlete_id).await.unwrap().is_some());
 
     // 6. Execute Deletion (GDPR method)
     // Note: This does NOT delete tokens (caller responsibility), only user data
     let count = db.delete_user_data(athlete_id).await.unwrap();
     assert!(count >= 3); // activity + preserve + stats + user
-    
+
     // Verify Tokens are STILL THERE (caller must delete explicitly)
     assert!(db.get_tokens(athlete_id).await.unwrap().is_some());
 
     // Verify Everything Else is GONE
     assert!(db.get_user(athlete_id).await.unwrap().is_none());
     assert!(db.get_activity(1001).await.unwrap().is_none());
-    assert!(db.get_activities_for_preserve(athlete_id, "Rancho San Antonio").await.unwrap().is_empty());
+    assert!(db
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .await
+        .unwrap()
+        .is_empty());
     assert!(db.get_user_stats(athlete_id).await.unwrap().is_none());
 
     // 7. Explicitly delete tokens (simulating task handler)

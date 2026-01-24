@@ -4,7 +4,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { uiState } from '$lib/state.svelte';
-	// @ts-ignore
+
 	import Content from '$lib/assets/about.md';
 	import { SocialLink } from '$lib/components';
 

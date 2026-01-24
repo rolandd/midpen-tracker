@@ -2,7 +2,6 @@
 <!-- Copyright 2026 Roland Dreier <roland@kernel.org> -->
 
 <script lang="ts">
-	// @ts-ignore
 	import Legal from '../../lib/assets/legal.md';
 </script>
 

@@ -31,9 +31,7 @@ impl FirestoreDb {
 
         tracing::info!(project = project_id, "Connected to Firestore");
 
-        Ok(Self {
-            client,
-        })
+        Ok(Self { client })
     }
 
     // ─── User Operations ─────────────────────────────────────────
@@ -461,11 +459,7 @@ impl FirestoreDb {
                 .map_err(|e| AppError::Database(e.to_string()))?;
         }
         deleted_count += activities.len();
-        tracing::debug!(
-            athlete_id,
-            count = activities.len(),
-            "Deleted activities"
-        );
+        tracing::debug!(athlete_id, count = activities.len(), "Deleted activities");
 
         // 3. Delete user stats
         self.client
@@ -491,11 +485,7 @@ impl FirestoreDb {
         deleted_count += 1;
         tracing::debug!(athlete_id, "Deleted user profile");
 
-        tracing::info!(
-            athlete_id,
-            deleted_count,
-            "User data deletion complete"
-        );
+        tracing::info!(athlete_id, deleted_count, "User data deletion complete");
 
         Ok(deleted_count)
     }

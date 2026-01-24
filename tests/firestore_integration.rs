@@ -269,10 +269,7 @@ async fn test_activity_idempotency() {
 
     // Verify stats weren't double-counted
     let stats = db.get_user_stats(athlete_id).await.unwrap().unwrap();
-    assert_eq!(
-        stats.total_activities, 1,
-        "Should count activity only once"
-    );
+    assert_eq!(stats.total_activities, 1, "Should count activity only once");
     assert_eq!(
         stats.total_distance_meters, 5000.0,
         "Distance should not be doubled"
@@ -429,7 +426,10 @@ async fn test_activity_with_multiple_preserves() {
         .await
         .unwrap();
     assert_eq!(rancho_activities.len(), 1);
-    assert_eq!(rancho_activities[0].activity_name, "Epic Multi-Preserve Ride");
+    assert_eq!(
+        rancho_activities[0].activity_name,
+        "Epic Multi-Preserve Ride"
+    );
 
     let monte_bello_activities = db
         .get_activities_for_preserve(athlete_id, "Monte Bello")
@@ -464,7 +464,9 @@ async fn test_preserves_by_year_tracking() {
         processed_at: "2024-06-15T12:00:00Z".to_string(),
         device_name: None,
     };
-    db.process_activity_atomic(&activity_2024, &[]).await.unwrap();
+    db.process_activity_atomic(&activity_2024, &[])
+        .await
+        .unwrap();
 
     // Activity in 2025
     let activity_2025 = Activity {
@@ -480,7 +482,9 @@ async fn test_preserves_by_year_tracking() {
         processed_at: "2025-01-10T12:00:00Z".to_string(),
         device_name: None,
     };
-    db.process_activity_atomic(&activity_2025, &[]).await.unwrap();
+    db.process_activity_atomic(&activity_2025, &[])
+        .await
+        .unwrap();
 
     // Verify year-specific stats
     let stats = db.get_user_stats(athlete_id).await.unwrap().unwrap();

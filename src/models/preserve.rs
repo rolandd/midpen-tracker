@@ -5,6 +5,7 @@
 
 use geo::{MultiPolygon, Polygon};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "binding-generation")]
 use ts_rs::TS;
 
 /// A Midpen Open Space Preserve with its boundary geometry.
@@ -37,8 +38,12 @@ impl PreserveGeometry {
 }
 
 /// Summary of a preserve for API responses.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct PreserveSummary {
     pub name: String,
     pub count: u32,
@@ -46,10 +51,14 @@ pub struct PreserveSummary {
 }
 
 /// Activity summary within a preserve context.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct PreserveActivity {
-    #[ts(type = "number")]
+    #[cfg_attr(feature = "binding-generation", ts(type = "number"))]
     pub id: u64,
     pub date: String,
     pub sport_type: String,

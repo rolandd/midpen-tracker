@@ -17,6 +17,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+#[cfg(feature = "binding-generation")]
 use ts_rs::TS;
 
 /// API routes (require authentication via JWT).
@@ -33,10 +34,14 @@ pub fn routes() -> Router<Arc<AppState>> {
 // ─── User Profile ────────────────────────────────────────────
 
 /// Current user response.
-#[derive(Serialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct UserResponse {
-    #[ts(type = "number")]
+    #[cfg_attr(feature = "binding-generation", ts(type = "number"))]
     pub athlete_id: u64,
     pub firstname: String,
     pub lastname: String,
@@ -71,8 +76,12 @@ async fn logout(Extension(user): Extension<AuthUser>) -> Result<Json<serde_json:
 // ─── Account Deletion ────────────────────────────────────────
 
 /// Response for account deletion.
-#[derive(Serialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct DeleteAccountResponse {
     pub success: bool,
     pub message: String,
@@ -90,7 +99,10 @@ async fn delete_account(
     headers: HeaderMap,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<DeleteAccountResponse>> {
-    tracing::info!(athlete_id = user.athlete_id, "User-initiated account deletion");
+    tracing::info!(
+        athlete_id = user.athlete_id,
+        "User-initiated account deletion"
+    );
 
     // Queue deletion task
     let payload = DeleteUserPayload {
@@ -145,8 +157,12 @@ fn default_per_page() -> u32 {
     20
 }
 
-#[derive(Serialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct ActivitiesResponse {
     pub activities: Vec<ActivitySummary>,
     pub page: u32,
@@ -154,10 +170,14 @@ pub struct ActivitiesResponse {
     pub total: u32,
 }
 
-#[derive(Serialize, Clone, Debug, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Serialize, Clone, Debug)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct ActivitySummary {
-    #[ts(type = "number")]
+    #[cfg_attr(feature = "binding-generation", ts(type = "number"))]
     pub id: u64,
     pub name: String,
     pub sport_type: String,
@@ -230,13 +250,18 @@ struct PreserveStatsQuery {
 }
 
 /// Preserve stats response.
-#[derive(Serialize, TS)]
-#[ts(export, export_to = "web/src/lib/generated/")]
+#[derive(Serialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
 pub struct PreserveStatsResponse {
     /// All-time preserve visit counts
     pub preserves: Vec<PreserveSummary>,
     /// Preserve visits broken down by year: { "2025": { "Rancho": 5 } }
-    pub preserves_by_year: std::collections::HashMap<String, std::collections::HashMap<String, u32>>,
+    pub preserves_by_year:
+        std::collections::HashMap<String, std::collections::HashMap<String, u32>>,
     pub total_preserves_visited: u32,
     pub total_preserves: u32,
     /// Number of activities still being processed in backfill

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@kernel.org>
 
-use midpen_strava::services::strava::StravaActivity;
 use midpen_strava::models::Activity;
+use midpen_strava::services::strava::StravaActivity;
 use std::fs;
 use std::path::Path;
 
@@ -12,8 +12,9 @@ fn test_device_name_parsing() {
     let json = fs::read_to_string(fixture_path).expect("Failed to read fixture");
 
     // Test StravaActivity parsing
-    let strava_activity: StravaActivity = serde_json::from_str(&json).expect("Failed to parse StravaActivity");
-    
+    let strava_activity: StravaActivity =
+        serde_json::from_str(&json).expect("Failed to parse StravaActivity");
+
     assert_eq!(strava_activity.id, 16804567307);
     assert_eq!(
         strava_activity.device_name.as_deref(),

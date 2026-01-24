@@ -63,10 +63,7 @@ check-all: lint
 generate-bindings:
     #!/usr/bin/env bash
     set -euo pipefail
-    rm -rf bindings
-    cargo test export_bindings --
-    cp bindings/web/src/lib/generated/*.ts web/src/lib/generated/
-    rm -rf bindings
+    TS_RS_EXPORT_DIR=. cargo test export_bindings --features binding-generation --
     # Run prettier on the generated files to match project style
     cd web && npx prettier --write src/lib/generated/*.ts
     echo "✅ TypeScript bindings generated and formatted in web/src/lib/generated/"
@@ -75,16 +72,16 @@ generate-bindings:
 check-bindings:
     #!/usr/bin/env bash
     set -euo pipefail
-    rm -rf bindings
-    cargo test export_bindings -- 2>/dev/null
-    for f in bindings/web/src/lib/generated/*.ts; do
-        name=$(basename "$f")
-        if ! diff -q "$f" "web/src/lib/generated/$name" >/dev/null 2>&1; then
-            echo "❌ Binding $name is stale! Run: just generate-bindings"
-            exit 1
-        fi
-    done
-    rm -rf bindings
+    # For check, we want to ensure no diffs are created.
+    # We can run the test and check git status for web/src/lib/generated/
+    
+    # Ideally we'd generate to a temp dir and diff, but for now let's rely on git
+    TS_RS_EXPORT_DIR=. cargo test export_bindings --features binding-generation -- 2>/dev/null
+    
+    if ! git diff --quiet web/src/lib/generated/; then
+        echo "❌ Bindings changed! Run: just generate-bindings"
+        exit 1
+    fi
     echo "✅ TypeScript bindings are up-to-date"
 
 # Setup git hooks for automatic binding generation

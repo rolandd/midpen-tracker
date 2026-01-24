@@ -28,7 +28,6 @@ struct ActivityExpected {
 #[derive(Debug, Deserialize)]
 struct FixtureActivity {
     // id field removed
-
     map: FixtureMap,
 }
 
