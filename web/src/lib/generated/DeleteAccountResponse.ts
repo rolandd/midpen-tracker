@@ -3,4 +3,4 @@
 /**
  * Response for account deletion.
  */
-export type DeleteAccountResponse = { success: boolean, message: string, };
+export type DeleteAccountResponse = { success: boolean; message: string };

@@ -1,3 +1,3 @@
 export const uiState = $state({
-    isAboutOpen: false
+	isAboutOpen: false
 });

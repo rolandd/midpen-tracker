@@ -64,7 +64,9 @@ generate-bindings:
     cargo test export_bindings --
     cp bindings/web/src/lib/generated/*.ts web/src/lib/generated/
     rm -rf bindings
-    echo "✅ TypeScript bindings generated in web/src/lib/generated/"
+    # Run prettier on the generated files to match project style
+    cd web && npx prettier --write src/lib/generated/*.ts
+    echo "✅ TypeScript bindings generated and formatted in web/src/lib/generated/"
 
 # Check bindings are up-to-date (CI safety net)
 check-bindings:

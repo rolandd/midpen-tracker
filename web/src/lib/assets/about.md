@@ -40,19 +40,18 @@ Inspired by Judy Cooks's story in [One Year, 25 Preserves](https://www.openspace
 
 We take your privacy seriously. Here is exactly how we handle your data:
 
-*   **Read**: We read your Strava profile (to identify you) and your activities (to check if they match preserve boundaries).
-*   **Store**: We store your authentication tokens (encrypted), your activity metadata (e.g., date, device type, visit status), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
-*   **Modify**: We modify your Strava activity descriptions *only* to add preserve visit annotations (e.g., "🌲 Visited Rancho San Antonio").
-*   **No Data Sharing**: We will never sell, rent, or voluntarily share your data with third parties for any purpose.
-*   **Delete**: All data associated with you is permanently deleted if you disconnect the app in Strava or select "Delete my account" in this app.
+- **Read**: We read your Strava profile (to identify you) and your activities (to check if they match preserve boundaries).
+- **Store**: We store your authentication tokens (encrypted), your activity metadata (e.g., date, device type, visit status), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
+- **Modify**: We modify your Strava activity descriptions _only_ to add preserve visit annotations (e.g., "🌲 Visited Rancho San Antonio").
+- **No Data Sharing**: We will never sell, rent, or voluntarily share your data with third parties for any purpose.
+- **Delete**: All data associated with you is permanently deleted if you disconnect the app in Strava or select "Delete my account" in this app.
 
 ### Credits & Data Sources
 
-*   **Preserve Boundaries**: [MROSD Open Data Portal](https://opendata-mrosd.hub.arcgis.com/)
-*   **Road Data**: [OpenStreetMap](https://www.openstreetmap.org) contributors
-*   **Inspiration**: [MROSD Stories](https://www.openspace.org/stories)
+- **Preserve Boundaries**: [MROSD Open Data Portal](https://opendata-mrosd.hub.arcgis.com/)
+- **Road Data**: [OpenStreetMap](https://www.openstreetmap.org) contributors
+- **Inspiration**: [MROSD Stories](https://www.openspace.org/stories)
 
 ### About Midpen
 
 The [Midpeninsula Regional Open Space District](https://www.openspace.org) manages over 65,000 acres of land in 26 open space preserves. This app helps you discover and track visits to all of them.
-

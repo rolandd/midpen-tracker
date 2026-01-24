@@ -3,4 +3,9 @@
 /**
  * Current user response.
  */
-export type UserResponse = { athlete_id: number, firstname: string, lastname: string, profile_picture: string | null, };
+export type UserResponse = {
+	athlete_id: number;
+	firstname: string;
+	lastname: string;
+	profile_picture: string | null;
+};

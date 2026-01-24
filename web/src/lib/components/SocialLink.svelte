@@ -1,6 +1,9 @@
 <script lang="ts">
-	let { platform, href, username }: { platform: 'github' | 'bluesky'; href: string; username: string } =
-		$props();
+	let {
+		platform,
+		href,
+		username
+	}: { platform: 'github' | 'bluesky'; href: string; username: string } = $props();
 </script>
 
 <a {href} target="_blank" rel="noopener" class="social-btn {platform}">

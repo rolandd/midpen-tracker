@@ -4,11 +4,11 @@
 
 We take your privacy seriously. Here is exactly how we handle your data:
 
-*   **Read**: We read your Strava profile (to identify you) and your activities (to check if they match preserve boundaries).
-*   **Store**: We store your authentication tokens (encrypted), your activity metadata (e.g., date, device type, visit status), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
-*   **Modify**: We modify your Strava activity descriptions *only* to add preserve visit annotations (e.g., "🌲 Visited Rancho San Antonio").
-*   **No Data Sharing**: We will never sell, rent, or voluntarily share your data with third parties for any purpose.
-*   **Delete**: All data associated with you is permanently deleted if you disconnect the app in Strava or select "Delete my account" in this app.
+- **Read**: We read your Strava profile (to identify you) and your activities (to check if they match preserve boundaries).
+- **Store**: We store your authentication tokens (encrypted), your activity metadata (e.g., date, device type, visit status), and the relevant activity IDs. We do **not** store your GPS tracks or maps.
+- **Modify**: We modify your Strava activity descriptions _only_ to add preserve visit annotations (e.g., "🌲 Visited Rancho San Antonio").
+- **No Data Sharing**: We will never sell, rent, or voluntarily share your data with third parties for any purpose.
+- **Delete**: All data associated with you is permanently deleted if you disconnect the app in Strava or select "Delete my account" in this app.
 
 ## Terms of Service
 
@@ -27,7 +27,7 @@ Midpen Tracker is an independent project and is not affiliated with,
 endorsed by, or sponsored by Strava, Inc.
 
     - Data Source: The App relies on the Strava API to function. We do
-	  not guarantee the accuracy of data provided by Strava.
+      not guarantee the accuracy of data provided by Strava.
 
     - Service Continuity: Changes to the Strava API or Terms of Service
       may affect the functionality of this App. We are not liable for any

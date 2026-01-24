@@ -63,8 +63,6 @@
 			return;
 		}
 
-
-
 		loadStats();
 		fetchUser();
 
@@ -190,10 +188,7 @@
 				</div>
 			{/if}
 			<div class="toggle-wrapper">
-				<Toggle
-					bind:checked={showUnvisited}
-					on:toggle={toggleShowUnvisited}
-				/>
+				<Toggle bind:checked={showUnvisited} on:toggle={toggleShowUnvisited} />
 				<button class="toggle-label" onclick={() => (showUnvisited = !showUnvisited)}>
 					Show unvisited preserves
 				</button>
@@ -489,7 +484,9 @@
 	}
 
 	.toggle-wrapper :global(.svelte-toggle--focus .svelte-toggle--thumb) {
-		box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-primary) !important;
+		box-shadow:
+			0 0 0 2px var(--color-surface),
+			0 0 0 4px var(--color-primary) !important;
 	}
 
 	.preserve-list {

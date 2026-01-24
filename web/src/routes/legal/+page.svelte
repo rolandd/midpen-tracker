@@ -25,7 +25,7 @@
 	}
 
 	/* Use :global to ensure styles apply to markdown-generated HTML */
-	
+
 	:global(.legal-page h1),
 	:global(.legal-page h2),
 	:global(.legal-page h3) {

@@ -3,4 +3,4 @@
 /**
  * Activity summary within a preserve context.
  */
-export type PreserveActivity = { id: number, date: string, sport_type: string, name: string, };
+export type PreserveActivity = { id: number; date: string; sport_type: string; name: string };

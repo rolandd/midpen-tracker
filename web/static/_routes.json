@@ -1,17 +1,15 @@
 {
-    "version": 1,
-    "include": [
-        "/*"
-    ],
-    "exclude": [
-        "/favicon.ico",
-        "/favicon-*.png",
-        "/apple-touch-icon.png",
-        "/android-chrome-*.png",
-        "/app-logo.svg",
-        "/site.webmanifest",
-        "/robots.txt",
-        "/_app/*",
-        "/btn_strava_connect_with_orange.svg"
-    ]
+	"version": 1,
+	"include": ["/*"],
+	"exclude": [
+		"/favicon.ico",
+		"/favicon-*.png",
+		"/apple-touch-icon.png",
+		"/android-chrome-*.png",
+		"/app-logo.svg",
+		"/site.webmanifest",
+		"/robots.txt",
+		"/_app/*",
+		"/btn_strava_connect_with_orange.svg"
+	]
 }

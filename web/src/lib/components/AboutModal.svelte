@@ -22,7 +22,7 @@
 	class="backdrop"
 	transition:fade={{ duration: 200 }}
 	onclick={close}
-    onkeydown={(e) => {
+	onkeydown={(e) => {
 		if (e.key === 'Escape') close();
 	}}
 	role="button"
@@ -32,10 +32,10 @@
 		class="modal"
 		transition:fly={{ y: 20, duration: 300 }}
 		onclick={(e) => e.stopPropagation()}
-        onkeydown={(e) => e.stopPropagation()}
+		onkeydown={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-modal="true"
-        tabindex="-1"
+		tabindex="-1"
 	>
 		<button class="close-btn" onclick={close} aria-label="Close">×</button>
 
@@ -50,12 +50,16 @@
 		<div class="content">
 			<Content />
 		</div>
-		
+
 		<footer>
 			<p>Created by Roland</p>
 			<div class="social-links">
 				<SocialLink platform="github" href="https://github.com/rolandd" username="rolandd" />
-				<SocialLink platform="bluesky" href="https://bsky.app/profile/rbd.bsky.social" username="@rbd.bsky.social" />
+				<SocialLink
+					platform="bluesky"
+					href="https://bsky.app/profile/rbd.bsky.social"
+					username="@rbd.bsky.social"
+				/>
 			</div>
 		</footer>
 	</div>
@@ -80,7 +84,9 @@
 		max-width: 640px;
 		border-radius: var(--radius);
 		border: 1px solid var(--color-border);
-		box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+		box-shadow:
+			0 20px 25px -5px rgba(0, 0, 0, 0.1),
+			0 10px 10px -5px rgba(0, 0, 0, 0.04);
 		position: relative;
 		overflow: hidden;
 		max-height: 90vh;
@@ -144,7 +150,7 @@
 		overflow-y: auto;
 		flex-grow: 1;
 	}
-	
+
 	footer {
 		text-align: center;
 		border-top: 1px solid var(--color-border);
@@ -170,13 +176,13 @@
 	/* Markdown styles */
 	:global(.content p) {
 		color: var(--color-text-muted);
-        font-size: 0.95rem;
+		font-size: 0.95rem;
 		line-height: 1.6;
 		margin-bottom: 1rem;
 	}
-    :global(.content p:first-of-type) {
-        color: var(--color-text);
-    }
+	:global(.content p:first-of-type) {
+		color: var(--color-text);
+	}
 
 	:global(.content a) {
 		color: var(--color-primary);
@@ -193,27 +199,27 @@
 		margin: 1.5rem 0 0.75rem;
 		font-weight: 700;
 	}
-    :global(.content h3:first-of-type) {
-        margin-top: 0.5rem;
-    }
+	:global(.content h3:first-of-type) {
+		margin-top: 0.5rem;
+	}
 
-    :global(.content li) {
-        color: var(--color-text-muted);
-        margin-bottom: 0.5rem;
-        font-size: 0.95rem;
-        line-height: 1.6;
-    }
+	:global(.content li) {
+		color: var(--color-text-muted);
+		margin-bottom: 0.5rem;
+		font-size: 0.95rem;
+		line-height: 1.6;
+	}
 
-    :global(.content strong) {
-        color: var(--color-text);
-        font-weight: 600;
-    }
+	:global(.content strong) {
+		color: var(--color-text);
+		font-weight: 600;
+	}
 
 	:global(.steps) {
 		display: flex;
 		flex-direction: column;
 		gap: 0;
-        margin-bottom: 1.5rem;
+		margin-bottom: 1.5rem;
 	}
 
 	:global(.step) {
@@ -266,14 +272,14 @@
 		text-align: center;
 		border-top: 1px solid var(--color-border);
 		padding-top: 1.5rem;
-        margin-top: 1.5rem;
+		margin-top: 1.5rem;
 	}
 
-    :global(.footer p) {
-        font-size: 0.875rem;
-        margin-bottom: 1rem;
-        color: var(--color-text-muted);
-    }
+	:global(.footer p) {
+		font-size: 0.875rem;
+		margin-bottom: 1rem;
+		color: var(--color-text-muted);
+	}
 
 	:global(.social-links) {
 		display: flex;
