@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright 2026 Roland Dreier <roland@kernel.org> -->
+
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { uiState } from '$lib/state.svelte';

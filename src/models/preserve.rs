@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Midpen Preserve model and geometry handling.
 
 use geo::{MultiPolygon, Polygon};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 /**
  * Mock data for frontend development without backend authentication.
  * Enable by setting PUBLIC_DEMO_MODE=true in .env or environment.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! OAuth state encoding/decoding tests.
 //!
 //! These tests verify that frontend URLs survive the encode/decode

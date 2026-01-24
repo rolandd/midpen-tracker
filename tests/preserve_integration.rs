@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Integration tests for preserve intersection detection.
 //!
 //! Uses real activity fixtures and real preserve boundaries to validate

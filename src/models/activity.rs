@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Strava activity model for storage and API.
 
 use serde::{Deserialize, Serialize};

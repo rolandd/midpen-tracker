@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Application configuration loaded from environment variables and Secret Manager.
 //!
 //! Secrets are fetched once at startup and cached in memory to minimize

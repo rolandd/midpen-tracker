@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Preserve detection smoke tests.
 //!
 //! These tests verify that the polyline → preserve detection pipeline works.

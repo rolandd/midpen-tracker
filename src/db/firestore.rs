@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Firestore client wrapper with typed operations.
 //!
 //! Provides high-level operations for:

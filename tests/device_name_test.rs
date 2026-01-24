@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 use midpen_strava::services::strava::StravaActivity;
 use midpen_strava::models::Activity;
 use std::fs;

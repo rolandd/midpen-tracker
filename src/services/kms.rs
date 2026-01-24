@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Cloud KMS service for encrypting/decrypting OAuth tokens.
 //!
 //! Uses direct KMS encryption (not envelope encryption) for simplicity.

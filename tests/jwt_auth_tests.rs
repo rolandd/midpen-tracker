@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! JWT authentication tests.
 //!
 //! These tests verify that JWT tokens created by auth routes can be decoded

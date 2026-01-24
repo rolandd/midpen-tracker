@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Firestore integration tests.
 //!
 //! These tests require the Firestore emulator to be running.

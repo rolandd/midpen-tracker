@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Midpen-Strava API Server
 //!
 //! Tracks adventures through Midpen Open Space Preserves by integrating

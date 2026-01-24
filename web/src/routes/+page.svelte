@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright 2026 Roland Dreier <roland@kernel.org> -->
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -21,7 +24,7 @@
 			<span class="logo-icon">🌲</span>
 		</div>
 
-		<h1>Midpen Strava Tracker</h1>
+		<h1>Midpen Tracker</h1>
 		<p class="subtitle">
 			Track your activities across all 25 Midpen Open Space Preserves. Connect your Strava account
 			to automatically detect which preserves you've visited.

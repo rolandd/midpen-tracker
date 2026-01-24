@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Task handler routes for Cloud Tasks callbacks.
 //!
 //! These endpoints are called by Cloud Tasks, not directly by users.

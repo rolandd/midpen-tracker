@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# SPDX-License-Identifier: MIT
+# Copyright 2026 Roland Dreier <roland@kernel.org>
+
+
 # Script to generate all favicon sizes from app-logo.svg
 # Requires ImageMagick to be installed
 

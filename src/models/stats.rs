@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! User statistics aggregates for efficient dashboard queries.
 //!
 //! These aggregates are pre-computed when activities are processed,

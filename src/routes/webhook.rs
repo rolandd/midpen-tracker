@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Webhook routes for Strava events.
 
 use crate::services::tasks::{DeleteUserPayload, ProcessActivityPayload};

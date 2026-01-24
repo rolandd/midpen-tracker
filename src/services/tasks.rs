@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Roland Dreier <roland@kernel.org>
+
 //! Cloud Tasks service for rate-limited async processing.
 //!
 //! This service creates Cloud Tasks for:

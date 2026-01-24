@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: MIT
+# Copyright 2026 Roland Dreier <roland@kernel.org>
+
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
