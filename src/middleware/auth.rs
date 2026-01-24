@@ -66,17 +66,11 @@ pub async fn require_auth(
 }
 
 /// Create a JWT for a user session.
-pub fn create_jwt(
-    athlete_id: u64,
-    signing_key: &[u8],
-) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn create_jwt(athlete_id: u64, signing_key: &[u8]) -> anyhow::Result<String> {
     use jsonwebtoken::{encode, EncodingKey, Header};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as usize;
 
     let claims = Claims {
         sub: athlete_id.to_string(),
@@ -84,9 +78,9 @@ pub fn create_jwt(
         exp: now + 30 * 24 * 60 * 60, // 30 days
     };
 
-    encode(
+    Ok(encode(
         &Header::new(Algorithm::HS256),
         &claims,
         &EncodingKey::from_secret(signing_key),
-    )
+    )?)
 }

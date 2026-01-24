@@ -27,10 +27,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 /// Create a JWT token for the authenticated user.
-fn create_jwt(
-    athlete_id: u64,
-    signing_key: &[u8],
-) -> std::result::Result<String, jsonwebtoken::errors::Error> {
+fn create_jwt(athlete_id: u64, signing_key: &[u8]) -> anyhow::Result<String> {
     use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
     use serde::Serialize;
 
@@ -41,10 +38,7 @@ fn create_jwt(
         iat: usize,  // issued at timestamp
     }
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as usize;
 
     let claims = Claims {
         sub: athlete_id.to_string(),
@@ -52,11 +46,11 @@ fn create_jwt(
         iat: now,
     };
 
-    encode(
+    Ok(encode(
         &Header::new(Algorithm::HS256),
         &claims,
         &EncodingKey::from_secret(signing_key),
-    )
+    )?)
 }
 
 /// Query parameters for starting OAuth flow.
@@ -73,7 +67,7 @@ async fn auth_start(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AuthStartParams>,
     headers: axum::http::HeaderMap,
-) -> Redirect {
+) -> Result<Redirect> {
     // Get the frontend URL from query param or fall back to config
     let frontend_url = params
         .redirect_uri
@@ -82,7 +76,7 @@ async fn auth_start(
     // Encode frontend URL + timestamp in state (URL-safe base64)
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("System time error: {}", e)))?
         .as_millis();
     let state_data = format!("{}|{:x}", frontend_url, timestamp);
     let oauth_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
@@ -122,7 +116,7 @@ async fn auth_start(
         "Starting OAuth flow, redirecting to Strava"
     );
 
-    Redirect::temporary(&auth_url)
+    Ok(Redirect::temporary(&auth_url))
 }
 
 #[derive(Deserialize)]
