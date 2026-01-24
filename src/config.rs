@@ -35,21 +35,6 @@ pub struct Config {
     pub webhook_verify_token: String,
 }
 
-impl Default for Config {
-    /// Default config for testing only.
-    fn default() -> Self {
-        Self {
-            strava_client_id: "test_client_id".to_string(),
-            frontend_url: "http://localhost:5173".to_string(),
-            gcp_project_id: "test-project".to_string(),
-            port: 8080,
-            strava_client_secret: "test_secret".to_string(),
-            jwt_signing_key: b"test_jwt_key_32_bytes_minimum!!".to_vec(),
-            webhook_verify_token: "test_verify_token".to_string(),
-        }
-    }
-}
-
 impl Config {
     /// Load configuration from environment variables.
     ///
@@ -81,6 +66,21 @@ impl Config {
                 .map(|v| v.trim().to_string())
                 .map_err(|_| ConfigError::Missing("WEBHOOK_VERIFY_TOKEN"))?,
         })
+    }
+
+    /// Default configuration for testing purposes.
+    ///
+    /// This should NEVER be used in production.
+    pub fn test_default() -> Self {
+        Self {
+            strava_client_id: "test_client_id".to_string(),
+            frontend_url: "http://localhost:5173".to_string(),
+            gcp_project_id: "test-project".to_string(),
+            port: 8080,
+            strava_client_secret: "test_secret".to_string(),
+            jwt_signing_key: b"test_jwt_key_32_bytes_minimum!!".to_vec(),
+            webhook_verify_token: "test_verify_token".to_string(),
+        }
     }
 
     /// Load configuration with secrets from Google Secret Manager.

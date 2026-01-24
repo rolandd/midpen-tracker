@@ -54,7 +54,7 @@ async fn create_test_app() -> (axum::Router, Vec<u8>) {
     use midpen_strava::services::{PreserveService, TasksService};
     use midpen_strava::AppState;
 
-    let config = Config::default();
+    let config = Config::test_default();
     let signing_key = config.jwt_signing_key.clone();
     let db = FirestoreDb::new(&config.gcp_project_id).await.unwrap();
     let preserve_service = PreserveService::default();

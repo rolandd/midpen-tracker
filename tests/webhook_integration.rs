@@ -19,7 +19,7 @@ async fn create_test_app() -> axum::Router {
     use midpen_strava::AppState;
     use std::sync::Arc;
 
-    let config = Config::default();
+    let config = Config::test_default();
     let db = FirestoreDb::new(&config.gcp_project_id).await.unwrap();
     let preserve_service = PreserveService::default();
     let tasks_service = TasksService::new(&config.gcp_project_id);
