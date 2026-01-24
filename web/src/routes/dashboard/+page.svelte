@@ -20,20 +20,21 @@
 	let showUnvisited = $state(false);
 	let expandedPreserve = $state<string | null>(null);
 
-	// Computed: get preserves filtered by selected year
+	// Computed: get preserves filtered by selected year and visit status
 	let preserves = $derived.by(() => {
+		let unfilteredPreserves: PreserveSummary[];
+
 		if (!selectedYear) {
 			// All time
-			return allTimePreserves;
-		}
-		// Filter to selected year
-		const yearData = preservesByYear[selectedYear] || {};
-		const yearPreserves: PreserveSummary[] = Object.entries(yearData)
-			.map(([name, count]) => ({ name, count, activities: [] }))
-			.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+			unfilteredPreserves = allTimePreserves;
+		} else {
+			// Filter to selected year
+			const yearData = preservesByYear[selectedYear] || {};
+			const yearPreserves: PreserveSummary[] = Object.entries(yearData)
+				.map(([name, count]) => ({ name, count, activities: [] }))
+				.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-		if (showUnvisited) {
-			// Add unvisited preserves with count 0
+			// Add unvisited preserves with count 0 for that year
 			const visitedNames = new Set(yearPreserves.map((p) => p.name));
 			const allNames = allTimePreserves.map((p) => p.name);
 			for (const name of allNames) {
@@ -42,8 +43,14 @@
 				}
 			}
 			yearPreserves.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+			unfilteredPreserves = yearPreserves;
 		}
-		return yearPreserves;
+
+		if (showUnvisited) {
+			return unfilteredPreserves;
+		}
+
+		return unfilteredPreserves.filter((p) => p.count > 0);
 	});
 
 	let totalVisited = $derived(preserves.filter((p) => p.count > 0).length);
@@ -71,7 +78,7 @@
 		error = null;
 
 		try {
-			const data = await fetchPreserveStats(showUnvisited);
+			const data = await fetchPreserveStats();
 			allTimePreserves = data.preserves.sort((a, b) => b.count - a.count);
 			preservesByYear = data.preserves_by_year;
 			availableYears = data.available_years;
@@ -86,10 +93,6 @@
 
 	function togglePreserve(name: string) {
 		expandedPreserve = expandedPreserve === name ? null : name;
-	}
-
-	async function toggleShowUnvisited() {
-		await loadStats();
 	}
 
 	async function handleLogout() {
@@ -155,7 +158,7 @@
 				</div>
 			{/if}
 			<label class="toggle">
-				<input type="checkbox" bind:checked={showUnvisited} onchange={toggleShowUnvisited} />
+				<input type="checkbox" bind:checked={showUnvisited} />
 				<span>Show unvisited preserves</span>
 			</label>
 		</div>

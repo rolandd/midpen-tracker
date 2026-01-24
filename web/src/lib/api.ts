@@ -83,8 +83,8 @@ export async function fetchMe(): Promise<User> {
 	return apiFetch<User>('/api/me');
 }
 
-export async function fetchPreserveStats(showUnvisited = false): Promise<PreserveStatsResponse> {
-	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=${showUnvisited}`);
+export async function fetchPreserveStats(): Promise<PreserveStatsResponse> {
+	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=true`);
 }
 
 export async function logout(): Promise<void> {
