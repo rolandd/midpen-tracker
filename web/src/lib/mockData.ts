@@ -76,11 +76,11 @@ function generatePreserves() {
 		// Increase max visits to allow testing pagination (e.g., > 50)
 		const maxVisits = Math.max(1, 120 - idx * 5);
 		const count = idx < 15 ? Math.floor(Math.random() * maxVisits) + 1 : 0;
-		// Keep up to 100 activities in mock data storage
+		// Keep up to 200 activities in mock data storage
 		return {
 			name,
 			count,
-			activities: generateMockActivities(name, Math.min(count, 100))
+			activities: generateMockActivities(name, Math.min(count, 200))
 		};
 	});
 }

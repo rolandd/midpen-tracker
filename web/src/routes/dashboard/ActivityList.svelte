@@ -3,6 +3,7 @@
 
 <script lang="ts">
 	import { fetchActivities, type ActivitySummary } from '$lib/api';
+	import { activityCache } from '$lib/cache.svelte';
 
 	let { preserveName } = $props();
 
@@ -13,11 +14,20 @@
 	let total = $state(0);
 
 	$effect(() => {
-		// Reset state
-		activities = [];
-		page = 1;
-		total = 0;
-		loadActivities(1);
+		const cached = activityCache.get(preserveName);
+		if (cached) {
+			activities = cached.activities;
+			total = cached.total;
+			page = cached.page;
+			loading = false;
+			error = null;
+		} else {
+			// Reset state
+			activities = [];
+			page = 1;
+			total = 0;
+			loadActivities(1);
+		}
 	});
 
 	async function loadActivities(pageNum: number) {
@@ -28,8 +38,10 @@
 			const data = await fetchActivities(preserveName, pageNum);
 			if (pageNum === 1) {
 				activities = data.activities;
+				activityCache.set(preserveName, data.activities, data.total, 1);
 			} else {
 				activities = [...activities, ...data.activities];
+				activityCache.append(preserveName, data.activities, data.total, pageNum);
 			}
 			total = data.total;
 		} catch (e) {
