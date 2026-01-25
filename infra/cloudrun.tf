@@ -68,7 +68,7 @@ resource "google_cloud_run_v2_service" "api" {
 
       env {
         name  = "FRONTEND_URL"
-        value = "https://midpen-strava.pages.dev" # Update after Pages deploy
+        value = var.frontend_url
       }
 
       env {

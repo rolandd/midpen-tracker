@@ -31,6 +31,27 @@ lint-python:
 fetch-preserves:
     uv run scripts/midpen.py
 
+# Sync frontend config from Terraform
+sync-frontend-config:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # This requires terraform state to be initialized and applied
+    URL=$(cd infra && {{terraform}} output -raw frontend_url 2>/dev/null || echo "https://midpen-strava.pages.dev")
+    
+    echo "Syncing frontend URL: $URL"
+    
+    # Create web/.env if it doesn't exist
+    touch web/.env
+    
+    # Update or append PUBLIC_BASE_URL
+    if grep -q "PUBLIC_BASE_URL=" web/.env; then
+        # Use a different delimiter (#) for sed to handle slashes in URL
+        sed -i "s#PUBLIC_BASE_URL=.*#PUBLIC_BASE_URL=$URL#" web/.env
+    else
+        echo "PUBLIC_BASE_URL=$URL" >> web/.env
+    fi
+    echo "✅ web/.env updated"
+
 # Run the API server locally
 dev-api:
     cargo run

@@ -3,8 +3,10 @@
 
 <script lang="ts">
 	import '../app.css';
+
 	import { uiState } from '$lib/state.svelte';
 	import { AboutModal } from '$lib/components';
+	import { PUBLIC_BASE_URL } from '$env/static/public';
 
 	let { children } = $props();
 </script>
@@ -13,6 +15,26 @@
 	<title>Midpen Tracker</title>
 
 	<meta name="description" content="Track your Strava activities in Midpen Open Space Preserves" />
+
+	<!-- Open Graph / Facebook -->
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{PUBLIC_BASE_URL}/" />
+	<meta property="og:title" content="Midpen Tracker" />
+	<meta
+		property="og:description"
+		content="Track your Strava activities in Midpen Open Space Preserves"
+	/>
+	<meta property="og:image" content="{PUBLIC_BASE_URL}/card.png" />
+
+	<!-- Twitter -->
+	<meta property="twitter:card" content="summary_large_image" />
+	<meta property="twitter:url" content="{PUBLIC_BASE_URL}/" />
+	<meta property="twitter:title" content="Midpen Tracker" />
+	<meta
+		property="twitter:description"
+		content="Track your Strava activities in Midpen Open Space Preserves"
+	/>
+	<meta property="twitter:image" content="{PUBLIC_BASE_URL}/card.png" />
 
 	<link rel="preconnect" href="https://fonts.googleapis.com" />
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />

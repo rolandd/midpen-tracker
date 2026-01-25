@@ -39,7 +39,7 @@ fn test_oauth_state_roundtrip_localhost() {
 
 #[test]
 fn test_oauth_state_roundtrip_production() {
-    let frontend_url = "https://midpen-strava.pages.dev";
+    let frontend_url = "https://example.org";
     let state = encode_state(frontend_url);
     let decoded = decode_state_frontend(&state);
 

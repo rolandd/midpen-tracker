@@ -1,7 +1,18 @@
-project_id       = "YOUR_PROJECT_ID"  # Replace with your GCP project
-region           = "us-west1"
-strava_client_id = "YOUR_STRAVA_CLIENT_ID"  # Replace with your Strava app client ID
+# GCP Project Config
+project_id = "YOUR_PROJECT_ID"
+region     = "us-west1"
 
-# Cloudflare configuration (optional - only needed if using Terraform to manage Cloudflare Pages)
-cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"  # Get from Cloudflare dashboard
-cloudflare_api_token  = "YOUR_CLOUDFLARE_API_TOKEN"   # Create token with Pages:Edit permission
+# Strava API Config
+strava_client_id = "YOUR_STRAVA_CLIENT_ID"
+
+# Frontend Config
+frontend_url = "https://example.com"
+
+# Cloudflare Config
+cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
+cloudflare_api_token  = "YOUR_CLOUDFLARE_API_TOKEN"
+
+# Deployment Flags
+# Set to false for initial infrastructure provision.
+# Set to true after building and pushing the Docker image (just build-push).
+deploy_cloudrun = false

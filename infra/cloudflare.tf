@@ -70,9 +70,10 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
   deployment_configs {
     production {
       environment_variables = {
-        NODE_VERSION   = "24"
-        NODE_ENV       = "development"
-        PUBLIC_API_URL = var.production_api_url
+        NODE_VERSION    = "24"
+        NODE_ENV        = "development"
+        PUBLIC_API_URL  = var.production_api_url
+        PUBLIC_BASE_URL = var.frontend_url
       }
 
       compatibility_date = "2024-01-01"
@@ -80,9 +81,10 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
 
     preview {
       environment_variables = {
-        NODE_VERSION   = "24"
-        NODE_ENV       = "development"
-        PUBLIC_API_URL = var.preview_api_url
+        NODE_VERSION    = "24"
+        NODE_ENV        = "development"
+        PUBLIC_API_URL  = var.preview_api_url
+        PUBLIC_BASE_URL = var.frontend_url # Or a preview URL if we had one
       }
 
       compatibility_date = "2024-01-01"
@@ -90,10 +92,25 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
   }
 }
 
+locals {
+  # Parse domain from frontend_url (strip protocol)
+  frontend_domain = replace(replace(var.frontend_url, "https://", ""), "http://", "")
+  # Check if custom domain (not pages.dev)
+  is_custom_domain = !endswith(local.frontend_domain, ".pages.dev")
+}
+
+# Bind custom domain if configured
+resource "cloudflare_pages_domain" "custom_domain" {
+  count        = local.is_custom_domain ? 1 : 0
+  account_id   = var.cloudflare_account_id
+  project_name = cloudflare_pages_project.midpen_strava_frontend.name
+  domain       = local.frontend_domain
+}
+
 # Output the Pages URL
 output "pages_url" {
   description = "Cloudflare Pages URL"
-  value       = "https://${cloudflare_pages_project.midpen_strava_frontend.subdomain}.pages.dev"
+  value       = var.frontend_url
 }
 
 output "pages_project_name" {

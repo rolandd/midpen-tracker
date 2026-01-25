@@ -27,6 +27,11 @@ variable "strava_client_id" {
   type        = string
 }
 
+variable "frontend_url" {
+  description = "Public URL of the frontend (e.g., https://midpen-strava.pages.dev)"
+  type        = string
+}
+
 variable "deploy_cloudrun" {
   description = "Whether to deploy Cloud Run (set true after pushing Docker image)"
   type        = bool
@@ -52,4 +57,9 @@ resource "google_project_service" "apis" {
 
   service            = each.key
   disable_on_destroy = false
+}
+
+output "frontend_url" {
+  value       = var.frontend_url
+  description = "Public URL of the frontend"
 }
