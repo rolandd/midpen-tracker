@@ -9,23 +9,41 @@
 	let activities = $state<ActivitySummary[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let page = $state(1);
+	let total = $state(0);
 
 	$effect(() => {
-		// Reset state when preserveName changes (though specific to this instance)
+		// Reset state
+		activities = [];
+		page = 1;
+		total = 0;
+		loadActivities(1);
+	});
+
+	async function loadActivities(pageNum: number) {
 		loading = true;
 		error = null;
 
-		fetchActivities(preserveName)
-			.then((data) => {
+		try {
+			const data = await fetchActivities(preserveName, pageNum);
+			if (pageNum === 1) {
 				activities = data.activities;
-			})
-			.catch((e) => {
-				error = e instanceof Error ? e.message : 'Failed to load activities';
-			})
-			.finally(() => {
-				loading = false;
-			});
-	});
+			} else {
+				activities = [...activities, ...data.activities];
+			}
+			total = data.total;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load activities';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function handleLoadMore(event: MouseEvent) {
+		event.stopPropagation();
+		page++;
+		loadActivities(page);
+	}
 
 	function getEmoji(sportType: string): string {
 		const type = sportType.toLowerCase();
@@ -45,7 +63,7 @@
 </script>
 
 <div class="activity-list-container">
-	{#if loading}
+	{#if activities.length === 0 && loading}
 		<div class="loading">
 			<div class="spinner"></div>
 		</div>
@@ -70,6 +88,16 @@
 				</a>
 			{/each}
 		</div>
+
+		{#if activities.length < total}
+			<div class="load-more-container">
+				{#if loading}
+					<div class="spinner"></div>
+				{:else}
+					<button class="load-more-btn" onclick={handleLoadMore}>Load more</button>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -128,6 +156,28 @@
 
 	.activity:hover .link {
 		opacity: 1;
+	}
+
+	.load-more-container {
+		display: flex;
+		justify-content: center;
+		padding-top: 1rem;
+	}
+
+	.load-more-btn {
+		background: var(--color-surface);
+		border: 1px solid var(--color-border);
+		color: var(--color-text);
+		padding: 0.5rem 1rem;
+		border-radius: var(--radius-sm);
+		font-size: 0.875rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.load-more-btn:hover {
+		background: var(--color-surface-hover);
+		border-color: var(--color-primary);
 	}
 
 	.loading {

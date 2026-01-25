@@ -119,6 +119,38 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))
     }
 
+    /// Get activities for a user with pagination.
+    pub async fn get_activities_for_user(
+        &self,
+        athlete_id: u64,
+        after_date: Option<&str>,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Activity>, AppError> {
+        let query = self.client.fluent().select().from(collections::ACTIVITIES);
+
+        let query = if let Some(date) = after_date {
+            let date = date.to_string();
+            query.filter(move |q| {
+                q.for_all([
+                    q.field("athlete_id").eq(athlete_id),
+                    q.field("start_date").greater_than(date.clone()),
+                ])
+            })
+        } else {
+            query.filter(move |q| q.field("athlete_id").eq(athlete_id))
+        };
+
+        query
+            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)])
+            .limit(limit)
+            .offset(offset)
+            .obj()
+            .query()
+            .await
+            .map_err(|e| AppError::Database(e.to_string()))
+    }
+
     /// Store a processed activity.
     pub async fn set_activity(&self, activity: &Activity) -> Result<(), AppError> {
         let _: () = self

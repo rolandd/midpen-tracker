@@ -73,12 +73,14 @@ function generateMockActivities(
 function generatePreserves() {
 	return preserveNames.map((name, idx) => {
 		// Give earlier preserves more visits for realistic distribution
-		const maxVisits = Math.max(1, 20 - idx);
+		// Increase max visits to allow testing pagination (e.g., > 50)
+		const maxVisits = Math.max(1, 120 - idx * 5);
 		const count = idx < 15 ? Math.floor(Math.random() * maxVisits) + 1 : 0;
+		// Keep up to 100 activities in mock data storage
 		return {
 			name,
 			count,
-			activities: generateMockActivities(name, Math.min(count, 5))
+			activities: generateMockActivities(name, Math.min(count, 100))
 		};
 	});
 }
@@ -116,9 +118,13 @@ export const mockPreserveStats: PreserveStatsResponse = {
 	]
 };
 
-export function getMockActivitiesForPreserve(preserveName: string): ActivitiesResponse {
+export function getMockActivitiesForPreserve(
+	preserveName: string,
+	page = 1,
+	per_page = 50
+): ActivitiesResponse {
 	const preserve = mockPreserves.find((p) => p.name === preserveName);
-	const activities = preserve
+	const allActivities = preserve
 		? preserve.activities.map((a) => ({
 				...a,
 				start_date: a.date,
@@ -126,10 +132,14 @@ export function getMockActivitiesForPreserve(preserveName: string): ActivitiesRe
 			}))
 		: [];
 
+	const start = (page - 1) * per_page;
+	const end = start + per_page;
+	const slicedActivities = allActivities.slice(start, end);
+
 	return {
-		activities,
-		total: activities.length,
-		page: 1,
-		per_page: 50
+		activities: slicedActivities,
+		total: allActivities.length,
+		page,
+		per_page
 	};
 }

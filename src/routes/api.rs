@@ -154,7 +154,7 @@ fn default_page() -> u32 {
     1
 }
 fn default_per_page() -> u32 {
-    20
+    50
 }
 
 #[derive(Serialize)]
@@ -218,23 +218,60 @@ async fn get_activities(
             })
             .collect();
 
+        let total_count = summaries.len() as u32;
+
         // Pagination (simple in-memory for now since these lists are small per preserve)
         let start = ((params.page - 1) * params.per_page) as usize;
-        if start < summaries.len() {
+        let paged_activities = if start < summaries.len() {
             let end = (start + params.per_page as usize).min(summaries.len());
             summaries[start..end].to_vec()
         } else {
             vec![]
-        }
+        };
+
+        (paged_activities, total_count)
     } else {
-        // Fallback for "all activities" (not implemented yet)
-        // TODO: Query Firestore for user's activities
-        vec![]
+        // Query Firestore for user's activities
+        let offset = (params.page - 1) * params.per_page;
+        let results = state
+            .db
+            .get_activities_for_user(
+                user.athlete_id,
+                params.after.as_deref(),
+                params.per_page,
+                offset,
+            )
+            .await?;
+
+        let page_count = results.len() as u32;
+        // For Firestore queries, getting exact total is expensive.
+        // If we got a full page, assume there might be more.
+        // We'll return (offset + page_count) + (1 if full page else 0) as a hint,
+        // or just return 0 to indicate "unknown" if that's allowed.
+        // For now, let's just return the current fetched count + offset as a lower bound
+        // or effectively disable "total" based logic for this path until we add aggregation.
+        // A common pattern is to return `offset + page_count` if `page_count < per_page`,
+        // else `offset + page_count + 1` (at least one more).
+        let estimated_total =
+            offset + page_count + if page_count == params.per_page { 1 } else { 0 };
+
+        let summaries = results
+            .into_iter()
+            .map(|a| ActivitySummary {
+                id: a.strava_activity_id,
+                name: a.name,
+                sport_type: a.sport_type,
+                start_date: a.start_date,
+                preserves: a.preserves_visited,
+            })
+            .collect();
+
+        (summaries, estimated_total)
     };
 
     Ok(Json(ActivitiesResponse {
-        total: activities.len() as u32, // Approximation for now
-        activities,
+        total: activities.1,
+        activities: activities.0,
         page: params.page,
         per_page: params.per_page,
     }))

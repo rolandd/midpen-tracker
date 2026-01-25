@@ -93,9 +93,16 @@ export async function logout(): Promise<void> {
 	clearToken();
 }
 
-export async function fetchActivities(preserve: string): Promise<ActivitiesResponse> {
-	if (DEMO_MODE) return getMockActivitiesForPreserve(preserve);
-	return apiFetch<ActivitiesResponse>(`/api/activities?preserve=${encodeURIComponent(preserve)}`);
+export async function fetchActivities(
+	preserve: string,
+
+	page = 1
+): Promise<ActivitiesResponse> {
+	if (DEMO_MODE) return getMockActivitiesForPreserve(preserve, page);
+
+	return apiFetch<ActivitiesResponse>(
+		`/api/activities?preserve=${encodeURIComponent(preserve)}&page=${page}`
+	);
 }
 
 export async function deleteAccount(): Promise<DeleteAccountResponse> {

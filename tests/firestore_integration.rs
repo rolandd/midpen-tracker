@@ -508,3 +508,76 @@ async fn test_preserves_by_year_tracking() {
         athlete_id
     );
 }
+
+#[tokio::test]
+async fn test_activity_pagination() {
+    require_emulator!();
+
+    let db = test_db().await;
+    let athlete_id = unique_athlete_id();
+
+    // Create 55 activities
+    // Timestamps: 2024-01-01T10:00:00Z to 2024-01-01T10:54:00Z
+    // Activity IDs: 1 to 55
+    // We want to query descending, so ID 55 (newest) should be first.
+    let total_activities = 55;
+    
+    for i in 1..=total_activities {
+        let timestamp = 1704103200 + (i * 60); // Base + i minutes
+        let dt = chrono::DateTime::from_timestamp(timestamp as i64, 0).unwrap();
+        let start_date = dt.to_rfc3339();
+
+        let activity = Activity {
+            strava_activity_id: athlete_id + i,
+            athlete_id,
+            name: format!("Activity {}", i),
+            sport_type: "Run".to_string(),
+            start_date,
+            distance_meters: 1000.0,
+            preserves_visited: vec![],
+            source: "test".to_string(),
+            annotation_added: false,
+            processed_at: dt.to_rfc3339(),
+            device_name: None,
+        };
+        // Use set_activity directly as we only care about the activities collection query
+        db.set_activity(&activity).await.unwrap();
+    }
+
+    // Test Page 1: Limit 20, Offset 0
+    // Should return IDs 55 down to 36
+    let page1 = db.get_activities_for_user(athlete_id, None, 20, 0).await.unwrap();
+    assert_eq!(page1.len(), 20, "Page 1 should have 20 items");
+    assert_eq!(page1[0].name, "Activity 55", "First item should be newest");
+    assert_eq!(page1[19].name, "Activity 36", "Last item on page 1 check");
+
+    // Test Page 2: Limit 20, Offset 20
+    // Should return IDs 35 down to 16
+    let page2 = db.get_activities_for_user(athlete_id, None, 20, 20).await.unwrap();
+    assert_eq!(page2.len(), 20, "Page 2 should have 20 items");
+    assert_eq!(page2[0].name, "Activity 35", "First item on page 2 check");
+
+    // Test Page 3: Limit 20, Offset 40
+    // Should return IDs 15 down to 1
+    let page3 = db.get_activities_for_user(athlete_id, None, 20, 40).await.unwrap();
+    assert_eq!(page3.len(), 15, "Page 3 should have remaining 15 items");
+    assert_eq!(page3[0].name, "Activity 15", "First item on page 3 check");
+    assert_eq!(page3[14].name, "Activity 1", "Last item should be oldest");
+
+    // Test Page 4: Limit 20, Offset 60
+    // Should return empty
+    let page4 = db.get_activities_for_user(athlete_id, None, 20, 60).await.unwrap();
+    assert_eq!(page4.len(), 0, "Page 4 should be empty");
+
+    // Test with after_date filter
+    // Filter after activity 50's date. Should return 51, 52, 53, 54, 55 (5 items)
+    let split_time = 1704103200 + (50 * 60);
+    let split_date = chrono::DateTime::from_timestamp(split_time as i64, 0).unwrap().to_rfc3339();
+    
+    let filtered = db.get_activities_for_user(athlete_id, Some(&split_date), 20, 0).await.unwrap();
+    assert_eq!(filtered.len(), 5, "Should have 5 activities after ID 50");
+    assert_eq!(filtered[0].name, "Activity 55");
+    assert_eq!(filtered[4].name, "Activity 51");
+
+    println!("✓ Pagination verified: athlete_id={}", athlete_id);
+}
