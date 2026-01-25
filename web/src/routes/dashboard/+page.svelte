@@ -35,7 +35,7 @@
 	let preserves = $derived.by(() => {
 		if (!selectedYear) {
 			// All time
-			return allTimePreserves;
+			return showUnvisited ? allTimePreserves : allTimePreserves.filter((p) => p.count > 0);
 		}
 		// Filter to selected year
 		const yearData = preservesByYear[selectedYear] ?? {};
@@ -84,7 +84,8 @@
 		error = null;
 
 		try {
-			const data = await fetchPreserveStats(showUnvisited);
+			// Always fetch all preserves (visited and unvisited)
+			const data = await fetchPreserveStats(true);
 			allTimePreserves = data.preserves.sort((a, b) => b.count - a.count);
 			preservesByYear = data.preserves_by_year;
 			availableYears = data.available_years;
@@ -108,10 +109,6 @@
 
 	function togglePreserve(name: string) {
 		expandedPreserve = expandedPreserve === name ? null : name;
-	}
-
-	async function toggleShowUnvisited() {
-		await loadStats();
 	}
 
 	async function handleLogout() {
@@ -191,7 +188,7 @@
 				</div>
 			{/if}
 			<div class="toggle-wrapper">
-				<Toggle bind:checked={showUnvisited} on:toggle={toggleShowUnvisited} />
+				<Toggle bind:checked={showUnvisited} />
 				<button class="toggle-label" onclick={() => (showUnvisited = !showUnvisited)}>
 					Show unvisited preserves
 				</button>
