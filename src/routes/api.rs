@@ -157,6 +157,8 @@ fn default_per_page() -> u32 {
     50
 }
 
+const MAX_PER_PAGE: u32 = 100;
+
 #[derive(Serialize)]
 #[cfg_attr(feature = "binding-generation", derive(TS))]
 #[cfg_attr(
@@ -199,6 +201,8 @@ async fn get_activities(
         "Fetching activities"
     );
 
+    let limit = params.per_page.min(MAX_PER_PAGE);
+
     let activities = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
         let results: Vec<ActivityPreserve> = state
@@ -221,9 +225,9 @@ async fn get_activities(
         let total_count = summaries.len() as u32;
 
         // Pagination (simple in-memory for now since these lists are small per preserve)
-        let start = ((params.page - 1) * params.per_page) as usize;
+        let start = ((params.page - 1) * limit) as usize;
         let paged_activities = if start < summaries.len() {
-            let end = (start + params.per_page as usize).min(summaries.len());
+            let end = (start + limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
         } else {
             vec![]
@@ -232,15 +236,10 @@ async fn get_activities(
         (paged_activities, total_count)
     } else {
         // Query Firestore for user's activities
-        let offset = (params.page - 1) * params.per_page;
+        let offset = (params.page - 1) * limit;
         let results = state
             .db
-            .get_activities_for_user(
-                user.athlete_id,
-                params.after.as_deref(),
-                params.per_page,
-                offset,
-            )
+            .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)
             .await?;
 
         let page_count = results.len() as u32;
@@ -252,8 +251,7 @@ async fn get_activities(
         // or effectively disable "total" based logic for this path until we add aggregation.
         // A common pattern is to return `offset + page_count` if `page_count < per_page`,
         // else `offset + page_count + 1` (at least one more).
-        let estimated_total =
-            offset + page_count + if page_count == params.per_page { 1 } else { 0 };
+        let estimated_total = offset + page_count + if page_count == limit { 1 } else { 0 };
 
         let summaries = results
             .into_iter()
@@ -273,7 +271,7 @@ async fn get_activities(
         total: activities.1,
         activities: activities.0,
         page: params.page,
-        per_page: params.per_page,
+        per_page: limit,
     }))
 }
 
