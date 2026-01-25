@@ -52,10 +52,9 @@ Regional Open Space District ("Midpen").
 
 4. Open Source & Source Code
 
-This project is open source. You are welcome and encouraged to inspect
-the source code, modify, and adapt the source code for your own
-projects, qaudit our security, or deploy your own instance of
-the application.
+This project is open source. You are welcome and encouraged to
+inspect, modify or adapt the source code for your own projects, audit
+our security, or deploy your own instance of the application.
 
     - Code License: Usage of the source code itself is governed by the
       MIT License included in the project source tree (LICENSE).
@@ -110,4 +109,9 @@ these Terms or if the project is discontinued.
 10. Governing Law
 
 These Terms are governed by the laws of the State of California,
-without regard to its conflict of law principles.
+Without regard to its conflict of law principles.
+
+11. Contact Us
+
+If you have any questions about these Terms or the Privacy Policy,
+please contact us at <roland@kernel.org>
