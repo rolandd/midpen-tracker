@@ -1,0 +1,26 @@
+steps:
+  # 1. Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest', '.']
+
+  # 2. Push the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest']
+
+  # 3. Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'midpen-strava-api'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest'
+      - '--region'
+      - '${_REGION}'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: us-west1 # Default, overridden by trigger
