@@ -2,45 +2,45 @@
 
 **Date:** 2026-05-21
 **Auditor:** Jules (AI Senior Full Stack Developer)
-**Overall Rating:** ⭐⭐⭐⭐½ (4.5/5) - **Excellent**
+**Overall Rating:** ⭐⭐⭐⭐ (4/5) - **Excellent but Needs Polish**
 
 ## Executive Summary
-The `midpen-strava` repository demonstrates a high standard of software engineering. The architecture is robust, leveraging the strengths of Rust (type safety, performance) and Svelte 5 (modern reactivity). Security is a first-class citizen with best-practice implementation of OAuth, Secret Manager, and least-privilege IAM. The project is well-positioned for open-sourcing as a showcase portfolio piece.
+The `midpen-strava` repository maintains a high standard of engineering. However, a verification pass reveals that **previously identified high-priority fixes have not yet been applied** to the codebase. Additionally, a deeper architectural review has uncovered potential scalability bottlenecks and data consistency issues.
 
-## Prioritized Action Items
+## 🚨 Verification Findings (Regression/Missing Fixes)
+The following items were reported as "addressed" but remain visible in the current codebase:
 
-### 🔴 Critical (Security & Data Safety)
-*None found.* The repository is free of hardcoded secrets, and sensitive files are correctly ignored.
+1.  **`Config` Safety (`src/config.rs`)**:
+    *   **Status**: `impl Default` is still present with hardcoded test secrets.
+    *   **Action**: Must be removed or converted to `test_default()`.
+2.  **Incomplete API (`src/routes/api.rs`)**:
+    *   **Status**: `get_activities` still contains a `TODO` and returns an empty list when filters are missing.
+    *   **Action**: Implement full fetching or return `400 Bad Request`.
+3.  **Error Handling (`src/routes/auth.rs`)**:
+    *   **Status**: `unwrap()` on `SystemTime` is still present.
 
-### 🟠 High (Best Practices & Safety)
-1.  **Remove `impl Default` for `Config`** (`src/config.rs`)
-    *   **Issue**: The `Default` implementation contains hardcoded strings like `"test_client_id"`. While `Config::from_env()` does not use these, accidental usage of `Config::default()` in a future production code path could lead to silent failures or security confusion.
-    *   **Recommendation**: Remove `impl Default`. Create a named constructor `Config::test_default()` purely for the test module to make the intent explicit.
+## New Prioritized Action Items
 
-### 🟡 Medium (Code Quality & Cleanup)
-1.  **Incomplete API Implementation** (`src/routes/api.rs`)
-    *   **Issue**: In `get_activities`, the `else` block (when no `preserve` filter is provided) returns an empty vector with a `TODO` comment.
-    *   **Recommendation**: Either implement the "get all activities" query (using Firestore pagination) or explicitly return a `400 Bad Request` if the filter is mandatory.
-2.  **Unwrap Usage in Routes** (`src/routes/auth.rs`)
-    *   **Issue**: `SystemTime::now()...unwrap()` is used. While effectively safe (unless the system clock is broken), it's idiomatic in Rust web services to handle all errors gracefully to avoid any risk of thread panics.
-    *   **Recommendation**: Replace with `?` operator and map to `AppError::Internal`.
-3.  **Project Organization**
-    *   **Issue**: `generate-favicons.sh` sits in the root `web/` directory.
-    *   **Recommendation**: Move to `web/scripts/` or the root `scripts/` directory to keep the source tree clean.
+### 🟡 Medium (Scalability & Quality)
+1.  **In-Memory Pagination** (`src/routes/api.rs`)
+    *   **Issue**: `get_activities` fetches *all* activities for a preserve from the database before slicing them in memory (`results.into_iter()...`).
+    *   **Impact**: Performance degradation as a user's activity history grows.
+    *   **Recommendation**: Use Firestore's `offset` / `limit` or cursor-based pagination at the query level.
+2.  **Date Format Inconsistency** (`src/services/activity.rs`)
+    *   **Issue**: Activities use a custom `chrono_now_iso()` helper that returns **seconds as a string** (e.g., `"1735689600"`), whereas Users and Tokens use standard **RFC3339** (e.g., `"2026-05-21T10:00:00Z"`).
+    *   **Impact**: Frontend date parsing complexity and potential sorting bugs.
+    *   **Recommendation**: Standardize on `chrono::Utc::now().to_rfc3339()` everywhere.
 
-### 🔵 Low (Polish & Documentation)
-1.  **Missing "Bad" Code**:
-    *   The user requested to find "bad" code. The "worst" code found was the `TODO` in `api.rs`. The rest is remarkably clean.
-2.  **Copyright Dates**:
-    *   Files are marked `Copyright 2026`. (Acknowledged as intentional).
+### 🔵 Low (Cleanup)
+1.  **`TODO` Cleanup**:
+    *   `src/routes/api.rs`: "TODO: Query Firestore for user's activities"
+    *   `src/db/firestore.rs`: "TODO: Could optimize by decrementing..."
 
 ## Open Source Readiness
-The project is ready for Option A (Portfolio/Showcase).
-*   **Docs**: `README.md` is clear and covers architecture well.
-*   **License**: MIT License is present.
-*   **Build**: `justfile` makes running the project easy (`just dev-api`).
+*   **Ready for Showcase**: Yes.
+*   **Ready for Contribution**: Needs the above fixes and a standard `CONTRIBUTING.md` before inviting community PRs.
 
-## Detailed Architecture Verification
-*   **Security**: IAM roles are scoped correctly (Least Privilege). Secrets are managed via Google Secret Manager and injected at runtime.
-*   **Frontend**: Verified usage of Svelte 5 Runes (`$state`, `$props`). Code is modern and clean.
-*   **Backend**: Async Rust with Axum. Token encryption using Cloud KMS is a standout feature for user privacy.
+## Rating Revision
+*   **Previous**: 4.5/5 (Conditional on fixes)
+*   **Current**: 4/5
+*   *Reason*: The persistence of the "Default Config" safety risk and the discovery of in-memory pagination lowers the score slightly. Fixing these will bring it to a 5/5.
