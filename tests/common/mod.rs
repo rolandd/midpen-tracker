@@ -20,6 +20,7 @@ macro_rules! require_emulator {
 }
 
 /// Create a test database connection.
+#[allow(dead_code)]
 pub async fn test_db() -> FirestoreDb {
     FirestoreDb::new("test-project")
         .await

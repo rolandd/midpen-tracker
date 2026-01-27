@@ -10,6 +10,8 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
+mod common;
+
 /// Create a test app without GCP dependencies
 async fn create_test_app() -> axum::Router {
     use midpen_strava::config::Config;
@@ -36,6 +38,7 @@ async fn create_test_app() -> axum::Router {
 
 #[tokio::test]
 async fn test_process_activity_no_header_forbidden() {
+    require_emulator!();
     let app = create_test_app().await;
 
     let payload = json!({
@@ -61,6 +64,7 @@ async fn test_process_activity_no_header_forbidden() {
 
 #[tokio::test]
 async fn test_process_activity_with_header_allowed() {
+    require_emulator!();
     let app = create_test_app().await;
 
     let payload = json!({
@@ -91,6 +95,7 @@ async fn test_process_activity_with_header_allowed() {
 
 #[tokio::test]
 async fn test_process_activity_wrong_queue_name_forbidden() {
+    require_emulator!();
     let app = create_test_app().await;
 
     let payload = json!({
@@ -117,6 +122,7 @@ async fn test_process_activity_wrong_queue_name_forbidden() {
 
 #[tokio::test]
 async fn test_continue_backfill_no_header_forbidden() {
+    require_emulator!();
     let app = create_test_app().await;
 
     let payload = json!({
