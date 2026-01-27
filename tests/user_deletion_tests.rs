@@ -6,31 +6,11 @@
 //! These tests require the Firestore emulator to be running.
 //! Run with: ./scripts/test-with-emulator.sh --test user_deletion_tests
 
-use midpen_strava::db::FirestoreDb;
 use midpen_strava::models::user::{User, UserTokens};
 use midpen_strava::models::{Activity, ActivityPreserve};
 
-/// Check if emulator is available via environment variable.
-fn emulator_available() -> bool {
-    std::env::var("FIRESTORE_EMULATOR_HOST").is_ok()
-}
-
-/// Skip test with message if emulator not available.
-macro_rules! require_emulator {
-    () => {
-        if !emulator_available() {
-            eprintln!("⚠️  Skipping: FIRESTORE_EMULATOR_HOST not set");
-            eprintln!("   Run with: ./scripts/test-with-emulator.sh");
-            return;
-        }
-    };
-}
-
-/// Create a test database connection.
-async fn test_db() -> FirestoreDb {
-    let project_id = "test-project";
-    FirestoreDb::new(project_id).await.unwrap()
-}
+mod common;
+use common::test_db;
 
 /// Generate a unique athlete ID for test isolation.
 fn unique_athlete_id() -> u64 {

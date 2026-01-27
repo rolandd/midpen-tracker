@@ -8,32 +8,11 @@
 //!
 //! The emulator provides a clean state for each test run.
 
-use midpen_strava::db::FirestoreDb;
 use midpen_strava::models::user::{User, UserTokens};
 use midpen_strava::models::{Activity, ActivityPreserve};
 
-/// Check if emulator is available via environment variable.
-fn emulator_available() -> bool {
-    std::env::var("FIRESTORE_EMULATOR_HOST").is_ok()
-}
-
-/// Skip test with message if emulator not available.
-macro_rules! require_emulator {
-    () => {
-        if !emulator_available() {
-            eprintln!("⚠️  Skipping: FIRESTORE_EMULATOR_HOST not set");
-            eprintln!("   Run with: ./scripts/test-with-emulator.sh");
-            return;
-        }
-    };
-}
-
-/// Create a test database connection.
-async fn test_db() -> FirestoreDb {
-    FirestoreDb::new("test-project")
-        .await
-        .expect("Failed to connect to Firestore emulator")
-}
+mod common;
+use common::test_db;
 
 /// Generate a unique athlete ID for test isolation.
 fn unique_athlete_id() -> u64 {

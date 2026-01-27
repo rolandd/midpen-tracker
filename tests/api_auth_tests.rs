@@ -18,6 +18,8 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
+mod common;
+
 /// Create a test JWT token.
 fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
     #[derive(Serialize)]
@@ -49,14 +51,14 @@ fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
 /// Create a test app with known signing key.
 async fn create_test_app() -> (axum::Router, Vec<u8>) {
     use midpen_strava::config::Config;
-    use midpen_strava::db::FirestoreDb;
     use midpen_strava::routes::create_router;
     use midpen_strava::services::{PreserveService, TasksService};
     use midpen_strava::AppState;
 
     let config = Config::test_default();
     let signing_key = config.jwt_signing_key.clone();
-    let db = FirestoreDb::new(&config.gcp_project_id).await.unwrap();
+
+    let db = common::test_db().await;
     let preserve_service = PreserveService::default();
     let tasks_service = TasksService::new(&config.gcp_project_id);
 
@@ -72,6 +74,7 @@ async fn create_test_app() -> (axum::Router, Vec<u8>) {
 
 #[tokio::test]
 async fn test_protected_route_without_token() {
+    require_emulator!();
     let (app, _) = create_test_app().await;
 
     let response = app
@@ -91,6 +94,7 @@ async fn test_protected_route_without_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_invalid_token() {
+    require_emulator!();
     let (app, _) = create_test_app().await;
 
     let response = app
@@ -111,6 +115,7 @@ async fn test_protected_route_with_invalid_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_valid_token() {
+    require_emulator!();
     let (app, signing_key) = create_test_app().await;
     let token = create_test_jwt(12345, &signing_key);
 
@@ -138,6 +143,7 @@ async fn test_protected_route_with_valid_token() {
 
 #[tokio::test]
 async fn test_cors_preflight() {
+    require_emulator!();
     let (app, _) = create_test_app().await;
 
     let response = app
@@ -167,6 +173,7 @@ async fn test_cors_preflight() {
 
 #[tokio::test]
 async fn test_public_route_no_auth_required() {
+    require_emulator!();
     let (app, _) = create_test_app().await;
 
     let response = app
