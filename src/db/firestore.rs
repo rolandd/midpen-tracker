@@ -17,7 +17,7 @@ use crate::models::{Activity, ActivityPreserve, User};
 /// Firestore database client.
 #[derive(Clone)]
 pub struct FirestoreDb {
-    client: firestore::FirestoreDb,
+    client: Option<firestore::FirestoreDb>,
 }
 
 impl FirestoreDb {
@@ -31,14 +31,30 @@ impl FirestoreDb {
 
         tracing::info!(project = project_id, "Connected to Firestore");
 
-        Ok(Self { client })
+        Ok(Self {
+            client: Some(client),
+        })
+    }
+
+    /// Create a mock Firestore client for testing (offline mode).
+    ///
+    /// All database operations will return an error if called.
+    pub fn new_mock() -> Self {
+        Self { client: None }
+    }
+
+    /// Helper to get the client or return an error if offline.
+    fn get_client(&self) -> Result<&firestore::FirestoreDb, AppError> {
+        self.client
+            .as_ref()
+            .ok_or_else(|| AppError::Database("Database not connected (offline mode)".to_string()))
     }
 
     // ─── User Operations ─────────────────────────────────────────
 
     /// Get a user by their Strava athlete ID.
     pub async fn get_user(&self, athlete_id: u64) -> Result<Option<User>, AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .select()
             .by_id_in(collections::USERS)
@@ -51,7 +67,7 @@ impl FirestoreDb {
     /// Create or update a user.
     pub async fn upsert_user(&self, user: &User) -> Result<(), AppError> {
         let _: () = self
-            .client
+            .get_client()?
             .fluent()
             .update()
             .in_col(collections::USERS)
@@ -67,7 +83,7 @@ impl FirestoreDb {
 
     /// Get encrypted tokens for a user.
     pub async fn get_tokens(&self, athlete_id: u64) -> Result<Option<UserTokens>, AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .select()
             .by_id_in(collections::TOKENS)
@@ -80,7 +96,7 @@ impl FirestoreDb {
     /// Store encrypted tokens for a user.
     pub async fn set_tokens(&self, athlete_id: u64, tokens: &UserTokens) -> Result<(), AppError> {
         let _: () = self
-            .client
+            .get_client()?
             .fluent()
             .update()
             .in_col(collections::TOKENS)
@@ -94,7 +110,7 @@ impl FirestoreDb {
 
     /// Delete tokens (for deauthorization).
     pub async fn delete_tokens(&self, athlete_id: u64) -> Result<(), AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .delete()
             .from(collections::TOKENS)
@@ -109,7 +125,7 @@ impl FirestoreDb {
 
     /// Get an activity by Strava ID.
     pub async fn get_activity(&self, activity_id: u64) -> Result<Option<Activity>, AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .select()
             .by_id_in(collections::ACTIVITIES)
@@ -127,7 +143,11 @@ impl FirestoreDb {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<Activity>, AppError> {
-        let query = self.client.fluent().select().from(collections::ACTIVITIES);
+        let query = self
+            .get_client()?
+            .fluent()
+            .select()
+            .from(collections::ACTIVITIES);
 
         let query = if let Some(date) = after_date {
             let date = date.to_string();
@@ -154,7 +174,7 @@ impl FirestoreDb {
     /// Store a processed activity.
     pub async fn set_activity(&self, activity: &Activity) -> Result<(), AppError> {
         let _: () = self
-            .client
+            .get_client()?
             .fluent()
             .update()
             .in_col(collections::ACTIVITIES)
@@ -169,7 +189,7 @@ impl FirestoreDb {
     /// Delete an activity and update user stats.
     pub async fn delete_activity(&self, activity_id: u64, athlete_id: u64) -> Result<(), AppError> {
         // Delete the activity document
-        self.client
+        self.get_client()?
             .fluent()
             .delete()
             .from(collections::ACTIVITIES)
@@ -183,7 +203,7 @@ impl FirestoreDb {
         // TODO: Could optimize by decrementing, but recalculation is safer
 
         let activities = self
-            .client
+            .get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITIES)
@@ -213,7 +233,7 @@ impl FirestoreDb {
         athlete_id: u64,
         preserve_name: &str,
     ) -> Result<Vec<ActivityPreserve>, AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITY_PRESERVES)
@@ -245,7 +265,7 @@ impl FirestoreDb {
             let doc_id = format!("{}_{}", record.activity_id, safe_name);
 
             let _: () = self
-                .client
+                .get_client()?
                 .fluent()
                 .update()
                 .in_col(collections::ACTIVITY_PRESERVES)
@@ -267,7 +287,7 @@ impl FirestoreDb {
         &self,
         athlete_id: u64,
     ) -> Result<Option<crate::models::UserStats>, AppError> {
-        self.client
+        self.get_client()?
             .fluent()
             .select()
             .by_id_in(collections::USER_STATS)
@@ -286,7 +306,7 @@ impl FirestoreDb {
         stats: &crate::models::UserStats,
     ) -> Result<(), AppError> {
         let _: () = self
-            .client
+            .get_client()?
             .fluent()
             .update()
             .in_col(collections::USER_STATS)
@@ -335,7 +355,7 @@ impl FirestoreDb {
 
         // Begin a transaction
         let mut transaction = self
-            .client
+            .get_client()?
             .begin_transaction()
             .await
             .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
@@ -343,7 +363,7 @@ impl FirestoreDb {
         // 1. Read current user stats within the transaction
         //    This registers the document for conflict detection
         let current_stats: Option<crate::models::UserStats> = self
-            .client
+            .get_client()?
             .fluent()
             .select()
             .by_id_in(collections::USER_STATS)
@@ -372,7 +392,7 @@ impl FirestoreDb {
         stats.update_from_activity(&activity, &now_clone);
 
         // 4. Add activity write to transaction
-        self.client
+        self.get_client()?
             .fluent()
             .update()
             .in_col(collections::ACTIVITIES)
@@ -388,7 +408,7 @@ impl FirestoreDb {
             let safe_name = urlencoding::encode(&record.preserve_name);
             let doc_id = format!("{}_{}", record.activity_id, safe_name);
 
-            self.client
+            self.get_client()?
                 .fluent()
                 .update()
                 .in_col(collections::ACTIVITY_PRESERVES)
@@ -404,7 +424,7 @@ impl FirestoreDb {
         }
 
         // 6. Add stats write to transaction
-        self.client
+        self.get_client()?
             .fluent()
             .update()
             .in_col(collections::USER_STATS)
@@ -450,7 +470,7 @@ impl FirestoreDb {
 
         // 1. Delete all activity-preserve join records
         let preserve_records: Vec<ActivityPreserve> = self
-            .client
+            .get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITY_PRESERVES)
@@ -463,7 +483,7 @@ impl FirestoreDb {
         for record in &preserve_records {
             let safe_name = urlencoding::encode(&record.preserve_name);
             let doc_id = format!("{}_{}", record.activity_id, safe_name);
-            self.client
+            self.get_client()?
                 .fluent()
                 .delete()
                 .from(collections::ACTIVITY_PRESERVES)
@@ -481,7 +501,7 @@ impl FirestoreDb {
 
         // 2. Delete all activities
         let activities: Vec<Activity> = self
-            .client
+            .get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITIES)
@@ -492,7 +512,7 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))?;
 
         for activity in &activities {
-            self.client
+            self.get_client()?
                 .fluent()
                 .delete()
                 .from(collections::ACTIVITIES)
@@ -505,7 +525,7 @@ impl FirestoreDb {
         tracing::debug!(athlete_id, count = activities.len(), "Deleted activities");
 
         // 3. Delete user stats
-        self.client
+        self.get_client()?
             .fluent()
             .delete()
             .from(collections::USER_STATS)
@@ -517,7 +537,7 @@ impl FirestoreDb {
         tracing::debug!(athlete_id, "Deleted user stats");
 
         // 4. Delete user profile
-        self.client
+        self.get_client()?
             .fluent()
             .delete()
             .from(collections::USERS)

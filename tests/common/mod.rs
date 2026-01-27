@@ -4,6 +4,7 @@
 use midpen_strava::db::FirestoreDb;
 
 /// Check if emulator is available via environment variable.
+#[allow(dead_code)]
 pub fn emulator_available() -> bool {
     std::env::var("FIRESTORE_EMULATOR_HOST").is_ok()
 }
@@ -25,4 +26,10 @@ pub async fn test_db() -> FirestoreDb {
     FirestoreDb::new("test-project")
         .await
         .expect("Failed to connect to Firestore emulator")
+}
+
+/// Create a mock database connection (offline).
+#[allow(dead_code)]
+pub fn test_db_offline() -> FirestoreDb {
+    FirestoreDb::new_mock()
 }
