@@ -38,6 +38,14 @@ pub struct AuthStartParams {
 }
 
 /// Start OAuth flow - redirect to Strava authorization.
+// ... imports ...
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
+
+// Type alias for HMAC-SHA256
+type HmacSha256 = Hmac<Sha256>;
+
+/// Start OAuth flow - redirect to Strava authorization.
 async fn auth_start(
     State(state): State<Arc<AppState>>,
     Query(params): Query<AuthStartParams>,
@@ -48,13 +56,27 @@ async fn auth_start(
         .redirect_uri
         .unwrap_or_else(|| state.config.frontend_url.clone());
 
-    // Encode frontend URL + timestamp in state (URL-safe base64)
+    // Encode frontend URL + timestamp in state
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("System time error: {}", e)))?
         .as_millis();
-    let state_data = format!("{}|{:x}", frontend_url, timestamp);
-    let oauth_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
+
+    // Create the data payload: "frontend_url|timestamp_hex"
+    let state_payload = format!("{}|{:x}", frontend_url, timestamp);
+
+    // Sign the payload
+    let mut mac = HmacSha256::new_from_slice(&state.config.oauth_state_key)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("HMAC init failed: {}", e)))?;
+    mac.update(state_payload.as_bytes());
+    let signature = mac.finalize().into_bytes();
+
+    // Combine payload + signature: "payload|signature_hex"
+    // We stick to hex for the signature part to keep it simple within the pipe-delimited format
+    let signed_state = format!("{}|{}", state_payload, hex::encode(signature));
+
+    // Base64 encode the whole thing for the URL
+    let oauth_state = URL_SAFE_NO_PAD.encode(signed_state.as_bytes());
 
     // Get the host from the request headers for callback URL
     let host = headers
@@ -121,9 +143,14 @@ async fn auth_callback(
     };
     let service_url = format!("{}://{}", scheme, host);
 
-    // Decode frontend URL from state parameter
-    let frontend_url =
-        decode_state_frontend(&params.state).unwrap_or_else(|| state.config.frontend_url.clone());
+    // Decode and verify frontend URL from state parameter
+    let frontend_url = verify_and_decode_state(&params.state, &state.config.oauth_state_key)
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                "Invalid or tampered state parameter, falling back to default frontend URL"
+            );
+            state.config.frontend_url.clone()
+        });
 
     // Check for OAuth errors
     if let Some(error) = params.error {
@@ -301,13 +328,35 @@ async fn trigger_backfill(
     Ok(())
 }
 
-/// Decode the frontend URL from the OAuth state parameter.
-fn decode_state_frontend(state: &str) -> Option<String> {
+/// Verify HMAC signature and decode the frontend URL from the OAuth state parameter.
+fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
     let bytes = URL_SAFE_NO_PAD.decode(state).ok()?;
     let state_str = String::from_utf8(bytes).ok()?;
-    // Format is "frontend_url|timestamp_hex"
-    let parts: Vec<&str> = state_str.splitn(2, '|').collect();
-    parts.first().map(|s| s.to_string())
+
+    // Format is "frontend_url|timestamp_hex|signature_hex"
+    let parts: Vec<&str> = state_str.splitn(3, '|').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+
+    let frontend_url = parts[0];
+    let timestamp_hex = parts[1];
+    let signature_hex = parts[2];
+
+    // Reconstruct payload and verify signature
+    let payload = format!("{}|{}", frontend_url, timestamp_hex);
+
+    let mut mac = HmacSha256::new_from_slice(secret).ok()?;
+    mac.update(payload.as_bytes());
+
+    let expected_signature = hex::encode(mac.finalize().into_bytes());
+
+    if signature_hex != expected_signature {
+        tracing::error!("OAuth state signature mismatch! Potential tampering.");
+        return None;
+    }
+
+    Some(frontend_url.to_string())
 }
 
 /// Logout - just a placeholder that clears client-side token.
@@ -315,4 +364,70 @@ async fn logout() -> Redirect {
     // The actual logout happens on client side by clearing localStorage
     // This endpoint just redirects back
     Redirect::temporary("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_and_decode_state_success() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        let timestamp = 1234567890u128;
+
+        let payload = format!("{}|{:x}", frontend_url, timestamp);
+        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
+        mac.update(payload.as_bytes());
+        let signature = hex::encode(mac.finalize().into_bytes());
+
+        let state_data = format!("{}|{}", payload, signature);
+        let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
+
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, Some(frontend_url.to_string()));
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_invalid_signature() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        let timestamp = 1234567890u128;
+
+        let payload = format!("{}|{:x}", frontend_url, timestamp);
+        let signature = "invalid_signature";
+
+        let state_data = format!("{}|{}", payload, signature);
+        let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
+
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_wrong_secret() {
+        let secret = b"secret_key";
+        let wrong_secret = b"wrong_key";
+        let frontend_url = "https://example.com";
+        let timestamp = 1234567890u128;
+
+        let payload = format!("{}|{:x}", frontend_url, timestamp);
+        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
+        mac.update(payload.as_bytes());
+        let signature = hex::encode(mac.finalize().into_bytes());
+
+        let state_data = format!("{}|{}", payload, signature);
+        let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
+
+        let result = verify_and_decode_state(&encoded_state, wrong_secret);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_malformed() {
+        let secret = b"secret_key";
+        let encoded_state = URL_SAFE_NO_PAD.encode("invalid|format");
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, None);
+    }
 }

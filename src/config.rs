@@ -33,6 +33,8 @@ pub struct Config {
     pub jwt_signing_key: Vec<u8>,
     /// Webhook verification token
     pub webhook_verify_token: String,
+    /// OAuth state signing key (derived from jwt_signing_key)
+    pub oauth_state_key: Vec<u8>,
 }
 
 impl Config {
@@ -42,6 +44,12 @@ impl Config {
     /// In production, use `load_with_secrets()` to fetch from Secret Manager.
     pub fn from_env() -> Result<Self, ConfigError> {
         dotenvy::dotenv().ok(); // Load .env file if present
+
+        let jwt_signing_key = env::var("JWT_SIGNING_KEY")
+            .map_err(|_| ConfigError::Missing("JWT_SIGNING_KEY"))?
+            .into_bytes();
+
+        let oauth_state_key = derive_oauth_key(&jwt_signing_key);
 
         Ok(Self {
             // Non-sensitive config from env
@@ -59,12 +67,11 @@ impl Config {
             strava_client_secret: env::var("STRAVA_CLIENT_SECRET")
                 .map(|v| v.trim().to_string())
                 .map_err(|_| ConfigError::Missing("STRAVA_CLIENT_SECRET"))?,
-            jwt_signing_key: env::var("JWT_SIGNING_KEY")
-                .map_err(|_| ConfigError::Missing("JWT_SIGNING_KEY"))?
-                .into_bytes(),
+            jwt_signing_key,
             webhook_verify_token: env::var("WEBHOOK_VERIFY_TOKEN")
                 .map(|v| v.trim().to_string())
                 .map_err(|_| ConfigError::Missing("WEBHOOK_VERIFY_TOKEN"))?,
+            oauth_state_key,
         })
     }
 
@@ -72,14 +79,18 @@ impl Config {
     ///
     /// This should NEVER be used in production.
     pub fn test_default() -> Self {
+        let jwt_signing_key = b"test_jwt_key_32_bytes_minimum!!".to_vec();
+        let oauth_state_key = derive_oauth_key(&jwt_signing_key);
+
         Self {
             strava_client_id: "test_client_id".to_string(),
             frontend_url: "http://localhost:5173".to_string(),
             gcp_project_id: "test-project".to_string(),
             port: 8080,
             strava_client_secret: "test_secret".to_string(),
-            jwt_signing_key: b"test_jwt_key_32_bytes_minimum!!".to_vec(),
+            jwt_signing_key,
             webhook_verify_token: "test_verify_token".to_string(),
+            oauth_state_key,
         }
     }
 
@@ -104,6 +115,9 @@ impl Config {
 
         tracing::info!("Secrets loaded and cached");
 
+        let jwt_signing_key = jwt_key.into_bytes();
+        let oauth_state_key = derive_oauth_key(&jwt_signing_key);
+
         Ok(Self {
             strava_client_id: env::var("STRAVA_CLIENT_ID")
                 .map_err(|_| ConfigError::Missing("STRAVA_CLIENT_ID"))?,
@@ -115,10 +129,24 @@ impl Config {
                 .parse()
                 .unwrap_or(8080),
             strava_client_secret: client_secret.trim().to_string(),
-            jwt_signing_key: jwt_key.into_bytes(),
+            jwt_signing_key,
             webhook_verify_token: webhook_token.trim().to_string(),
+            oauth_state_key,
         })
     }
+}
+
+/// Derive a specialized key for OAuth state signing from the master JWT key using HKDF.
+fn derive_oauth_key(master_key: &[u8]) -> Vec<u8> {
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+
+    let hk = Hkdf::<Sha256>::new(None, master_key);
+    let mut okm = [0u8; 32];
+    // Info string provides context separation
+    hk.expand(b"midpen-strava-oauth-state-v1", &mut okm)
+        .expect("HKDF expand failed");
+    okm.to_vec()
 }
 
 /// Fetch a secret from Google Secret Manager.
