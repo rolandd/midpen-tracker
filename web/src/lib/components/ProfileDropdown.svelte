@@ -7,6 +7,7 @@
 	import type { UserResponse } from '../generated';
 	import { DeleteAccountModal } from '$lib/components';
 	import { deleteAccount } from '$lib/api';
+	import { uiState } from '$lib/state.svelte';
 
 	interface Props {
 		user: UserResponse | null;
@@ -150,6 +151,9 @@
 				class="px-3 py-2 text-xs text-[var(--color-text-muted)] text-center border-t border-[var(--color-border)] mt-1 opacity-50"
 			>
 				Build: {import.meta.env.PUBLIC_BUILD_ID?.substring(0, 7) || 'dev'}
+				{#if uiState.backendBuildId}
+					/ {uiState.backendBuildId.substring(0, 7) || 'dev'}
+				{/if}
 			</div>
 		</div>
 	{/if}
