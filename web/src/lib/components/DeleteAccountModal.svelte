@@ -19,7 +19,12 @@
 		try {
 			await onConfirm();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to delete account';
+			const rawMessage = e instanceof Error ? e.message : 'Failed to delete account';
+			if (rawMessage.includes('500')) {
+				error = 'Server error. Please try again later.';
+			} else {
+				error = rawMessage;
+			}
 			isDeleting = false;
 		}
 	}
