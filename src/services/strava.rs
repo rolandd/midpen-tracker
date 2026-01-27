@@ -505,6 +505,79 @@ impl StravaService {
             .update_activity_description(&access_token, activity_id, description)
             .await
     }
+
+    /// Deauthorize with a specific token.
+    pub async fn deauthorize_with_token(&self, access_token: &str) -> Result<(), AppError> {
+        self.client.deauthorize(access_token).await
+    }
+
+    /// Revoke local tokens from DB and return a valid access token for final cleanup.
+    ///
+    /// This method:
+    /// 1. Reads tokens from DB.
+    /// 2. Deletes tokens from DB immediately (to block concurrent processing).
+    /// 3. Decrypts and checks expiration.
+    /// 4. Refreshes token with Strava if needed (in-memory only).
+    /// 5. Returns the valid access token.
+    pub async fn revoke_local_tokens(&self, athlete_id: u64) -> Result<Option<String>, AppError> {
+        // 1. Get tokens
+        let tokens_opt = self.db.get_tokens(athlete_id).await?;
+        let tokens = match tokens_opt {
+            Some(t) => t,
+            None => return Ok(None),
+        };
+
+        // 2. Delete tokens immediately
+        self.db.delete_tokens(athlete_id).await?;
+
+        // 3. Decrypt
+        let (mut access_token, refresh_token) = match crate::services::kms::decrypt_tokens(
+            &self.kms,
+            &tokens.access_token_encrypted,
+            &tokens.refresh_token_encrypted,
+        )
+        .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    athlete_id,
+                    "Failed to decrypt tokens (skipping deauth)"
+                );
+                return Ok(None);
+            }
+        };
+
+        // 4. Check expiration & Refresh in-memory
+        let expires_at = chrono::DateTime::parse_from_rfc3339(&tokens.expires_at)
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .unwrap_or_else(|_| chrono::Utc::now());
+
+        let now = chrono::Utc::now();
+        let margin = chrono::Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
+
+        if now + margin >= expires_at {
+            tracing::info!(
+                athlete_id,
+                "Token expired during deletion, refreshing in-memory"
+            );
+            match self.client.refresh_token(&refresh_token).await {
+                Ok(new_tokens) => {
+                    access_token = new_tokens.access_token;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        athlete_id,
+                        "Failed to refresh token for deauth (attempting with old token)"
+                    );
+                }
+            }
+        }
+
+        Ok(Some(access_token))
+    }
 }
 
 /// Token exchange response from Strava OAuth (includes athlete info).

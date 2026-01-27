@@ -388,32 +388,30 @@ async fn delete_user(
         "Processing user deletion from Cloud Task"
     );
 
-    // 1. Get tokens from DB (hold in memory for later Strava deauth)
-    let tokens_result = state.db.get_tokens(payload.athlete_id).await;
-    let held_tokens = match tokens_result {
-        Ok(Some(tokens)) => Some(tokens),
-        Ok(None) => {
-            tracing::warn!(
-                athlete_id = payload.athlete_id,
-                "No tokens found - user may have already been deleted"
-            );
-            None
-        }
+    // Create StravaService
+    let strava = match create_strava_service(&state).await {
+        Ok(s) => s,
         Err(e) => {
-            tracing::error!(error = %e, "Failed to get tokens");
+            tracing::error!(error = %e, "Failed to create StravaService for deletion");
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
     };
 
-    // 2. Delete tokens FIRST (blocks concurrent activity processing)
-    if let Err(e) = state.db.delete_tokens(payload.athlete_id).await {
-        tracing::error!(error = %e, "Failed to delete tokens");
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
-    tracing::debug!(athlete_id = payload.athlete_id, "Tokens deleted");
+    // 1. Revoke local tokens immediately (get valid token for later deauth)
+    // This blocks concurrent activity processing.
+    let access_token_opt = match strava.revoke_local_tokens(payload.athlete_id).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to revoke tokens");
+            // If DB error, we probably can't proceed.
+            // If it's just "not found", revoke_local_tokens returns Ok(None).
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
 
-    // 3. Delete all user data
-    match state.db.delete_user_data(payload.athlete_id).await {
+    // 2. Delete all user data
+    let deletion_result = state.db.delete_user_data(payload.athlete_id).await;
+    match &deletion_result {
         Ok(count) => {
             tracing::info!(
                 athlete_id = payload.athlete_id,
@@ -423,66 +421,36 @@ async fn delete_user(
         }
         Err(e) => {
             tracing::error!(error = %e, "Failed to delete user data");
-            // Continue to Strava deauth anyway - tokens are already gone
+            // Continue to Strava deauth anyway, but will return error later
         }
     }
 
-    // 4. Deauthorize with Strava using held-in-memory tokens
-    if let Some(tokens) = held_tokens {
-        // Create KMS service for token decryption
-        let kms = match KmsService::new(
-            &state.config.gcp_project_id,
-            "us-west1",
-            "midpen-strava",
-            "token-encryption",
-        )
-        .await
-        {
-            Ok(k) => k,
-            Err(e) => {
-                tracing::error!(error = %e, "Failed to create KMS service for deauth");
-                // Data is deleted, just can't deauth - still consider success
-                return StatusCode::OK;
-            }
-        };
-
-        // Decrypt access token
-        match crate::services::kms::decrypt_tokens(
-            &kms,
-            &tokens.access_token_encrypted,
-            &tokens.refresh_token_encrypted,
-        )
-        .await
-        {
-            Ok((access_token, _refresh_token)) => {
-                // Create Strava client and deauthorize
-                let client = crate::services::strava::StravaClient::new(
-                    state.config.strava_client_id.clone(),
-                    state.config.strava_client_secret.clone(),
-                );
-
-                if let Err(e) = client.deauthorize(&access_token).await {
-                    tracing::warn!(
-                        error = %e,
-                        athlete_id = payload.athlete_id,
-                        "Failed to deauthorize with Strava (non-fatal)"
-                    );
-                    // Non-fatal - user may have already revoked from Strava side
-                } else {
-                    tracing::info!(
-                        athlete_id = payload.athlete_id,
-                        "Strava deauthorization successful"
-                    );
-                }
-            }
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    athlete_id = payload.athlete_id,
-                    "Failed to decrypt tokens for deauth (non-fatal)"
-                );
-            }
+    // 3. Deauthorize with Strava using the valid token
+    if let Some(token) = access_token_opt {
+        if let Err(e) = strava.deauthorize_with_token(&token).await {
+            tracing::warn!(
+                error = %e,
+                athlete_id = payload.athlete_id,
+                "Failed to deauthorize with Strava (non-fatal)"
+            );
+        } else {
+            tracing::info!(
+                athlete_id = payload.athlete_id,
+                "Strava deauthorization successful"
+            );
         }
+    } else {
+        tracing::info!(
+            athlete_id = payload.athlete_id,
+            "No tokens found to deauthorize (already deleted or failed to decrypt)"
+        );
+    }
+
+    if deletion_result.is_err() {
+        // Return 500 to trigger retry if data deletion failed
+        // Note: revoke_local_tokens succeeded, so tokens are gone. Retry will hit "No tokens found" branch
+        // and focus on deleting data.
+        return StatusCode::INTERNAL_SERVER_ERROR;
     }
 
     tracing::info!(
