@@ -89,8 +89,7 @@ impl ActivityProcessor {
             };
 
         // 4. Build activity record and preserve join records
-        let now = get_current_timestamp()
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("System time error: {}", e)))?;
+        let now = chrono::Utc::now().to_rfc3339();
         let activity = Activity {
             strava_activity_id: activity_id,
             athlete_id,
@@ -172,12 +171,7 @@ fn append_annotation(existing: Option<&str>, annotation: &str) -> String {
     }
 }
 
-/// Get current time as seconds from epoch string.
-fn get_current_timestamp() -> anyhow::Result<String> {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    Ok(format!("{}", secs))
-}
+
 
 #[cfg(test)]
 mod tests {

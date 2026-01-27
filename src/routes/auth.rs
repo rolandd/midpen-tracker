@@ -26,32 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/auth/logout", get(logout))
 }
 
-/// Create a JWT token for the authenticated user.
-fn create_jwt(athlete_id: u64, signing_key: &[u8]) -> anyhow::Result<String> {
-    use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-    use serde::Serialize;
-
-    #[derive(Serialize)]
-    struct Claims {
-        sub: String, // athlete_id as string
-        exp: usize,  // expiration timestamp
-        iat: usize,  // issued at timestamp
-    }
-
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as usize;
-
-    let claims = Claims {
-        sub: athlete_id.to_string(),
-        exp: now + 86400 * 30, // 30 days
-        iat: now,
-    };
-
-    Ok(encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(signing_key),
-    )?)
-}
+use crate::middleware::auth::create_jwt;
 
 /// Query parameters for starting OAuth flow.
 #[derive(Deserialize)]
