@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright 2026 Roland Dreier <roland@kernel.org>
+// Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
 import js from '@eslint/js';
 import ts from 'typescript-eslint';

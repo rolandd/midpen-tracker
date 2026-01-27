@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # SPDX-License-Identifier: MIT
-# Copyright 2026 Roland Dreier <roland@kernel.org>
+# Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
 #
 # Run Firestore integration tests with the emulator.

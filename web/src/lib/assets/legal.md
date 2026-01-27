@@ -114,4 +114,4 @@ Without regard to its conflict of law principles.
 11. Contact Us
 
 If you have any questions about these Terms or the Privacy Policy,
-please contact us at <roland@kernel.org>
+please contact us at <roland@rolandd.dev>

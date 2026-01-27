@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright 2026 Roland Dreier <roland@kernel.org>
+// Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
 //! Application configuration loaded from environment variables and Secret Manager.
 //!

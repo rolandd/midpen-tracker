@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright 2026 Roland Dreier <roland@kernel.org>
+// Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
 import adapter from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
