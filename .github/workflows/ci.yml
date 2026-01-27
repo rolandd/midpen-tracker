@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  frontend:
+    name: Frontend (Check & Lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check SvelteKit
+        run: npm run check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check Formatting
+        run: npm run check-format
+
+      - name: Build
+        run: npm run build
+
+  backend:
+    name: Backend (Test & Check)
+    runs-on: ubuntu-latest
+    container:
+      image: rust:alpine
+
+    steps:
+      - name: Install System Dependencies
+        run: apk add --no-cache musl-dev git tar build-base
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Rust Components
+        run: rustup component add clippy rustfmt
+
+      - name: Run Tests
+        run: cargo test
+
+      - name: Check
+        run: cargo check
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+      - name: Check Formatting
+        run: cargo fmt -- --check
+
+  security_audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+      - name: Run Audit
+        run: cargo audit
