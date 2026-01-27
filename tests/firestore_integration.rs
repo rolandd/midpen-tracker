@@ -15,13 +15,28 @@ mod common;
 use common::test_db;
 
 /// Generate a unique athlete ID for test isolation.
+
 fn unique_athlete_id() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
+    // Use last 12 digits of nanoseconds to avoid overflow if needed, but u64 fits all nanos since epoch.
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64
-        % 1_000_000_000
+}
+
+/// Helper to create a basic test user
+fn test_user(athlete_id: u64) -> User {
+    User {
+        strava_athlete_id: athlete_id,
+        email: Some("test@example.com".to_string()),
+        firstname: "Test".to_string(),
+        lastname: "User".to_string(),
+        profile_picture: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        last_active: chrono::Utc::now().to_rfc3339(),
+        deletion_requested_at: None,
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -165,6 +180,9 @@ async fn test_new_activity_processing() {
     let athlete_id = unique_athlete_id();
     let activity_id = athlete_id + 1000;
 
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
+
     // Create the activity
     let activity = Activity {
         strava_activity_id: activity_id,
@@ -227,6 +245,9 @@ async fn test_activity_idempotency() {
     let athlete_id = unique_athlete_id();
     let activity_id = athlete_id + 2000;
 
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
+
     let activity = Activity {
         strava_activity_id: activity_id,
         athlete_id,
@@ -269,6 +290,9 @@ async fn test_multiple_activities_accumulate_stats() {
 
     let db = test_db().await;
     let athlete_id = unique_athlete_id();
+
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
 
     // Process first activity
     let activity1 = Activity {
@@ -354,6 +378,9 @@ async fn test_activity_with_multiple_preserves() {
     let athlete_id = unique_athlete_id();
     let activity_id = athlete_id + 4000;
 
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
+
     // Activity that spans multiple preserves
     let activity = Activity {
         strava_activity_id: activity_id,
@@ -432,6 +459,9 @@ async fn test_preserves_by_year_tracking() {
     let db = test_db().await;
     let athlete_id = unique_athlete_id();
 
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
+
     // Activity in 2024
     let activity_2024 = Activity {
         strava_activity_id: athlete_id + 5001,
@@ -497,6 +527,9 @@ async fn test_activity_pagination() {
 
     let db = test_db().await;
     let athlete_id = unique_athlete_id();
+
+    // Create user first
+    db.upsert_user(&test_user(athlete_id)).await.unwrap();
 
     // Create 55 activities
     // Timestamps: 2024-01-01T10:00:00Z to 2024-01-01T10:54:00Z
