@@ -14,7 +14,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 jsonwebtoken = "9"
 
 # Geo processing
-geo = "0.29"
+geo = "0.32"
 geojson = "0.24"
 polyline = "0.11"
 
@@ -49,8 +49,8 @@ chrono = "0.4"
 bytes = "1"
 
 # GCP SDK
-firestore = { version = "0.43", default-features = false }
-gcloud-sdk = { version = "0.25", default-features = false, features = ["tls-webpki-roots"] }
+firestore = { version = "0.47", default-features = false }
+gcloud-sdk = { version = "0.28", default-features = false, features = ["tls-webpki-roots"] }
 google-cloud-tasks-v2 = { version = "1", default-features = false }
 google-cloud-kms = { version = "0.6.0", default-features = false, features = ["rustls-tls", "auth"] }
 google-cloud-googleapis = "0.16"
