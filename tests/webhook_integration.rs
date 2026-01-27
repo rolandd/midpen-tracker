@@ -10,30 +10,6 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
-/// Create a test app without GCP dependencies
-async fn create_test_app() -> axum::Router {
-    use midpen_strava::config::Config;
-    use midpen_strava::db::FirestoreDb;
-    use midpen_strava::routes::create_router;
-    use midpen_strava::services::{PreserveService, TasksService};
-    use midpen_strava::AppState;
-    use std::sync::Arc;
-
-    let config = Config::test_default();
-    let db = FirestoreDb::new(&config.gcp_project_id).await.unwrap();
-    let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id);
-
-    let state = Arc::new(AppState {
-        config,
-        db,
-        preserve_service,
-        tasks_service,
-    });
-
-    create_router(state)
-}
-
 /// Create a test app with mock dependencies (no GCP required)
 async fn create_offline_test_app() -> axum::Router {
     use midpen_strava::config::Config;
@@ -122,7 +98,7 @@ async fn test_webhook_verification_wrong_token() {
 
 #[tokio::test]
 async fn test_webhook_event_create_activity() {
-    let app = create_test_app().await;
+    let app = create_offline_test_app().await;
 
     let event = json!({
         "aspect_type": "create",
@@ -151,7 +127,7 @@ async fn test_webhook_event_create_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_update_activity() {
-    let app = create_test_app().await;
+    let app = create_offline_test_app().await;
 
     let event = json!({
         "aspect_type": "update",
@@ -181,7 +157,7 @@ async fn test_webhook_event_update_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_delete_activity() {
-    let app = create_test_app().await;
+    let app = create_offline_test_app().await;
 
     let event = json!({
         "aspect_type": "delete",
@@ -210,7 +186,7 @@ async fn test_webhook_event_delete_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_athlete_deauthorize() {
-    let app = create_test_app().await;
+    let app = create_offline_test_app().await;
 
     let event = json!({
         "aspect_type": "deauthorize",
