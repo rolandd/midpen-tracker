@@ -317,6 +317,17 @@ impl FirestoreDb {
         let activity_id = activity.strava_activity_id;
         let now = chrono::Utc::now().to_rfc3339();
 
+        // Safety Check: Ensure user still exists before writing.
+        // This mitigates "zombie data" if deletion happened during processing.
+        if self.get_user(athlete_id).await?.is_none() {
+            tracing::warn!(
+                athlete_id,
+                activity_id,
+                "User not found, aborting atomic write (zombie prevention)"
+            );
+            return Ok(false);
+        }
+
         // Clone data needed inside the transaction closure
         let activity = activity.clone();
         let preserve_records = preserve_records.to_vec();

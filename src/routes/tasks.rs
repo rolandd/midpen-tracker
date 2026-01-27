@@ -112,6 +112,15 @@ async fn process_activity(
 
             StatusCode::OK
         }
+        Err(AppError::NotFound(msg)) if msg.contains("Tokens") || msg.contains("User") => {
+            tracing::warn!(
+                activity_id = payload.activity_id,
+                athlete_id = payload.athlete_id,
+                error = %msg,
+                "User/Tokens not found during processing - stopping retry (user likely deleted)"
+            );
+            StatusCode::OK
+        }
         Err(e) => {
             tracing::error!(
                 activity_id = payload.activity_id,
