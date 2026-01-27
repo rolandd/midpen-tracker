@@ -116,11 +116,7 @@ export async function fetchActivities(
 }
 
 export async function deleteAccount(): Promise<DeleteAccountResponse> {
-	const response = await apiFetch<DeleteAccountResponse>('/api/account', { method: 'DELETE' });
-
-	clearToken();
-
-	return response;
+	return apiFetch<DeleteAccountResponse>('/api/account', { method: 'DELETE' });
 }
 
 export async function fetchHealth(): Promise<HealthResponse> {

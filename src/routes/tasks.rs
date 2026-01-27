@@ -418,6 +418,17 @@ async fn delete_user(
         }
     };
 
+    // Safety Check: Did the user re-login immediately?
+    // If tokens exist now, it means handle_oauth_callback ran AFTER revoke_local_tokens.
+    // We should abort deletion to preserve the new account.
+    if let Ok(Some(_)) = state.db.get_tokens(payload.athlete_id).await {
+        tracing::warn!(
+            athlete_id = payload.athlete_id,
+            "User re-logged in during deletion process - ABORTING deletion to preserve new account"
+        );
+        return StatusCode::OK;
+    }
+
     // 2. Delete all user data
     let deletion_result = state.db.delete_user_data(payload.athlete_id).await;
     match &deletion_result {
@@ -432,6 +443,15 @@ async fn delete_user(
             tracing::error!(error = %e, "Failed to delete user data");
             // Continue to Strava deauth anyway, but will return error later
         }
+    }
+
+    // Safety Check Again: Did user login during data deletion?
+    if let Ok(Some(_)) = state.db.get_tokens(payload.athlete_id).await {
+        tracing::warn!(
+            athlete_id = payload.athlete_id,
+            "User re-logged in during data deletion - ABORTING deauth"
+        );
+        return StatusCode::OK;
     }
 
     // 3. Deauthorize with Strava using the valid token

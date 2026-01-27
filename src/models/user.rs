@@ -22,6 +22,9 @@ pub struct User {
     pub created_at: String,
     /// Last activity timestamp
     pub last_active: String,
+    /// When account deletion was requested (if pending)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletion_requested_at: Option<String>,
 }
 
 /// User's OAuth tokens (encrypted in Firestore).

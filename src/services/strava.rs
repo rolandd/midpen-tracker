@@ -390,6 +390,7 @@ impl StravaService {
             profile_picture: token_response.athlete.profile.clone(),
             created_at: now.clone(),
             last_active: now.clone(),
+            deletion_requested_at: None,
         };
 
         if let Err(e) = self.db.upsert_user(&user).await {

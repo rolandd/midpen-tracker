@@ -8,4 +8,5 @@ export type UserResponse = {
 	firstname: string;
 	lastname: string;
 	profile_picture: string | null;
+	deletion_requested_at: string | null;
 };

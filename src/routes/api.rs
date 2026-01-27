@@ -46,6 +46,7 @@ pub struct UserResponse {
     pub firstname: String,
     pub lastname: String,
     pub profile_picture: Option<String>,
+    pub deletion_requested_at: Option<String>,
 }
 
 /// Get current user profile.
@@ -62,6 +63,7 @@ async fn get_me(
         firstname: user_profile.firstname,
         lastname: user_profile.lastname,
         profile_picture: user_profile.profile_picture,
+        deletion_requested_at: user_profile.deletion_requested_at,
     }))
 }
 
@@ -103,6 +105,19 @@ async fn delete_account(
         athlete_id = user.athlete_id,
         "User-initiated account deletion"
     );
+
+    // Mark user as pending deletion (for UI feedback)
+    // We fetch-modify-write to preserve other fields
+    if let Some(mut user_profile) = state.db.get_user(user.athlete_id).await? {
+        user_profile.deletion_requested_at = Some(chrono::Utc::now().to_rfc3339());
+        state.db.upsert_user(&user_profile).await?;
+    } else {
+        // User already gone? Rare but possible. Proceed to queue task just in case tokens remain.
+        tracing::warn!(
+            athlete_id = user.athlete_id,
+            "User profile not found during deletion request"
+        );
+    }
 
     // Queue deletion task
     let payload = DeleteUserPayload {

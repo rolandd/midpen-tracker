@@ -159,8 +159,8 @@
 	<DeleteAccountModal
 		onConfirm={async () => {
 			await deleteAccount();
-			// API will 401 on next request, but we proactively clear token and redirect
-			goto('/');
+			// Redirect to processing page while deletion happens in background
+			goto('/account-deletion-in-progress');
 		}}
 		onCancel={() => (showDeleteConfirmation = false)}
 	/>

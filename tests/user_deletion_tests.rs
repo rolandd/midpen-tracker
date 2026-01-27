@@ -54,8 +54,9 @@ async fn test_delete_user_data_removes_all_records() {
         firstname: "Delete".to_string(),
         lastname: "Me".to_string(),
         profile_picture: None,
-        created_at: now.clone(),
-        last_active: now.clone(),
+        created_at: "2024-01-01T00:00:00Z".to_string(),
+        last_active: "2024-01-01T00:00:00Z".to_string(),
+        deletion_requested_at: None,
     };
     db.upsert_user(&user).await.unwrap();
 

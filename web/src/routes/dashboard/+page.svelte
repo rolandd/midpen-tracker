@@ -101,6 +101,9 @@
 	async function fetchUser() {
 		try {
 			user = await fetchMe();
+			if (user.deletion_requested_at) {
+				goto('/account-deletion-in-progress');
+			}
 		} catch (e) {
 			console.error('Failed to fetch user profile', e);
 			// Non-critical, just don't show profile

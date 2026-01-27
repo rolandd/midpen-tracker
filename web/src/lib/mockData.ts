@@ -15,7 +15,8 @@ export const mockUser: UserResponse = {
 	firstname: 'Demo',
 	lastname: 'User',
 	// Realistic placeholder avatar
-	profile_picture: 'https://ui-avatars.com/api/?name=Demo+User&background=random'
+	profile_picture: 'https://ui-avatars.com/api/?name=Demo+User&background=random',
+	deletion_requested_at: null
 };
 
 // Sample preserves with realistic data

@@ -69,6 +69,7 @@ async fn test_new_user_creation() {
         profile_picture: Some("https://example.com/pic.jpg".to_string()),
         created_at: "2024-01-15T10:00:00Z".to_string(),
         last_active: "2024-01-15T10:00:00Z".to_string(),
+        deletion_requested_at: None,
     };
     db.upsert_user(&user).await.unwrap();
 
@@ -105,6 +106,7 @@ async fn test_user_update_preserves_all_fields() {
         profile_picture: None,
         created_at: "2024-01-01T00:00:00Z".to_string(),
         last_active: "2024-01-01T00:00:00Z".to_string(),
+        deletion_requested_at: None,
     };
     db.upsert_user(&user_v1).await.unwrap();
 
@@ -117,6 +119,7 @@ async fn test_user_update_preserves_all_fields() {
         profile_picture: Some("https://example.com/new.jpg".to_string()),
         created_at: "2024-01-01T00:00:00Z".to_string(), // Should preserve original
         last_active: "2024-01-15T12:00:00Z".to_string(),
+        deletion_requested_at: None,
     };
     db.upsert_user(&user_v2).await.unwrap();
 
