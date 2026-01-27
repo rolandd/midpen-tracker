@@ -171,8 +171,6 @@ fn append_annotation(existing: Option<&str>, annotation: &str) -> String {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
