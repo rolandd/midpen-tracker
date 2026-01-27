@@ -18,7 +18,11 @@ use tracing::Level;
 
 /// Health check response
 async fn health_check() -> Json<serde_json::Value> {
-    Json(serde_json::json!({ "status": "ok" }))
+    let build_id = option_env!("BUILD_ID").unwrap_or("unknown");
+    Json(serde_json::json!({
+        "status": "ok",
+        "build_id": build_id
+    }))
 }
 
 /// Build the complete router with all routes.

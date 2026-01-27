@@ -145,6 +145,12 @@
 			>
 				Delete My Account
 			</button>
+
+			<div
+				class="px-3 py-2 text-xs text-[var(--color-text-muted)] text-center border-t border-[var(--color-border)] mt-1 opacity-50"
+			>
+				Build: {import.meta.env.PUBLIC_BUILD_ID?.substring(0, 7) || 'dev'}
+			</div>
 		</div>
 	{/if}
 </div>

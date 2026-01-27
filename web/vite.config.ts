@@ -10,7 +10,10 @@ export default defineConfig(({ mode }) => {
 		plugins: [sveltekit()],
 		define: {
 			'import.meta.env.PUBLIC_API_URL': JSON.stringify(env.PUBLIC_API_URL),
-			'import.meta.env.PUBLIC_DEMO_MODE': JSON.stringify(env.PUBLIC_DEMO_MODE)
+			'import.meta.env.PUBLIC_DEMO_MODE': JSON.stringify(env.PUBLIC_DEMO_MODE),
+			'import.meta.env.PUBLIC_BUILD_ID': JSON.stringify(
+				process.env.CF_PAGES_COMMIT_SHA || env.PUBLIC_BUILD_ID || 'dev'
+			)
 		}
 	};
 });

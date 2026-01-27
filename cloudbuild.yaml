@@ -1,7 +1,13 @@
 steps:
   # 1. Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest', '.']
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest'
+      - '--build-arg'
+      - 'BUILD_ID=${SHORT_SHA}'
+      - '.'
 
   # 2. Push the container image
   - name: 'gcr.io/cloud-builders/docker'

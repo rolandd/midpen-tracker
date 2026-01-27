@@ -20,6 +20,9 @@ RUN cargo build --release && rm -rf src
 COPY src ./src
 COPY data ./data
 
+ARG BUILD_ID=unknown
+ENV BUILD_ID=${BUILD_ID}
+
 # Build the real binary
 RUN touch src/main.rs src/lib.rs && cargo build --release
 
