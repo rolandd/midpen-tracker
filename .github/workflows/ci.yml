@@ -30,6 +30,9 @@ jobs:
 
       - name: Check SvelteKit
         run: npm run check
+        env:
+          PUBLIC_BASE_URL: "https://example.com"
+          PUBLIC_API_URL: "https://api.example.com"
 
       - name: Lint
         run: npm run lint
@@ -39,6 +42,9 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          PUBLIC_BASE_URL: "https://example.com"
+          PUBLIC_API_URL: "https://api.example.com"
 
   backend:
     name: Backend (Test & Check)
