@@ -55,6 +55,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 // Types - re-exported from generated bindings
+
 export type {
 	UserResponse,
 	PreserveActivity,
@@ -62,34 +63,43 @@ export type {
 	PreserveStatsResponse,
 	ActivitySummary,
 	ActivitiesResponse,
-	DeleteAccountResponse
+	DeleteAccountResponse,
+	HealthResponse
 } from './generated';
+
 import type {
 	UserResponse,
 	PreserveStatsResponse,
 	ActivitiesResponse,
-	DeleteAccountResponse
+	DeleteAccountResponse,
+	HealthResponse
 } from './generated';
 
 // API methods
+
 export async function fetchMe(): Promise<UserResponse> {
 	if (DEMO_MODE) return mockUser;
+
 	return apiFetch<UserResponse>('/api/me');
 }
 
 export async function fetchPreserveStats(showUnvisited = false): Promise<PreserveStatsResponse> {
 	if (DEMO_MODE) {
 		const stats = { ...mockPreserveStats };
+
 		if (!showUnvisited) {
 			stats.preserves = stats.preserves.filter((p) => p.count > 0);
 		}
+
 		return stats;
 	}
+
 	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=${showUnvisited}`);
 }
 
 export async function logout(): Promise<void> {
 	await apiFetch('/auth/logout', { method: 'POST' });
+
 	clearToken();
 }
 
@@ -107,6 +117,14 @@ export async function fetchActivities(
 
 export async function deleteAccount(): Promise<DeleteAccountResponse> {
 	const response = await apiFetch<DeleteAccountResponse>('/api/account', { method: 'DELETE' });
+
 	clearToken();
+
 	return response;
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+	if (DEMO_MODE) return { status: 'ok', build_id: 'demo' };
+
+	return apiFetch<HealthResponse>('/health');
 }

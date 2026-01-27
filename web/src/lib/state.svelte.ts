@@ -2,5 +2,6 @@
 // Copyright 2026 Roland Dreier <roland@kernel.org>
 
 export const uiState = $state({
-	isAboutOpen: false
+	isAboutOpen: false,
+	backendBuildId: null as string | null
 });

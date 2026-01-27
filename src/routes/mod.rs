@@ -11,18 +11,32 @@ pub mod webhook;
 use crate::middleware::auth::require_auth;
 use crate::AppState;
 use axum::{middleware, routing::get, Json, Router};
+use serde::Serialize;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
+#[cfg(feature = "binding-generation")]
+use ts_rs::TS;
+
+#[derive(Serialize)]
+#[cfg_attr(feature = "binding-generation", derive(TS))]
+#[cfg_attr(
+    feature = "binding-generation",
+    ts(export, export_to = "web/src/lib/generated/")
+)]
+pub struct HealthResponse {
+    pub status: String,
+    pub build_id: String,
+}
 
 /// Health check response
-async fn health_check() -> Json<serde_json::Value> {
-    let build_id = option_env!("BUILD_ID").unwrap_or("unknown");
-    Json(serde_json::json!({
-        "status": "ok",
-        "build_id": build_id
-    }))
+async fn health_check() -> Json<HealthResponse> {
+    let build_id = option_env!("BUILD_ID").unwrap_or("unknown").to_string();
+    Json(HealthResponse {
+        status: "ok".to_string(),
+        build_id,
+    })
 }
 
 /// Build the complete router with all routes.

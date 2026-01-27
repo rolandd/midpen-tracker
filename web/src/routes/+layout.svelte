@@ -3,12 +3,21 @@
 
 <script lang="ts">
 	import '../app.css';
-
+	import { onMount } from 'svelte';
 	import { uiState } from '$lib/state.svelte';
 	import { AboutModal } from '$lib/components';
 	import { PUBLIC_BASE_URL } from '$env/static/public';
+	import { fetchHealth } from '$lib/api';
 
 	let { children } = $props();
+
+	onMount(() => {
+		fetchHealth()
+			.then((h) => {
+				uiState.backendBuildId = h.build_id;
+			})
+			.catch((e) => console.debug('Failed to fetch backend health:', e));
+	});
 </script>
 
 <svelte:head>
