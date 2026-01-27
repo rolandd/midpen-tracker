@@ -20,7 +20,21 @@ const config = {
 		}),
 		// Prerender all pages as static HTML
 		prerender: {
-			entries: ['*']
+			entries: ['/', '/legal', '/dashboard', '/callback', '/account-deletion-in-progress']
+		},
+		// Content Security Policy
+		// SvelteKit automatically adds hashes for inline scripts
+		csp: {
+			mode: 'hash',
+			directives: {
+				'default-src': ['self'],
+				'script-src': ['self'],
+				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
+				'font-src': ['self', 'https://fonts.gstatic.com'],
+				'img-src': ['self', 'data:', 'https:'],
+				'connect-src': ['self', 'https://*.run.app', 'http://localhost:8080'],
+				'frame-ancestors': ['none']
+			}
 		}
 	}
 };
