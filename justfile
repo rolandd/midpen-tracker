@@ -244,3 +244,38 @@ list-webhooks:
     else
         curl -s "https://www.strava.com/api/v3/push_subscriptions?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET"
     fi
+
+# Delete all webhook subscriptions
+delete-webhook:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    if ! command -v jq &> /dev/null; then
+        echo "❌ jq is required for this recipe"
+        exit 1
+    fi
+
+    echo "Fetching secrets..."
+    CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
+    
+    echo "Fetching subscriptions..."
+    SUBS=$(curl -s "https://www.strava.com/api/v3/push_subscriptions?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET")
+    
+    # Check for empty list
+    COUNT=$(echo "$SUBS" | jq 'if type=="array" then length else 0 end')
+    
+    if [ "$COUNT" -eq "0" ]; then
+        echo "No active subscriptions found."
+        exit 0
+    fi
+    
+    echo "Found $COUNT subscription(s). Deleting..."
+    
+    # Get IDs and delete each
+    for id in $(echo "$SUBS" | jq -r '.[].id'); do
+        echo "Deleting subscription ID: $id"
+        curl -s -X DELETE "https://www.strava.com/api/v3/push_subscriptions/$id?client_id={{strava_client_id}}&client_secret=$CLIENT_SECRET"
+        echo ""
+    done
+    
+    echo "✅ Webhooks deleted"
