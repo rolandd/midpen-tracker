@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
-use midpen_strava::db::FirestoreDb;
+use midpen_tracker::db::FirestoreDb;
 
 /// Check if emulator is available via environment variable.
 #[allow(dead_code)]

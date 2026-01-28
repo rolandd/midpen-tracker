@@ -6,8 +6,8 @@
 //! These tests require the Firestore emulator to be running.
 //! Run with: ./scripts/test-with-emulator.sh --test user_deletion_tests
 
-use midpen_strava::models::user::{User, UserTokens};
-use midpen_strava::models::{Activity, ActivityPreserve};
+use midpen_tracker::models::user::{User, UserTokens};
+use midpen_tracker::models::{Activity, ActivityPreserve};
 
 mod common;
 use common::test_db;
@@ -77,7 +77,7 @@ async fn test_delete_user_data_removes_all_records() {
     db.batch_set_activity_preserves(&[preserve]).await.unwrap();
 
     // 5. Create User Stats
-    let mut stats = midpen_strava::models::UserStats::default();
+    let mut stats = midpen_tracker::models::UserStats::default();
     stats.processed_activity_ids.insert(1001);
     db.set_user_stats(athlete_id, &stats).await.unwrap();
 

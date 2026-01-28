@@ -6,7 +6,7 @@
 //! Tracks adventures through Midpen Open Space Preserves by integrating
 //! with Strava to detect which preserves were visited during activities.
 
-use midpen_strava::{
+use midpen_tracker::{
     config::Config,
     db::FirestoreDb,
     services::{PreserveService, TasksService},
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Build router
-    let app = midpen_strava::routes::create_router(state);
+    let app = midpen_tracker::routes::create_router(state);
 
     // Start server
     let addr = format!("0.0.0.0:{}", config.port);
@@ -77,7 +77,7 @@ fn init_logging() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("midpen_strava=debug".parse().unwrap())
+                .add_directive("midpen_tracker=debug".parse().unwrap())
                 .add_directive("info".parse().unwrap()),
         )
         .with(format)

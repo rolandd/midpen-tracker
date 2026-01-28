@@ -14,10 +14,10 @@ mod common;
 
 /// Create a test app without GCP dependencies
 async fn create_test_app() -> axum::Router {
-    use midpen_strava::config::Config;
-    use midpen_strava::routes::create_router;
-    use midpen_strava::services::{PreserveService, TasksService};
-    use midpen_strava::AppState;
+    use midpen_tracker::config::Config;
+    use midpen_tracker::routes::create_router;
+    use midpen_tracker::services::{PreserveService, TasksService};
+    use midpen_tracker::AppState;
     use std::sync::Arc;
 
     let config = Config::test_default();

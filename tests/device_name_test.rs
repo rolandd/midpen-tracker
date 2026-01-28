@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
-use midpen_strava::models::Activity;
-use midpen_strava::services::strava::StravaActivity;
+use midpen_tracker::models::Activity;
+use midpen_tracker::services::strava::StravaActivity;
 use std::fs;
 use std::path::Path;
 
