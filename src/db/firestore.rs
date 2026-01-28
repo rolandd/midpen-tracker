@@ -28,11 +28,57 @@ impl FirestoreDb {
     ///
     /// For local development with emulator, set FIRESTORE_EMULATOR_HOST.
     pub async fn new(project_id: &str) -> Result<Self, AppError> {
+        // If the emulator environment variable is set, use unauthenticated connection
+        // to avoid local credential warnings and leakage.
+        if std::env::var("FIRESTORE_EMULATOR_HOST").is_ok() {
+            return Self::create_emulator_client(project_id).await;
+        }
+
         let client = firestore::FirestoreDb::new(project_id)
             .await
             .map_err(|e| AppError::Database(format!("Failed to connect to Firestore: {}", e)))?;
 
         tracing::info!(project = project_id, "Connected to Firestore");
+
+        Ok(Self {
+            client: Some(client),
+        })
+    }
+
+    /// Create a Firestore client for the emulator with unauthenticated access.
+    async fn create_emulator_client(project_id: &str) -> Result<Self, AppError> {
+        tracing::info!("Using unauthenticated connection for Firestore Emulator");
+
+        // Use ExternalJwtFunctionSource to provide a dummy token without needing async-trait
+        // or a custom TokenSource implementation struct.
+        let token_source = gcloud_sdk::ExternalJwtFunctionSource::new(|| async {
+            Ok(gcloud_sdk::Token {
+                token_type: "Bearer".to_string(),
+                token: gcloud_sdk::SecretValue::new(
+                    "eyJhbGciOiJub25lIn0.eyJ1aWQiOiJ0ZXN0In0."
+                        .to_string()
+                        .into(),
+                ),
+                expiry: chrono::Utc::now() + chrono::Duration::hours(1),
+            })
+        });
+
+        let options = firestore::FirestoreDbOptions::new(project_id.to_string());
+
+        let client = firestore::FirestoreDb::with_options_token_source(
+            options,
+            gcloud_sdk::GCP_DEFAULT_SCOPES.clone(),
+            gcloud_sdk::TokenSourceType::ExternalSource(Box::new(token_source)),
+        )
+        .await
+        .map_err(|e| {
+            AppError::Database(format!("Failed to connect to Firestore Emulator: {}", e))
+        })?;
+
+        tracing::info!(
+            project = project_id,
+            "Connected to Firestore (Emulator/Unauthenticated)"
+        );
 
         Ok(Self {
             client: Some(client),
