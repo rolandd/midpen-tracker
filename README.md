@@ -1,5 +1,7 @@
 # Midpen Tracker
 
+<img src="web/static/app-logo.svg" align="right" width="120" alt="Midpen Tracker Logo">
+
 Track your adventures through [Midpeninsula Regional Open Space
 District](https://www.openspace.org/) preserves by analyzing your
 Strava activities.
