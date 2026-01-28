@@ -67,6 +67,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "GCP_REGION"
+        value = var.region
+      }
+
+      env {
         name  = "FRONTEND_URL"
         value = var.frontend_url
       }

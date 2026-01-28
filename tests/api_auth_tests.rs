@@ -60,7 +60,7 @@ async fn create_test_app() -> (axum::Router, Vec<u8>) {
 
     let db = common::test_db_offline();
     let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id);
+    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
 
     let state = Arc::new(AppState {
         config,

@@ -22,7 +22,7 @@ async fn create_offline_test_app() -> axum::Router {
     let config = Config::test_default();
     let db = FirestoreDb::new_mock();
     let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id);
+    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
 
     let state = Arc::new(AppState {
         config,
