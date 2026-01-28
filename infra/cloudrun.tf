@@ -50,7 +50,7 @@ resource "google_cloud_run_v2_service" "api" {
     }
 
     containers {
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/midpen-strava/api:latest"
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/${var.service_name}/api:latest"
 
       ports {
         container_port = 8080
@@ -135,6 +135,6 @@ output "api_url" {
 }
 
 output "artifact_registry" {
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/midpen-strava"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/midpen-tracker"
   description = "Artifact Registry path for Docker images"
 }

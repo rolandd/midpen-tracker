@@ -1,6 +1,7 @@
 # GCP Project Config
 project_id = "YOUR_PROJECT_ID"
 region     = "us-west1"
+service_name = "midpen-tracker"
 
 # Strava API Config
 strava_client_id = "YOUR_STRAVA_CLIENT_ID"

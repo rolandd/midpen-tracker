@@ -20,6 +20,9 @@ backend_url := `grep VITE_API_URL web/.env | cut -d= -f2`
 # Extract Strava client ID from terraform.tfvars (single source of truth)
 strava_client_id := `grep strava_client_id infra/terraform.tfvars | cut -d'"' -f2`
 
+# Extract service name (midpen-tracker) from terraform.tfvars
+service_name := `grep service_name infra/terraform.tfvars | cut -d'"' -f2`
+
 # ─── Development ──────────────────────────────────────────────
 
 # Format / lint preserve downloader script
@@ -122,15 +125,15 @@ build-docker:
 
 # Build and push to Artifact Registry
 build-push:
-    docker build -t {{region}}-docker.pkg.dev/{{project}}/midpen-strava/api:latest .
-    docker push {{region}}-docker.pkg.dev/{{project}}/midpen-strava/api:latest
+    docker build -t {{region}}-docker.pkg.dev/{{project}}/{{service_name}}/api:latest .
+    docker push {{region}}-docker.pkg.dev/{{project}}/{{service_name}}/api:latest
 
 # ─── Deploy ───────────────────────────────────────────────────
 
 # Deploy API to Cloud Run
 deploy-api:
     gcloud run deploy midpen-strava-api \
-        --image={{region}}-docker.pkg.dev/{{project}}/midpen-strava/api:latest \
+        --image={{region}}-docker.pkg.dev/{{project}}/{{service_name}}/api:latest \
         --region={{region}} \
         --project={{project}}
 

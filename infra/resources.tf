@@ -78,7 +78,7 @@ resource "google_cloud_tasks_queue" "activity_processing" {
 # Artifact Registry for container images
 resource "google_artifact_registry_repository" "main" {
   location      = var.region
-  repository_id = "midpen-strava"
+  repository_id = var.service_name
   format        = "DOCKER"
 
   # Set to true to test the policy before actual deletion

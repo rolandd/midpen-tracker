@@ -1,7 +1,7 @@
   # 1. Pull the previous builder image to leverage layer caching
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
-    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder || exit 0']
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder || exit 0']
 
   # 2. Build the builder stage (with dependencies) using cached layers
   - name: 'gcr.io/cloud-builders/docker'
@@ -10,9 +10,9 @@
       - '--target'
       - 'builder'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
       - '--cache-from'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
       - '.'
 
   # 3. Build the final runtime image
@@ -20,19 +20,19 @@
     args:
       - 'build'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:latest'
       - '--build-arg'
       - 'BUILD_ID=${SHORT_SHA}'
       - '--cache-from'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
       - '.'
 
   # 4. Push the images (builder cache + runtime)
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest']
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:latest']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder']
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder']
 
   # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -42,7 +42,7 @@
       - 'deploy'
       - 'midpen-strava-api'
       - '--image'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:latest'
       - '--region'
       - '${_REGION}'
 
@@ -50,4 +50,5 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _REGION: us-west1 # Default, overridden by trigger
+  _REGION: us-west1
+  _REPO_NAME: midpen-tracker
