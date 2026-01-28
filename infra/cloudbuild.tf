@@ -1,6 +1,6 @@
 # Cloud Build Service Account
 resource "google_service_account" "cloudbuild" {
-  account_id   = "midpen-strava-build"
+  account_id   = "midpen-tracker-build"
   display_name = "Cloud Build Service Account"
 }
 
