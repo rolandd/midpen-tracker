@@ -55,7 +55,7 @@ resource "cloudflare_pages_project" "midpen_strava_frontend" {
     type = "github"
     config {
       owner                         = "rolandd"
-      repo_name                     = "midpen-strava"
+      repo_name                     = "midpen-tracker"
       production_branch             = "main"
       pr_comments_enabled           = true
       deployments_enabled           = true
