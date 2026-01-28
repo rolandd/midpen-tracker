@@ -21,17 +21,18 @@ pub struct KmsService {
 }
 
 impl KmsService {
+    /// KMS Key Ring Name
+    const KEY_RING_NAME: &str = "midpen-strava";
+
     /// Create a new KMS service.
     /// Connects to GCP KMS.
-    pub async fn new(
-        project_id: &str,
-        location: &str,
-        key_ring: &str,
-        key_name: &str,
-    ) -> Result<Self, AppError> {
+    pub async fn new(project_id: &str, location: &str, key_name: &str) -> Result<Self, AppError> {
         let key_path = format!(
             "projects/{}/locations/{}/keyRings/{}/cryptoKeys/{}",
-            project_id, location, key_ring, key_name
+            project_id,
+            location,
+            Self::KEY_RING_NAME,
+            key_name
         );
 
         let config = google_cloud_kms::client::ClientConfig::default()
