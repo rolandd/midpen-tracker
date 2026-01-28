@@ -189,12 +189,13 @@ async fn test_webhook_event_athlete_deauthorize() {
     let app = create_offline_test_app().await;
 
     let event = json!({
-        "aspect_type": "deauthorize",
+        "aspect_type": "update",
         "event_time": 1234567890,
-        "object_id": 0,
+        "object_id": 123456,
         "object_type": "athlete",
         "owner_id": 123456,
-        "subscription_id": 12345
+        "subscription_id": 12345,
+        "updates": { "authorized": "false" }
     });
 
     let response = app

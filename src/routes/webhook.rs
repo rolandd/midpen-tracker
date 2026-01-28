@@ -66,6 +66,19 @@ struct WebhookEvent {
     object_id: u64,
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
+    /// For athlete events, contains {"authorized": "false"} on deauthorization
+    #[serde(default)]
+    updates: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Check if a webhook event represents an athlete deauthorization.
+/// Strava sends: object_type="athlete", aspect_type="update", updates={"authorized": "false"}
+fn is_deauthorization(event: &WebhookEvent) -> bool {
+    event
+        .updates
+        .as_ref()
+        .and_then(|u| u.get("authorized"))
+        .is_some_and(|v| v == "false")
 }
 
 /// Handle incoming webhook events (POST).
@@ -128,7 +141,7 @@ async fn handle_event(
                 tracing::info!(activity_id = event.object_id, "Activity deleted");
             }
         }
-        ("athlete", "deauthorize") => {
+        ("athlete", "update") if is_deauthorization(&event) => {
             // Queue user deletion via Cloud Tasks (respond immediately to Strava)
             let payload = DeleteUserPayload {
                 athlete_id: event.owner_id,
