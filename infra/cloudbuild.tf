@@ -67,7 +67,7 @@ resource "google_cloudbuildv2_repository" "midpen_strava" {
 
 # Trigger on push to main
 resource "google_cloudbuild_trigger" "main_deploy" {
-  name        = "midpen-strava-deploy"
+  name        = "midpen-tracker-deploy"
   description = "Deploy to Cloud Run on push to main"
   location    = var.region
 
