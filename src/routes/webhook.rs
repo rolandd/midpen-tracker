@@ -67,8 +67,9 @@ struct WebhookEvent {
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
     /// For athlete events, contains {"authorized": "false"} on deauthorization
+    /// For athlete events, contains {"authorized": "false"} on deauthorization
     #[serde(default)]
-    updates: Option<std::collections::HashMap<String, String>>,
+    updates: Option<std::collections::HashMap<String, serde_json::Value>>,
 }
 
 /// Check if a webhook event represents an athlete deauthorization.
@@ -78,21 +79,34 @@ fn is_deauthorization(event: &WebhookEvent) -> bool {
         .updates
         .as_ref()
         .and_then(|u| u.get("authorized"))
-        .is_some_and(|v| v == "false")
+        .is_some_and(|v| v == false || v == "false")
 }
 
 /// Handle incoming webhook events (POST).
 async fn handle_event(
     State(state): State<Arc<AppState>>,
     headers: axum::http::HeaderMap,
-    Json(event): Json<WebhookEvent>,
+    Json(payload): Json<serde_json::Value>,
 ) -> StatusCode {
+    tracing::info!(
+        payload = %payload,
+        "Webhook event received (raw)"
+    );
+
+    let event: WebhookEvent = match serde_json::from_value(payload) {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to parse webhook event");
+            return StatusCode::OK; // Still return 200 to Strava to avoid retries
+        }
+    };
+
     tracing::info!(
         object_type = %event.object_type,
         object_id = event.object_id,
         aspect_type = %event.aspect_type,
         owner_id = event.owner_id,
-        "Webhook event received"
+        "Webhook event parsed successfully"
     );
 
     match (event.object_type.as_str(), event.aspect_type.as_str()) {
