@@ -121,6 +121,15 @@ async fn process_activity(
             );
             StatusCode::OK
         }
+        Err(AppError::StravaApi(msg)) if msg.contains("Token expired or invalid") => {
+            tracing::warn!(
+                activity_id = payload.activity_id,
+                athlete_id = payload.athlete_id,
+                error = %msg,
+                "Token revoked - stopping retry (user likely deauthorized)"
+            );
+            StatusCode::OK // Stop retrying - will never succeed
+        }
         Err(e) => {
             tracing::error!(
                 activity_id = payload.activity_id,
@@ -185,7 +194,15 @@ async fn continue_backfill(
         Ok(a) => a,
         Err(AppError::NotFound(_)) => {
             // User may have disconnected - don't retry
-            tracing::error!(athlete_id = payload.athlete_id, "No tokens for backfill");
+            tracing::warn!(athlete_id = payload.athlete_id, "No tokens for backfill");
+            return StatusCode::OK;
+        }
+        Err(AppError::StravaApi(msg)) if msg.contains("Token expired or invalid") => {
+            tracing::warn!(
+                athlete_id = payload.athlete_id,
+                error = %msg,
+                "Token revoked during backfill - stopping retry"
+            );
             return StatusCode::OK;
         }
         Err(e) => {
