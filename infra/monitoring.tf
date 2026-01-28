@@ -1,7 +1,7 @@
 # Cloud Monitoring alert policy for errors
 resource "google_monitoring_alert_policy" "api_errors" {
   count        = var.deploy_cloudrun ? 1 : 0
-  display_name = "Midpen Strava API Errors"
+  display_name = "Midpen Tracker API Errors"
   combiner     = "OR"
   
   conditions {
@@ -38,7 +38,7 @@ resource "google_monitoring_alert_policy" "api_errors" {
 # Uptime check for API health (only when Cloud Run is deployed)
 resource "google_monitoring_uptime_check_config" "api_health" {
   count        = var.deploy_cloudrun ? 1 : 0
-  display_name = "Midpen Strava API Health"
+  display_name = "Midpen Tracker API Health"
   timeout      = "10s"
   period       = "300s"  # Check every 5 minutes
   

@@ -1,7 +1,7 @@
 # Service account for Cloud Run
 resource "google_service_account" "cloudrun" {
   account_id   = "midpen-strava-api"
-  display_name = "Midpen-Strava Cloud Run Service"
+  display_name = "Midpen-Tracker Cloud Run Service"
 }
 
 # IAM bindings - least privilege
