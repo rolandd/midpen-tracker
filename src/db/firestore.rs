@@ -13,6 +13,9 @@ use crate::db::collections;
 use crate::error::AppError;
 use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
+use futures_util::{stream, StreamExt};
+
+const MAX_CONCURRENT_DB_OPS: usize = 50;
 
 /// Firestore database client.
 #[derive(Clone)]
@@ -253,28 +256,37 @@ impl FirestoreDb {
 
     /// Store multiple activity-preserve records.
     ///
-    /// Uses sequential writes since the firestore crate's batch API requires specific setup.
-    /// For small numbers of preserves per activity (typically 1-3), this is acceptable.
+    /// Uses concurrent writes with a limit to avoid overloading Firestore.
     pub async fn batch_set_activity_preserves(
         &self,
         records: &[ActivityPreserve],
     ) -> Result<(), AppError> {
-        for record in records {
-            // Document ID: combine activity_id and preserve_name to ensure uniqueness
-            let safe_name = urlencoding::encode(&record.preserve_name);
-            let doc_id = format!("{}_{}", record.activity_id, safe_name);
+        let client = self.get_client()?;
 
-            let _: () = self
-                .get_client()?
-                .fluent()
-                .update()
-                .in_col(collections::ACTIVITY_PRESERVES)
-                .document_id(&doc_id)
-                .object(record)
-                .execute()
-                .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
-        }
+        stream::iter(records.to_vec())
+            .map(|record| async move {
+                // Document ID: combine activity_id and preserve_name to ensure uniqueness
+                let safe_name = urlencoding::encode(&record.preserve_name);
+                let doc_id = format!("{}_{}", record.activity_id, safe_name);
+
+                let _: () = client
+                    .fluent()
+                    .update()
+                    .in_col(collections::ACTIVITY_PRESERVES)
+                    .document_id(&doc_id)
+                    .object(&record)
+                    .execute()
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))?;
+
+                Ok::<_, AppError>(())
+            })
+            .buffer_unordered(MAX_CONCURRENT_DB_OPS)
+            .collect::<Vec<Result<(), AppError>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>, AppError>>()?;
+
         Ok(())
     }
 
@@ -480,24 +492,30 @@ impl FirestoreDb {
             .await
             .map_err(|e| AppError::Database(e.to_string()))?;
 
-        for record in &preserve_records {
-            let safe_name = urlencoding::encode(&record.preserve_name);
-            let doc_id = format!("{}_{}", record.activity_id, safe_name);
-            self.get_client()?
-                .fluent()
-                .delete()
-                .from(collections::ACTIVITY_PRESERVES)
-                .document_id(&doc_id)
-                .execute()
-                .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
-        }
-        deleted_count += preserve_records.len();
-        tracing::debug!(
-            athlete_id,
-            count = preserve_records.len(),
-            "Deleted activity-preserve records"
-        );
+        let count = preserve_records.len();
+        let client = self.get_client()?;
+
+        stream::iter(preserve_records)
+            .map(|record| async move {
+                let safe_name = urlencoding::encode(&record.preserve_name);
+                let doc_id = format!("{}_{}", record.activity_id, safe_name);
+                client
+                    .fluent()
+                    .delete()
+                    .from(collections::ACTIVITY_PRESERVES)
+                    .document_id(&doc_id)
+                    .execute()
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))
+            })
+            .buffer_unordered(MAX_CONCURRENT_DB_OPS)
+            .collect::<Vec<Result<(), AppError>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>, AppError>>()?;
+
+        deleted_count += count;
+        tracing::debug!(athlete_id, count, "Deleted activity-preserve records");
 
         // 2. Delete all activities
         let activities: Vec<Activity> = self
@@ -511,18 +529,26 @@ impl FirestoreDb {
             .await
             .map_err(|e| AppError::Database(e.to_string()))?;
 
-        for activity in &activities {
-            self.get_client()?
-                .fluent()
-                .delete()
-                .from(collections::ACTIVITIES)
-                .document_id(activity.strava_activity_id.to_string())
-                .execute()
-                .await
-                .map_err(|e| AppError::Database(e.to_string()))?;
-        }
-        deleted_count += activities.len();
-        tracing::debug!(athlete_id, count = activities.len(), "Deleted activities");
+        let count = activities.len();
+        stream::iter(activities)
+            .map(|activity| async move {
+                client
+                    .fluent()
+                    .delete()
+                    .from(collections::ACTIVITIES)
+                    .document_id(activity.strava_activity_id.to_string())
+                    .execute()
+                    .await
+                    .map_err(|e| AppError::Database(e.to_string()))
+            })
+            .buffer_unordered(MAX_CONCURRENT_DB_OPS)
+            .collect::<Vec<Result<(), AppError>>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<()>, AppError>>()?;
+
+        deleted_count += count;
+        tracing::debug!(athlete_id, count, "Deleted activities");
 
         // 3. Delete user stats
         self.get_client()?
