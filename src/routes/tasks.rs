@@ -9,7 +9,6 @@
 use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
-use crate::services::kms::KmsService;
 use crate::services::strava::StravaService;
 use crate::services::tasks::{ContinueBackfillPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
@@ -32,14 +31,15 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// Create a StravaService from app state.
 /// Helper to avoid duplicating the KMS initialization logic.
 async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
-    let kms = KmsService::new(&state.config.gcp_project_id, "us-west1", "token-encryption").await?;
-
-    Ok(StravaService::new(
+    StravaService::new(
         state.config.strava_client_id.clone(),
         state.config.strava_client_secret.clone(),
         state.db.clone(),
-        kms,
-    ))
+        state.config.gcp_project_id.clone(),
+        "us-west1".to_string(),
+        "token-encryption".to_string(),
+    )
+    .await
 }
 
 /// Process a single activity (called by Cloud Tasks).

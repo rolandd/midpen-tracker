@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{AppError, Result};
-use crate::services::kms::KmsService;
 use crate::services::strava::StravaService;
 use crate::AppState;
 
@@ -162,19 +161,19 @@ async fn auth_callback(
     tracing::info!("Exchanging authorization code for tokens");
 
     // Create StravaService for OAuth handling
-    let kms = KmsService::new(&state.config.gcp_project_id, "us-west1", "token-encryption")
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to initialize KMS service");
-            e
-        })?;
-
     let strava_service = StravaService::new(
         state.config.strava_client_id.clone(),
         state.config.strava_client_secret.clone(),
         state.db.clone(),
-        kms,
-    );
+        state.config.gcp_project_id.clone(),
+        "us-west1".to_string(),
+        "token-encryption".to_string(),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = %e, "Failed to initialize Strava service");
+        e
+    })?;
 
     // Handle OAuth callback: exchange code, store user and tokens
     let oauth_result = strava_service.handle_oauth_callback(&params.code).await?;

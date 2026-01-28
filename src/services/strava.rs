@@ -280,12 +280,21 @@ pub struct StravaService {
 
 impl StravaService {
     /// Create a new Strava service.
-    pub fn new(client_id: String, client_secret: String, db: FirestoreDb, kms: KmsService) -> Self {
-        Self {
+    pub async fn new(
+        client_id: String,
+        client_secret: String,
+        db: FirestoreDb,
+        project_id: String,
+        location: String,
+        key_name: String,
+    ) -> Result<Self, AppError> {
+        let kms = KmsService::new(&project_id, &location, &key_name).await?;
+
+        Ok(Self {
             client: StravaClient::new(client_id, client_secret),
             db,
             kms,
-        }
+        })
     }
 
     // ─── Token Management ────────────────────────────────────────────────────
