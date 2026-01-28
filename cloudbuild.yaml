@@ -1,3 +1,4 @@
+steps:
   # 1. Pull the previous builder image to leverage layer caching
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
