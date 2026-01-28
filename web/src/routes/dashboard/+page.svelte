@@ -106,7 +106,14 @@
 			}
 		} catch (e) {
 			console.error('Failed to fetch user profile', e);
-			// Non-critical, just don't show profile
+
+			// If we get a 404, the user record is gone (e.g. revoked/deleted),
+			// but we still have a valid JWT. We should log them out locally.
+			const msg = e instanceof Error ? e.message : String(e);
+			if (msg.includes('404')) {
+				await apiLogout(); // This clears token and hits logout endpoint
+				goto('/');
+			}
 		}
 	}
 
