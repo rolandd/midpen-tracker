@@ -51,12 +51,6 @@
 		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 		rel="stylesheet"
 	/>
-
-	<!-- Content Security Policy -->
-	<meta
-		http-equiv="content-security-policy"
-		content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.run.app http://localhost:8080; frame-ancestors 'none';"
-	/>
 </svelte:head>
 
 <div class="app-wrapper">
