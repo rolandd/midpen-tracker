@@ -49,10 +49,10 @@ pub struct TasksService {
 }
 
 impl TasksService {
-    pub fn new(project_id: &str) -> Self {
+    pub fn new(project_id: &str, region: &str) -> Self {
         Self {
             project_id: project_id.to_string(),
-            location: "us-west1".to_string(),
+            location: region.to_string(),
             queue_name: crate::config::ACTIVITY_QUEUE_NAME.to_string(),
         }
     }

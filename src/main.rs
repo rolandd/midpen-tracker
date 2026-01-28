@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize Cloud Tasks service
-    let tasks_service = TasksService::new(&config.gcp_project_id);
+    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
     tracing::info!(
         project = %config.gcp_project_id,
         "Cloud Tasks service initialized"

@@ -23,6 +23,8 @@ pub struct Config {
     pub frontend_url: String,
     /// GCP project ID
     pub gcp_project_id: String,
+    /// GCP region (e.g. us-west1)
+    pub gcp_region: String,
     /// Server port
     pub port: u16,
 
@@ -58,6 +60,7 @@ impl Config {
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".to_string()),
             gcp_project_id: env::var("GCP_PROJECT_ID").unwrap_or_else(|_| "local-dev".to_string()),
+            gcp_region: env::var("GCP_REGION").unwrap_or_else(|_| "us-west1".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
@@ -86,6 +89,7 @@ impl Config {
             strava_client_id: "test_client_id".to_string(),
             frontend_url: "http://localhost:5173".to_string(),
             gcp_project_id: "test-project".to_string(),
+            gcp_region: "us-west1".to_string(),
             port: 8080,
             strava_client_secret: "test_secret".to_string(),
             jwt_signing_key,
@@ -124,6 +128,7 @@ impl Config {
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".to_string()),
             gcp_project_id: project_id,
+            gcp_region: env::var("GCP_REGION").unwrap_or_else(|_| "us-west1".to_string()),
             port: env::var("PORT")
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
