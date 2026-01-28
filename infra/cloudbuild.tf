@@ -94,7 +94,8 @@ resource "google_cloudbuild_trigger" "main_deploy" {
   filename = "cloudbuild.yaml"
 
   substitutions = {
-    _REGION = var.region
+    _REGION    = var.region
+    _REPO_NAME = var.service_name
   }
 
   depends_on = [
