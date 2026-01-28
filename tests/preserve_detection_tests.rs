@@ -9,7 +9,7 @@
 //! IMPORTANT: If these tests fail, it indicates breakage in the core preserve
 //! matching logic that users won't notice until they check their stats.
 
-use midpen_strava::services::PreserveService;
+use midpen_tracker::services::PreserveService;
 
 /// Load the real preserve boundaries for testing.
 fn load_test_preserves() -> PreserveService {

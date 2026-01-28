@@ -30,7 +30,7 @@ RUN touch src/main.rs src/lib.rs && cargo build --release
 FROM gcr.io/distroless/static-debian13:nonroot
 
 # Copy the binary
-COPY --from=builder /app/target/release/midpen-strava /app/midpen-strava
+COPY --from=builder /app/target/release/midpen-tracker /app/midpen-tracker
 
 # Copy preserve boundaries (needed at runtime)
 COPY --from=builder /app/data /app/data
@@ -45,4 +45,4 @@ USER nonroot
 EXPOSE 8080
 
 # Run the binary
-ENTRYPOINT ["/app/midpen-strava"]
+ENTRYPOINT ["/app/midpen-tracker"]

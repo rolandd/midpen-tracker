@@ -8,8 +8,8 @@
 //!
 //! The emulator provides a clean state for each test run.
 
-use midpen_strava::models::user::{User, UserTokens};
-use midpen_strava::models::{Activity, ActivityPreserve};
+use midpen_tracker::models::user::{User, UserTokens};
+use midpen_tracker::models::{Activity, ActivityPreserve};
 
 mod common;
 use common::test_db;
