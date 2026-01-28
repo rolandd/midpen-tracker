@@ -50,10 +50,10 @@ fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
 
 /// Create a test app with known signing key.
 async fn create_test_app() -> (axum::Router, Vec<u8>) {
-    use midpen_strava::config::Config;
-    use midpen_strava::routes::create_router;
-    use midpen_strava::services::{PreserveService, TasksService};
-    use midpen_strava::AppState;
+    use midpen_tracker::config::Config;
+    use midpen_tracker::routes::create_router;
+    use midpen_tracker::services::{PreserveService, TasksService};
+    use midpen_tracker::AppState;
 
     let config = Config::test_default();
     let signing_key = config.jwt_signing_key.clone();

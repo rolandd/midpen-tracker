@@ -6,7 +6,7 @@
 //! Uses real activity fixtures and real preserve boundaries to validate
 //! the intersection logic produces correct results.
 
-use midpen_strava::services::PreserveService;
+use midpen_tracker::services::PreserveService;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
