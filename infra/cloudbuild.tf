@@ -58,7 +58,7 @@ resource "google_cloudbuildv2_connection" "github" {
 }
 
 # Link the repository
-resource "google_cloudbuildv2_repository" "midpen_strava" {
+resource "google_cloudbuildv2_repository" "midpen_tracker" {
   location          = var.region
   name              = "midpen-tracker"
   parent_connection = google_cloudbuildv2_connection.github.name
@@ -74,7 +74,7 @@ resource "google_cloudbuild_trigger" "main_deploy" {
   service_account = google_service_account.cloudbuild.id
 
   repository_event_config {
-    repository = google_cloudbuildv2_repository.midpen_strava.id
+    repository = google_cloudbuildv2_repository.midpen_tracker.id
     push {
       branch = "^main$"
     }
