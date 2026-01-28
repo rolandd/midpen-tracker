@@ -22,6 +22,11 @@ variable "region" {
   default     = "us-west1"
 }
 
+variable "service_name" {
+  description = "Service name used for Artifact Registry and Cloud Run"
+  type        = string
+}
+
 variable "strava_client_id" {
   description = "Strava OAuth Client ID"
   type        = string
