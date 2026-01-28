@@ -1,5 +1,21 @@
-steps:
-  # 1. Build the container image
+  # 1. Pull the previous builder image to leverage layer caching
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder || exit 0']
+
+  # 2. Build the builder stage (with dependencies) using cached layers
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--target'
+      - 'builder'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
+      - '--cache-from'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
+      - '.'
+
+  # 3. Build the final runtime image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -7,13 +23,18 @@ steps:
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest'
       - '--build-arg'
       - 'BUILD_ID=${SHORT_SHA}'
+      - '--cache-from'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder'
       - '.'
 
-  # 2. Push the container image
+  # 4. Push the images (builder cache + runtime)
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:latest']
 
-  # 3. Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/midpen-strava/api:builder']
+
+  # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
