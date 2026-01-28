@@ -467,7 +467,14 @@ async fn delete_user(
 
     // 3. Deauthorize with Strava using the valid token
     if let Some(token) = access_token_opt {
-        if let Err(e) = strava.deauthorize_with_token(&token).await {
+        // If triggered by webhook, the user already revoked access on Strava.
+        // Calling deauthorize again might confuse Strava or fail, so we skip it.
+        if payload.source == "webhook" {
+            tracing::info!(
+                athlete_id = payload.athlete_id,
+                "Skipping Strava deauthorization (triggered by webhook revocation)"
+            );
+        } else if let Err(e) = strava.deauthorize_with_token(&token).await {
             tracing::warn!(
                 error = %e,
                 athlete_id = payload.athlete_id,
