@@ -17,6 +17,12 @@ variable "cloudflare_api_token" {
   sensitive   = true
 }
 
+# Zone ID for DNS records
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for the custom domain"
+  type        = string
+}
+
 # Backend API URL for production
 variable "production_api_url" {
   description = "Production API URL for VITE_API_URL"
@@ -105,6 +111,16 @@ resource "cloudflare_pages_domain" "custom_domain" {
   account_id   = var.cloudflare_account_id
   project_name = cloudflare_pages_project.midpen_tracker_frontend.name
   domain       = local.frontend_domain
+}
+
+# Create DNS record explicitly
+resource "cloudflare_record" "frontend_cname" {
+  count   = local.is_custom_domain ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = "midpen-tracker"
+  content = "${cloudflare_pages_project.midpen_tracker_frontend.name}.pages.dev"
+  type    = "CNAME"
+  proxied = true
 }
 
 # Output the Pages URL

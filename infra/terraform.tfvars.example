@@ -12,6 +12,7 @@ frontend_url = "https://example.com"
 # Cloudflare Config
 cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 cloudflare_api_token  = "YOUR_CLOUDFLARE_API_TOKEN"
+# cloudflare_zone_id    = "YOUR_ZONE_ID_HERE"
 
 # Deployment Flags
 # Set to false for initial infrastructure provision.
