@@ -16,15 +16,18 @@ EMULATOR_PORT=8181
 EMULATOR_HOST="localhost:$EMULATOR_PORT"
 EMULATOR_PID=""
 
+# Kill the emulator process by matching the command line.
+# This finds the Java process specifically, avoiding issues with wrapper scripts not propagating signals.
 cleanup() {
+    # Kill the Java emulator process listening on the port
+    pkill -f "cloud-firestore-emulator.*port=$EMULATOR_PORT" || true
+
+    # Also try to kill the gcloud wrapper if we have its PID
     if [ -n "$EMULATOR_PID" ]; then
-        echo "Stopping Firestore emulator (PID $EMULATOR_PID)..."
         kill $EMULATOR_PID 2>/dev/null || true
-        wait $EMULATOR_PID 2>/dev/null || true
     fi
 }
-
-trap cleanup EXIT
+trap cleanup EXIT SIGINT SIGTERM
 
 # Check if emulator is already running on the port
 if curl -s "http://$EMULATOR_HOST" > /dev/null 2>&1; then
