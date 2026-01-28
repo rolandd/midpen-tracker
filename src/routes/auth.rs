@@ -166,7 +166,7 @@ async fn auth_callback(
         state.config.strava_client_secret.clone(),
         state.db.clone(),
         state.config.gcp_project_id.clone(),
-        "us-west1".to_string(),
+        state.config.gcp_region.clone(),
         "token-encryption".to_string(),
     )
     .await
