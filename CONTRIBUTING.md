@@ -7,8 +7,8 @@ Thank you for your interest in contributing to Midpen Tracker! We welcome contri
 1.  **Fork the repository** on GitHub.
 2.  **Clone your fork** locally:
     ```bash
-    git clone https://github.com/your-username/midpen-strava.git
-    cd midpen-strava
+    git clone https://github.com/your-username/midpen-tracker.git
+    cd midpen-tracker
     ```
 3.  **Install dependencies**:
     - Backend: Ensure you have [Rust](https://www.rust-lang.org/tools/install) installed.

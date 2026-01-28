@@ -60,9 +60,9 @@ resource "google_cloudbuildv2_connection" "github" {
 # Link the repository
 resource "google_cloudbuildv2_repository" "midpen_strava" {
   location          = var.region
-  name              = "midpen-strava"
+  name              = "midpen-tracker"
   parent_connection = google_cloudbuildv2_connection.github.name
-  remote_uri        = "https://github.com/rolandd/midpen-strava.git"
+  remote_uri        = "https://github.com/rolandd/midpen-tracker.git"
 }
 
 # Trigger on push to main
