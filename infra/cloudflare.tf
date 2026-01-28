@@ -38,9 +38,9 @@ provider "cloudflare" {
 # Cloudflare Pages Project
 # Note: This assumes the project already exists (created via UI with GitHub connection)
 # Terraform is used to manage configuration, not create the initial project
-resource "cloudflare_pages_project" "midpen_strava_frontend" {
+resource "cloudflare_pages_project" "midpen_tracker_frontend" {
   account_id        = var.cloudflare_account_id
-  name              = "midpen-strava"
+  name              = "midpen-tracker"
   production_branch = "main"
 
   # Build configuration
@@ -103,7 +103,7 @@ locals {
 resource "cloudflare_pages_domain" "custom_domain" {
   count        = local.is_custom_domain ? 1 : 0
   account_id   = var.cloudflare_account_id
-  project_name = cloudflare_pages_project.midpen_strava_frontend.name
+  project_name = cloudflare_pages_project.midpen_tracker_frontend.name
   domain       = local.frontend_domain
 }
 
@@ -115,5 +115,5 @@ output "pages_url" {
 
 output "pages_project_name" {
   description = "Cloudflare Pages project name"
-  value       = cloudflare_pages_project.midpen_strava_frontend.name
+  value       = cloudflare_pages_project.midpen_tracker_frontend.name
 }
