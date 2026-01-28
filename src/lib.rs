@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
-//! Midpen-Strava: Track adventures through Midpen Open Space Preserves
+//! Midpen-Tracker: Track adventures through Midpen Open Space Preserves
 //!
 //! This crate provides the backend API for processing Strava activities
 //! and detecting which Midpen preserves were visited.

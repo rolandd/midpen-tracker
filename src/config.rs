@@ -144,7 +144,7 @@ fn derive_oauth_key(master_key: &[u8]) -> Vec<u8> {
     let hk = Hkdf::<Sha256>::new(None, master_key);
     let mut okm = [0u8; 32];
     // Info string provides context separation
-    hk.expand(b"midpen-strava-oauth-state-v1", &mut okm)
+    hk.expand(b"midpen-tracker-oauth-state-v1", &mut okm)
         .expect("HKDF expand failed");
     okm.to_vec()
 }

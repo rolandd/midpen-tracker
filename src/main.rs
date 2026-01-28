@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
-//! Midpen-Strava API Server
+//! Midpen-Tracker API Server
 //!
 //! Tracks adventures through Midpen Open Space Preserves by integrating
 //! with Strava to detect which preserves were visited during activities.
@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load configuration from environment
     let config = Config::from_env().expect("Failed to load configuration");
-    tracing::info!(port = config.port, "Starting Midpen-Strava API");
+    tracing::info!(port = config.port, "Starting Midpen-Tracker API");
 
     // Initialize Firestore database
     let db = FirestoreDb::new(&config.gcp_project_id)

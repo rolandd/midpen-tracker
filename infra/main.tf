@@ -1,4 +1,4 @@
-# Midpen-Strava Infrastructure
+# Midpen-Tracker Infrastructure
 #
 # This Terraform configuration provisions:
 # - Firestore database

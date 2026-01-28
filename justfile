@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
-# Midpen-Strava justfile
+# Midpen-Tracker justfile
 # Run with: just <recipe>
 
 # Default recipe - show help
