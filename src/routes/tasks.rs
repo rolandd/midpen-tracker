@@ -32,13 +32,7 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// Create a StravaService from app state.
 /// Helper to avoid duplicating the KMS initialization logic.
 async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
-    let kms = KmsService::new(
-        &state.config.gcp_project_id,
-        "us-west1",
-        "midpen-strava",
-        "token-encryption",
-    )
-    .await?;
+    let kms = KmsService::new(&state.config.gcp_project_id, "us-west1", "token-encryption").await?;
 
     Ok(StravaService::new(
         state.config.strava_client_id.clone(),

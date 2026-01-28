@@ -162,17 +162,12 @@ async fn auth_callback(
     tracing::info!("Exchanging authorization code for tokens");
 
     // Create StravaService for OAuth handling
-    let kms = KmsService::new(
-        &state.config.gcp_project_id,
-        "us-west1",
-        "midpen-strava",
-        "token-encryption",
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Failed to initialize KMS service");
-        e
-    })?;
+    let kms = KmsService::new(&state.config.gcp_project_id, "us-west1", "token-encryption")
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to initialize KMS service");
+            e
+        })?;
 
     let strava_service = StravaService::new(
         state.config.strava_client_id.clone(),
