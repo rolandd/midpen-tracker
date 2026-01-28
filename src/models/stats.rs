@@ -115,16 +115,25 @@ impl UserStats {
 
         // Update preserve counts and visit dates
         for preserve_name in &activity.preserves_visited {
-            *self.preserves.entry(preserve_name.clone()).or_insert(0) += 1;
+            if let Some(count) = self.preserves.get_mut(preserve_name) {
+                *count += 1;
+            } else {
+                self.preserves.insert(preserve_name.clone(), 1);
+            }
 
             // Track first visit
-            self.preserve_first_visit
-                .entry(preserve_name.clone())
-                .or_insert_with(|| activity.start_date.clone());
+            if !self.preserve_first_visit.contains_key(preserve_name) {
+                self.preserve_first_visit
+                    .insert(preserve_name.clone(), activity.start_date.clone());
+            }
 
             // Always update last visit (assuming activities processed in order)
-            self.preserve_last_visit
-                .insert(preserve_name.clone(), activity.start_date.clone());
+            if let Some(last_visit) = self.preserve_last_visit.get_mut(preserve_name) {
+                *last_visit = activity.start_date.clone();
+            } else {
+                self.preserve_last_visit
+                    .insert(preserve_name.clone(), activity.start_date.clone());
+            }
         }
 
         // Update activity totals
@@ -132,26 +141,42 @@ impl UserStats {
         self.total_distance_meters += activity.distance_meters;
 
         // Update sport type stats
-        *self
-            .activities_by_sport
-            .entry(activity.sport_type.clone())
-            .or_insert(0) += 1;
-        *self
-            .distance_by_sport
-            .entry(activity.sport_type.clone())
-            .or_insert(0.0) += activity.distance_meters;
+        if let Some(count) = self.activities_by_sport.get_mut(&activity.sport_type) {
+            *count += 1;
+        } else {
+            self.activities_by_sport
+                .insert(activity.sport_type.clone(), 1);
+        }
+        if let Some(dist) = self.distance_by_sport.get_mut(&activity.sport_type) {
+            *dist += activity.distance_meters;
+        } else {
+            self.distance_by_sport
+                .insert(activity.sport_type.clone(), activity.distance_meters);
+        }
 
         // Update time series (extract YYYY-MM and YYYY from start_date)
         if let Some(month_key) = extract_month_key(&activity.start_date) {
-            *self.activities_by_month.entry(month_key).or_insert(0) += 1;
+            if let Some(count) = self.activities_by_month.get_mut(&month_key) {
+                *count += 1;
+            } else {
+                self.activities_by_month.insert(month_key, 1);
+            }
         }
         if let Some(year_key) = extract_year_key(&activity.start_date) {
-            *self.activities_by_year.entry(year_key.clone()).or_insert(0) += 1;
+            if let Some(count) = self.activities_by_year.get_mut(&year_key) {
+                *count += 1;
+            } else {
+                self.activities_by_year.insert(year_key.clone(), 1);
+            }
 
             // Update preserves_by_year for year-filtered queries
             let year_preserves = self.preserves_by_year.entry(year_key).or_default();
             for preserve_name in &activity.preserves_visited {
-                *year_preserves.entry(preserve_name.clone()).or_insert(0) += 1;
+                if let Some(count) = year_preserves.get_mut(preserve_name) {
+                    *count += 1;
+                } else {
+                    year_preserves.insert(preserve_name.clone(), 1);
+                }
             }
         }
 
