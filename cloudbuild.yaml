@@ -1,19 +1,19 @@
 steps:
-  # 1. Pull the previous builder image to leverage layer caching
+  # 1. Pull the previous dependencies image to leverage layer caching
   - name: 'gcr.io/cloud-builders/docker'
     entrypoint: 'bash'
-    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder || exit 0']
+    args: ['-c', 'docker pull ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:dependencies || exit 0']
 
-  # 2. Build the builder stage (with dependencies) using cached layers
+  # 2. Build the dependencies stage using cached layers
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '--target'
-      - 'builder'
+      - 'dependencies'
       - '-t'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:dependencies'
       - '--cache-from'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:dependencies'
       - '.'
 
   # 3. Build the final runtime image
@@ -25,15 +25,15 @@ steps:
       - '--build-arg'
       - 'BUILD_ID=${SHORT_SHA}'
       - '--cache-from'
-      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:dependencies'
       - '.'
 
-  # 4. Push the images (builder cache + runtime)
+  # 4. Push the images (dependencies cache + runtime)
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:latest']
 
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:builder']
+    args: ['push', '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:dependencies']
 
   # 5. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
