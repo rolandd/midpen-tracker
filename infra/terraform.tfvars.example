@@ -12,6 +12,7 @@ frontend_url = "https://example.com"
 # api_host     = "api.example.com" # Optional: Custom domain for API
 
 # Cloudflare Config
+domain_name           = "example.com"
 cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 cloudflare_api_token  = "YOUR_CLOUDFLARE_API_TOKEN"
 # cloudflare_zone_id    = "YOUR_ZONE_ID_HERE"

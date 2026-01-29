@@ -105,6 +105,12 @@ locals {
   is_custom_domain = !endswith(local.frontend_domain, ".pages.dev")
 }
 
+# Domain name for DNS records
+variable "domain_name" {
+  description = "Root domain name for DNS records (e.g. rolandd.dev)"
+  type        = string
+}
+
 # Bind custom domain if configured
 resource "cloudflare_pages_domain" "custom_domain" {
   count        = local.is_custom_domain ? 1 : 0
@@ -117,7 +123,8 @@ resource "cloudflare_pages_domain" "custom_domain" {
 resource "cloudflare_record" "frontend_cname" {
   count   = local.is_custom_domain ? 1 : 0
   zone_id = var.cloudflare_zone_id
-  name    = "midpen-tracker"
+  # Strip the domain name + dot from the full frontend domain to get the subdomain
+  name    = replace(local.frontend_domain, ".${var.domain_name}", "")
   content = "${cloudflare_pages_project.midpen_tracker_frontend.name}.pages.dev"
   type    = "CNAME"
   proxied = true
@@ -127,7 +134,8 @@ resource "cloudflare_record" "frontend_cname" {
 resource "cloudflare_record" "api_cname" {
   count   = var.api_host != "" ? 1 : 0
   zone_id = var.cloudflare_zone_id
-  name    = replace(var.api_host, ".rolandd.dev", "") # Assuming host is api.midpen-tracker... or similar subdomain
+  # Strip the domain name from the api host to get the subdomain
+  name    = replace(var.api_host, ".${var.domain_name}", "")
   content = "ghs.googlehosted.com"
   type    = "CNAME"
   proxied = true
