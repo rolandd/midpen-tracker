@@ -1,0 +1,2 @@
+bucket = "MY_TF_STATE_BUCKET" # should be outside the project
+prefix = "MY_PROJECT_ID"

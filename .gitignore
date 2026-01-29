@@ -22,3 +22,4 @@ data/preserve_comparisons
 cache
 .envrc
 .agent-shell
+infra/backend.conf

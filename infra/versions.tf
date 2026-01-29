@@ -12,9 +12,6 @@ terraform {
     }
   }
 
-  # Remote state configuration (uncomment when bucket exists)
-  # backend "gcs" {
-  #   bucket = "midpen-tracker-terraform-state"
-  #   prefix = "terraform/state"
-  # }
+  # Remote state configuration, use like "terraform init -backend-config=backend.conf
+  backend "gcs" { }
 }
