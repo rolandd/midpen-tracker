@@ -1,5 +1,5 @@
 # Build stage - use Rust with musl for static binary
-FROM rust:1.92-alpine AS builder
+FROM rust:1.92-alpine AS dependencies
 
 # Install build dependencies for musl
 RUN apk add --no-cache musl-dev
@@ -15,6 +15,10 @@ RUN mkdir src && echo 'fn main() {}' > src/main.rs && echo 'pub fn lib() {}' > s
 
 # Build dependencies only (cached layer)
 RUN cargo build --release && rm -rf src
+
+# --- End of cached dependencies stage ---
+
+FROM dependencies AS builder
 
 # Copy actual source code
 COPY src ./src
