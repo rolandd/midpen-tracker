@@ -20,3 +20,5 @@ token
 __pycache__/
 data/preserve_comparisons
 cache
+.envrc
+.agent-shell
