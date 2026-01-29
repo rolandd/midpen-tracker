@@ -49,6 +49,11 @@ variable "api_host" {
   default     = ""
 }
 
+variable "remote_repo_uri" {
+  description = "URI of the remote repository (e.g. https://github.com/rolandd/midpen-tracker.git)"
+  type        = string
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region

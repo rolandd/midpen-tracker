@@ -2,6 +2,7 @@
 project_id = "YOUR_PROJECT_ID"
 region     = "us-west1"
 service_name = "midpen-tracker"
+remote_repo_uri = "https://github.com/YOUR_USERNAME/midpen-tracker.git"
 
 # Strava API Config
 strava_client_id = "YOUR_STRAVA_CLIENT_ID"

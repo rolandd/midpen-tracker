@@ -62,7 +62,7 @@ resource "google_cloudbuildv2_repository" "midpen_tracker" {
   location          = var.region
   name              = "midpen-tracker"
   parent_connection = google_cloudbuildv2_connection.github.name
-  remote_uri        = "https://github.com/rolandd/midpen-tracker.git"
+  remote_uri        = var.remote_repo_uri
 }
 
 # Trigger on push to main
