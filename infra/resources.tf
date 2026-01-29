@@ -10,7 +10,7 @@ resource "google_firestore_database" "main" {
 
 # KMS Keyring for token encryption
 resource "google_kms_key_ring" "main" {
-  name     = "midpen-strava"
+  name     = "midpen-tracker"
   location = var.region
 
   depends_on = [google_project_service.apis]

@@ -41,7 +41,7 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'midpen-strava-api'
+      - 'midpen-tracker-api'
       - '--image'
       - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/api:latest'
       - '--region'

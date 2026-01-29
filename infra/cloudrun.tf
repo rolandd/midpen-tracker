@@ -1,6 +1,6 @@
 # Service account for Cloud Run
 resource "google_service_account" "cloudrun" {
-  account_id   = "midpen-strava-api"
+  account_id   = "midpen-tracker-api"
   display_name = "Midpen-Tracker Cloud Run Service"
 }
 
@@ -38,7 +38,7 @@ resource "google_project_iam_member" "cloudrun_tasks" {
 # Cloud Run service (set deploy_cloudrun=true after building/pushing image)
 resource "google_cloud_run_v2_service" "api" {
   count    = var.deploy_cloudrun ? 1 : 0
-  name     = "midpen-strava-api"
+  name     = "midpen-tracker-api"
   location = var.region
 
   template {
@@ -133,9 +133,24 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
   member   = "allUsers"
 }
 
+# Domain Mapping (Custom Domain)
+resource "google_cloud_run_domain_mapping" "api" {
+  count    = var.deploy_cloudrun && var.api_host != "" ? 1 : 0
+  name     = var.api_host
+  location = var.region
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.api[0].name
+  }
+}
+
 # Outputs
 output "api_url" {
-  value       = var.deploy_cloudrun ? google_cloud_run_v2_service.api[0].uri : "(not deployed yet)"
+  value       = var.deploy_cloudrun ? (var.api_host != "" ? "https://${var.api_host}" : google_cloud_run_v2_service.api[0].uri) : "(not deployed yet)"
   description = "Cloud Run API URL"
 }
 

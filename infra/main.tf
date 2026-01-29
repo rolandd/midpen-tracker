@@ -33,7 +33,7 @@ variable "strava_client_id" {
 }
 
 variable "frontend_url" {
-  description = "Public URL of the frontend (e.g., https://midpen-strava.pages.dev)"
+  description = "Public URL of the frontend (e.g., https://midpen-tracker.pages.dev)"
   type        = string
 }
 
@@ -41,6 +41,12 @@ variable "deploy_cloudrun" {
   description = "Whether to deploy Cloud Run (set true after pushing Docker image)"
   type        = bool
   default     = false
+}
+
+variable "api_host" {
+  description = "Custom domain for the backend API (e.g. api.midpen-tracker.rolandd.dev). Leave empty to use default Cloud Run URL."
+  type        = string
+  default     = ""
 }
 
 provider "google" {

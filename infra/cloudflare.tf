@@ -27,14 +27,14 @@ variable "cloudflare_zone_id" {
 variable "production_api_url" {
   description = "Production API URL for VITE_API_URL"
   type        = string
-  default     = "https://midpen-strava-api-nynxios3na-uw.a.run.app"
+  default     = "https://midpen-tracker-api-nynxios3na-uw.a.run.app"
 }
 
 # Preview/staging API URL (optional)
 variable "preview_api_url" {
   description = "Preview API URL for VITE_API_URL in preview deployments"
   type        = string
-  default     = "https://midpen-strava-api-nynxios3na-uw.a.run.app" # Can change to staging URL
+  default     = "https://midpen-tracker-api-nynxios3na-uw.a.run.app" # Can change to staging URL
 }
 
 provider "cloudflare" {
@@ -78,7 +78,7 @@ resource "cloudflare_pages_project" "midpen_tracker_frontend" {
       environment_variables = {
         NODE_VERSION    = "24"
         NODE_ENV        = "development"
-        PUBLIC_API_URL  = var.production_api_url
+        PUBLIC_API_URL  = var.api_host != "" ? "https://${var.api_host}" : var.production_api_url
         PUBLIC_BASE_URL = var.frontend_url
       }
 
@@ -89,7 +89,7 @@ resource "cloudflare_pages_project" "midpen_tracker_frontend" {
       environment_variables = {
         NODE_VERSION    = "24"
         NODE_ENV        = "development"
-        PUBLIC_API_URL  = var.preview_api_url
+        PUBLIC_API_URL  = var.api_host != "" ? "https://${var.api_host}" : var.preview_api_url
         PUBLIC_BASE_URL = var.frontend_url # Or a preview URL if we had one
       }
 
@@ -122,6 +122,17 @@ resource "cloudflare_record" "frontend_cname" {
   type    = "CNAME"
   proxied = true
 }
+
+# Backend API DNS (CNAME to ghs.googlehosted.com for Cloud Run Custom Domain)
+resource "cloudflare_record" "api_cname" {
+  count   = var.api_host != "" ? 1 : 0
+  zone_id = var.cloudflare_zone_id
+  name    = replace(var.api_host, ".rolandd.dev", "") # Assuming host is api.midpen-tracker... or similar subdomain
+  content = "ghs.googlehosted.com"
+  type    = "CNAME"
+  proxied = true
+}
+
 
 # Output the Pages URL
 output "pages_url" {

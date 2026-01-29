@@ -22,7 +22,7 @@ pub struct KmsService {
 
 impl KmsService {
     /// KMS Key Ring Name
-    const KEY_RING_NAME: &str = "midpen-strava";
+    const KEY_RING_NAME: &str = "midpen-tracker";
 
     /// Create a new KMS service.
     /// Connects to GCP KMS.

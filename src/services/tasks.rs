@@ -126,7 +126,7 @@ impl TasksService {
             .set_oidc_token(
                 OidcToken::default()
                     .set_service_account_email(format!(
-                        "midpen-strava-api@{}.iam.gserviceaccount.com",
+                        "midpen-tracker-api@{}.iam.gserviceaccount.com",
                         self.project_id
                     ))
                     .set_audience(service_url.to_string()),

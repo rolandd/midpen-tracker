@@ -8,6 +8,7 @@ strava_client_id = "YOUR_STRAVA_CLIENT_ID"
 
 # Frontend Config
 frontend_url = "https://example.com"
+# api_host     = "api.example.com" # Optional: Custom domain for API
 
 # Cloudflare Config
 cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"

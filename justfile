@@ -39,7 +39,7 @@ sync-frontend-config:
     #!/usr/bin/env bash
     set -euo pipefail
     # This requires terraform state to be initialized and applied
-    URL=$(cd infra && {{terraform}} output -raw frontend_url 2>/dev/null || echo "https://midpen-strava.pages.dev")
+    URL=$(cd infra && {{terraform}} output -raw frontend_url 2>/dev/null || echo "https://midpen-tracker.pages.dev")
     
     echo "Syncing frontend URL: $URL"
     
@@ -121,7 +121,7 @@ build-release:
 
 # Build Docker image locally
 build-docker:
-    docker build -t midpen-strava-api .
+    docker build -t midpen-tracker-api .
 
 # Build and push to Artifact Registry
 build-push:
@@ -132,7 +132,7 @@ build-push:
 
 # Deploy API to Cloud Run
 deploy-api:
-    gcloud run deploy midpen-strava-api \
+    gcloud run deploy midpen-tracker-api \
         --image={{region}}-docker.pkg.dev/{{project}}/{{service_name}}/api:latest \
         --region={{region}} \
         --project={{project}}

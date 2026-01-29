@@ -10,7 +10,7 @@ resource "google_monitoring_alert_policy" "api_errors" {
     condition_matched_log {
       filter = <<-EOT
         resource.type="cloud_run_revision"
-        resource.labels.service_name="midpen-strava-api"
+        resource.labels.service_name="midpen-tracker-api"
         severity>=ERROR
       EOT
       
@@ -30,7 +30,7 @@ resource "google_monitoring_alert_policy" "api_errors" {
   }
   
   documentation {
-    content   = "API errors detected in Cloud Run logs. Check the logs at https://console.cloud.google.com/run/detail/${var.region}/midpen-strava-api/logs"
+    content   = "API errors detected in Cloud Run logs. Check the logs at https://console.cloud.google.com/run/detail/${var.region}/midpen-tracker-api/logs"
     mime_type = "text/markdown"
   }
 }

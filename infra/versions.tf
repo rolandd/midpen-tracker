@@ -14,7 +14,7 @@ terraform {
 
   # Remote state configuration (uncomment when bucket exists)
   # backend "gcs" {
-  #   bucket = "midpen-strava-terraform-state"
+  #   bucket = "midpen-tracker-terraform-state"
   #   prefix = "terraform/state"
   # }
 }
