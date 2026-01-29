@@ -2,7 +2,7 @@
 resource "google_firestore_database" "main" {
   project     = var.project_id
   name        = "(default)"
-  location_id = "nam5"
+  location_id = "nam5"		# US multi-region redundancy, has free tier
   type        = "FIRESTORE_NATIVE"
 
   depends_on = [google_project_service.apis]
