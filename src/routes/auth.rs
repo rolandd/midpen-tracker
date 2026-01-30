@@ -6,7 +6,7 @@
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect}, // Added IntoResponse
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite}; // Added axum-extra
@@ -24,7 +24,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/auth/strava", get(auth_start))
         .route("/auth/strava/callback", get(auth_callback))
-        .route("/auth/logout", get(logout))
+        .route("/auth/logout", post(logout))
 }
 
 use crate::middleware::auth::create_jwt;
@@ -359,8 +359,13 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
 
 /// Logout - clear the auth cookie.
 async fn logout(jar: CookieJar) -> (CookieJar, axum::http::StatusCode) {
+    // Cookie removal must match the same attributes as when it was set
+    // (path, secure, httponly, samesite) for browser to recognize it
     let cookie = Cookie::build("midpen_token")
         .path("/")
+        .http_only(true)
+        .secure(true) // Must match what was set during login
+        .same_site(SameSite::Lax)
         .max_age(time::Duration::seconds(0))
         .build();
 
