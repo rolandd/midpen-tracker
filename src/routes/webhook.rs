@@ -32,7 +32,7 @@ struct VerifyParams {
 }
 
 /// Verification response.
-#[derive(Serialize)]
+#[derive(Serialize, Default)]
 struct VerifyResponse {
     #[serde(rename = "hub.challenge")]
     challenge: String,
@@ -45,17 +45,18 @@ async fn verify(
 ) -> impl IntoResponse {
     if params.mode == "subscribe" && params.verify_token == state.config.webhook_verify_token {
         tracing::info!("Webhook subscription verified");
-        Json(VerifyResponse {
-            challenge: params.challenge,
-        })
+        (
+            StatusCode::OK,
+            Json(VerifyResponse {
+                challenge: params.challenge,
+            }),
+        )
     } else {
         tracing::warn!(
             mode = %params.mode,
             "Webhook verification failed: invalid token"
         );
-        Json(VerifyResponse {
-            challenge: String::new(),
-        })
+        (StatusCode::FORBIDDEN, Json(VerifyResponse::default()))
     }
 }
 
