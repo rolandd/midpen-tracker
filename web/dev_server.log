@@ -1,0 +1,16 @@
+
+> web@0.0.1 dev
+> vite dev --port 5173
+
+7:49:54 PM [vite-plugin-svelte] The following packages have a svelte field in their package.json but no exports condition for svelte.
+
+svelte-switcher@1.0.2
+
+Please see https://github.com/sveltejs/vite-plugin-svelte/blob/main/docs/faq.md#missing-exports-condition for details.
+
+  VITE v7.3.1  ready in 1138 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+7:52:48 PM [vite] .env changed, restarting server...
+7:52:48 PM [vite] server restarted.
