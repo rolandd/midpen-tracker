@@ -23,3 +23,6 @@ cache
 .envrc
 .agent-shell
 infra/backend.conf
+
+# Logs
+*.log

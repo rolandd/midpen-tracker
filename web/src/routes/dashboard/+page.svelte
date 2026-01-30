@@ -229,24 +229,18 @@
 		{:else}
 			<div class="preserve-list">
 				{#each preserves as preserve (preserve.name)}
-					<div
-						class="preserve-card card"
-						class:unvisited={preserve.count === 0}
-						role="button"
-						tabindex="0"
-						aria-expanded={expandedPreserve === preserve.name}
-						onclick={() => togglePreserve(preserve.name)}
-						onkeydown={(e) => {
-							if (e.key === 'Enter' || e.key === ' ') {
-								e.preventDefault();
-								togglePreserve(preserve.name);
-							}
-						}}
-					>
-						<div class="preserve-header">
-							<span class="preserve-name">{preserve.name}</span>
-							<span class="preserve-count">{preserve.count}</span>
-						</div>
+					<div class="preserve-card card" class:unvisited={preserve.count === 0}>
+						<button
+							type="button"
+							class="preserve-header-btn"
+							aria-expanded={expandedPreserve === preserve.name}
+							onclick={() => togglePreserve(preserve.name)}
+						>
+							<div class="preserve-header">
+								<span class="preserve-name">{preserve.name}</span>
+								<span class="preserve-count">{preserve.count}</span>
+							</div>
+						</button>
 
 						{#if expandedPreserve === preserve.name}
 							<ActivityList preserveName={preserve.name} />
@@ -521,7 +515,6 @@
 	}
 
 	.preserve-card {
-		cursor: pointer;
 		transition: all 0.2s;
 	}
 
@@ -531,6 +524,22 @@
 
 	.preserve-card.unvisited {
 		opacity: 0.5;
+	}
+
+	.preserve-header-btn {
+		width: 100%;
+		background: none;
+		border: none;
+		padding: 0;
+		text-align: left;
+		cursor: pointer;
+		color: inherit;
+	}
+
+	.preserve-header-btn:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: 4px;
+		border-radius: var(--radius-sm);
 	}
 
 	.preserve-header {
