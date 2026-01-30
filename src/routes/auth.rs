@@ -334,6 +334,7 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
     // Format is "frontend_url|timestamp_hex|signature_hex"
     let parts: Vec<&str> = state_str.splitn(3, '|').collect();
     if parts.len() != 3 {
+        tracing::warn!("Invalid OAuth state format");
         return None;
     }
 
@@ -350,7 +351,37 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 
     if signature_hex != expected_signature {
-        tracing::error!("OAuth state signature mismatch! Potential tampering.");
+        tracing::warn!("OAuth state signature mismatch! Potential tampering.");
+        return None;
+    }
+
+    // Verify timestamp
+    let timestamp_millis = u128::from_str_radix(timestamp_hex, 16).ok()?;
+    let now_millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_millis();
+
+    // 15 minutes = 900,000 ms
+    const MAX_AGE_MS: u128 = 15 * 60 * 1000;
+    // 5 minutes skew = 300,000 ms
+    const FUTURE_SKEW_MS: u128 = 5 * 60 * 1000;
+
+    if timestamp_millis < now_millis.saturating_sub(MAX_AGE_MS) {
+        tracing::warn!(
+            timestamp = timestamp_millis,
+            now = now_millis,
+            "OAuth state expired"
+        );
+        return None;
+    }
+
+    if timestamp_millis > now_millis.saturating_add(FUTURE_SKEW_MS) {
+        tracing::warn!(
+            timestamp = timestamp_millis,
+            now = now_millis,
+            "OAuth state timestamp in future"
+        );
         return None;
     }
 
@@ -376,20 +407,76 @@ async fn logout(jar: CookieJar) -> (CookieJar, axum::http::StatusCode) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_verify_and_decode_state_success() {
-        let secret = b"secret_key";
-        let frontend_url = "https://example.com";
-        let timestamp = 1234567890u128;
-
+    // Helper to generate a valid state for testing
+    fn generate_test_state(frontend_url: &str, timestamp: u128, secret: &[u8]) -> String {
         let payload = format!("{}|{:x}", frontend_url, timestamp);
         let mut mac = HmacSha256::new_from_slice(secret).unwrap();
         mac.update(payload.as_bytes());
         let signature = hex::encode(mac.finalize().into_bytes());
 
         let state_data = format!("{}|{}", payload, signature);
-        let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
+        URL_SAFE_NO_PAD.encode(state_data.as_bytes())
+    }
 
+    #[test]
+    fn test_verify_and_decode_state_success() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        // Use current time
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, Some(frontend_url.to_string()));
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_expired() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        // 16 minutes ago
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            - 16 * 60 * 1000;
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_future() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        // 6 minutes in future
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            + 6 * 60 * 1000;
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
+        let result = verify_and_decode_state(&encoded_state, secret);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_skew_allowed() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        // 4 minutes in future (allowed)
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+            + 4 * 60 * 1000;
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
         let result = verify_and_decode_state(&encoded_state, secret);
         assert_eq!(result, Some(frontend_url.to_string()));
     }
@@ -398,7 +485,10 @@ mod tests {
     fn test_verify_and_decode_state_invalid_signature() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
-        let timestamp = 1234567890u128;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
 
         let payload = format!("{}|{:x}", frontend_url, timestamp);
         let signature = "invalid_signature";
@@ -415,16 +505,12 @@ mod tests {
         let secret = b"secret_key";
         let wrong_secret = b"wrong_key";
         let frontend_url = "https://example.com";
-        let timestamp = 1234567890u128;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
 
-        let payload = format!("{}|{:x}", frontend_url, timestamp);
-        let mut mac = HmacSha256::new_from_slice(secret).unwrap();
-        mac.update(payload.as_bytes());
-        let signature = hex::encode(mac.finalize().into_bytes());
-
-        let state_data = format!("{}|{}", payload, signature);
-        let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
-
+        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
         let result = verify_and_decode_state(&encoded_state, wrong_secret);
         assert_eq!(result, None);
     }
