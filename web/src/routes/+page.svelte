@@ -6,6 +6,8 @@
 	import { goto } from '$app/navigation';
 	import { checkAuth, API_BASE_URL } from '$lib/api';
 
+	let isConnecting = $state(false);
+
 	onMount(async () => {
 		if (await checkAuth()) {
 			await goto('/dashboard');
@@ -30,7 +32,14 @@
 			to automatically detect which preserves you've visited.
 		</p>
 
-		<button class="strava-connect-btn" onclick={connectStrava}>
+		<button
+			class="strava-connect-btn"
+			class:loading={isConnecting}
+			onclick={connectStrava}
+			aria-label="Connect with Strava"
+			disabled={isConnecting}
+			aria-busy={isConnecting}
+		>
 			<img src="/btn_strava_connect_with_orange.svg" alt="Connect with Strava" height="48" />
 		</button>
 
@@ -117,6 +126,12 @@
 			filter 0.2s ease;
 	}
 
+	.strava-connect-btn:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: 4px;
+		border-radius: 4px;
+	}
+
 	.strava-connect-btn:hover {
 		transform: translateY(-2px);
 		filter: brightness(1.1);
@@ -126,6 +141,16 @@
 		display: block;
 		height: 48px;
 		width: auto;
+	}
+
+	.strava-connect-btn.loading {
+		cursor: not-allowed;
+		transform: none;
+	}
+
+	.strava-connect-btn.loading img {
+		opacity: 0.3;
+		filter: grayscale(1);
 	}
 
 	.features {
