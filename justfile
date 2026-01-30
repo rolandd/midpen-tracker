@@ -15,7 +15,7 @@ project := env_var_or_default("GCP_PROJECT_ID", `gcloud config get-value project
 region := "us-west1"
 
 # Extract backend URL from web/.env (single source of truth)
-backend_url := `grep VITE_API_URL web/.env | cut -d= -f2`
+backend_url := `grep PUBLIC_API_URL web/.env | cut -d= -f2`
 
 # Extract Strava client ID from terraform.tfvars (single source of truth)
 strava_client_id := `grep strava_client_id infra/terraform.tfvars | cut -d'"' -f2`
