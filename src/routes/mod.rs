@@ -10,10 +10,11 @@ pub mod webhook;
 
 use crate::middleware::auth::require_auth;
 use crate::AppState;
+use axum::http::{header, Method};
 use axum::{middleware, routing::get, Json, Router};
 use serde::Serialize;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 #[cfg(feature = "binding-generation")]
@@ -52,8 +53,15 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                     || origin_str.starts_with("http://127.0.0.1")
             },
         ))
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_credentials(true)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION, header::ACCEPT]);
 
     // Public routes (no auth required)
     let public_routes = Router::new()

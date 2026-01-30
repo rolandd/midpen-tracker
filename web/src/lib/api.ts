@@ -7,45 +7,40 @@ import { DEMO_MODE, mockUser, mockPreserveStats, getMockActivitiesForPreserve } 
 export const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
 // Auth state helpers
-export function getToken(): string | null {
-	if (typeof window === 'undefined') return null;
-	return localStorage.getItem('midpen_token');
-}
-
-export function setToken(token: string): void {
-	localStorage.setItem('midpen_token', token);
-}
-
-export function clearToken(): void {
-	localStorage.removeItem('midpen_token');
-}
-
-export function isLoggedIn(): boolean {
+// Deprecated: We now use HttpOnly cookies, so we can't synchronously check login status
+// without an API call. Components should try to fetch user or handle 401s.
+export async function checkAuth(): Promise<boolean> {
 	if (DEMO_MODE) return true;
-	return getToken() !== null;
+	try {
+		await fetchMe();
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 // API fetch wrapper with auth
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-	const token = getToken();
-
 	const headers: HeadersInit = {
 		'Content-Type': 'application/json',
 		...options.headers
 	};
 
-	if (token) {
-		(headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-	}
+	// We no longer manually inject Authorization header.
+	// The browser sends the HttpOnly cookie automatically.
 
 	const response = await fetch(`${API_BASE_URL}${path}`, {
 		...options,
-		headers
+		headers,
+		credentials: 'include' // Important: sends cookies with request
 	});
 
 	if (!response.ok) {
 		if (response.status === 401) {
-			clearToken();
+			// Session expired or invalid
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/')) {
+				// Optionally handle logout redirect here or let caller handle it
+			}
 			throw new Error('Session expired');
 		}
 		throw new Error(`API error: ${response.status}`);
@@ -99,8 +94,6 @@ export async function fetchPreserveStats(showUnvisited = false): Promise<Preserv
 
 export async function logout(): Promise<void> {
 	await apiFetch('/auth/logout', { method: 'POST' });
-
-	clearToken();
 }
 
 export async function fetchActivities(

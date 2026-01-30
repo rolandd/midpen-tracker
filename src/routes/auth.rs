@@ -5,14 +5,16 @@
 
 use axum::{
     extract::{Query, State},
-    response::Redirect,
+    response::{IntoResponse, Redirect}, // Added IntoResponse
     routing::get,
     Router,
 };
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite}; // Added axum-extra
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use time; // Added time import for Cookie max_age
 
 use crate::error::{AppError, Result};
 use crate::services::strava::StravaService;
@@ -126,9 +128,11 @@ pub struct CallbackParams {
 /// OAuth callback - exchange code for tokens, create session.
 async fn auth_callback(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar, // Added CookieJar
     headers: axum::http::HeaderMap,
     Query(params): Query<CallbackParams>,
-) -> Result<Redirect> {
+) -> Result<impl IntoResponse> {
+    // Changed return type to impl IntoResponse
     // Construct service URL for Cloud Tasks (assumes HTTPS in production)
     let host = headers
         .get(axum::http::header::HOST)
@@ -155,7 +159,7 @@ async fn auth_callback(
     if let Some(error) = params.error {
         tracing::warn!(error = %error, "OAuth error from Strava");
         let redirect = format!("{}?error={}", frontend_url, error);
-        return Ok(Redirect::temporary(&redirect));
+        return Ok((jar, Redirect::temporary(&redirect))); // Return jar + redirect
     }
 
     tracing::info!("Exchanging authorization code for tokens");
@@ -202,9 +206,24 @@ async fn auth_callback(
         .map_err(|e| AppError::Internal(anyhow::anyhow!("JWT creation failed: {}", e)))?;
 
     // Redirect to frontend with token
-    let redirect_url = format!("{}/callback?token={}", frontend_url, jwt);
+    // Create HttpOnly cookie
+    let mut cookie = Cookie::new("midpen_token", jwt);
+    cookie.set_http_only(true);
+    cookie.set_secure(true); // Always secure (production requirement, works on localhost if using https or ignored on http localhost?) - check SvelteKit usage.
+                             // Actually for localhost dev usually secure=false if not using https.
+                             // But our infra setup implies production has https.
+                             // Let's check environment.
+    let is_production = state.config.frontend_url.contains("https");
+    cookie.set_secure(is_production);
+    cookie.set_path("/");
+    cookie.set_same_site(SameSite::Lax);
+    // Set max age to 30 days (same as JWT exp)
+    cookie.set_max_age(time::Duration::days(30));
 
-    Ok(Redirect::temporary(&redirect_url))
+    // Redirect to dashboard (no token in URL)
+    let redirect_url = format!("{}/dashboard", frontend_url);
+
+    Ok((jar.add(cookie), Redirect::temporary(&redirect_url)))
 }
 
 /// Trigger backfill for activities since 2025-01-01.
@@ -354,10 +373,14 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
 }
 
 /// Logout - just a placeholder that clears client-side token.
-async fn logout() -> Redirect {
-    // The actual logout happens on client side by clearing localStorage
-    // This endpoint just redirects back
-    Redirect::temporary("/")
+/// Logout - clear the auth cookie.
+async fn logout(jar: CookieJar) -> (CookieJar, Redirect) {
+    let cookie = Cookie::build("midpen_token")
+        .path("/")
+        .max_age(time::Duration::seconds(0))
+        .build();
+
+    (jar.remove(cookie), Redirect::temporary("/"))
 }
 
 #[cfg(test)]

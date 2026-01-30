@@ -4,7 +4,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { fetchMe, clearToken } from '$lib/api';
+	import { fetchMe, logout } from '$lib/api';
 
 	onMount(() => {
 		// Poll every 2 seconds
@@ -19,7 +19,7 @@
 			} catch {
 				// Failed to fetch (401/404) -> deletion complete
 				clearInterval(interval);
-				clearToken();
+				await logout().catch(() => {}); // Ensure cookie is cleared, ignore errors
 				goto('/');
 			}
 		}, 2000);

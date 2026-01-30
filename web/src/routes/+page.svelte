@@ -4,10 +4,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isLoggedIn, API_BASE_URL } from '$lib/api';
+	import { checkAuth, API_BASE_URL } from '$lib/api';
 
 	onMount(async () => {
-		if (isLoggedIn()) {
+		if (await checkAuth()) {
 			await goto('/dashboard');
 		}
 	});

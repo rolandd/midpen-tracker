@@ -5,7 +5,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
-		isLoggedIn,
+		checkAuth,
 		fetchPreserveStats,
 		logout as apiLogout,
 		fetchMe,
@@ -61,10 +61,12 @@
 	let totalVisited = $derived(preserves.filter((p) => p.count > 0).length);
 
 	onMount(() => {
-		if (!isLoggedIn()) {
-			goto('/');
-			return;
-		}
+		(async () => {
+			if (!(await checkAuth())) {
+				goto('/');
+				return;
+			}
+		})();
 
 		loadStats();
 		fetchUser();

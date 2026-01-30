@@ -10,6 +10,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use axum_extra::extract::cookie::CookieJar;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -34,24 +35,30 @@ pub struct AuthUser {
 /// Middleware that requires valid JWT authentication.
 pub async fn require_auth(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar, // Added CookieJar extractor
     mut request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let auth_header = request
-        .headers()
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
+    // Try cookie first, then header
+    let token = if let Some(cookie) = jar.get("midpen_token") {
+        cookie.value().to_string()
+    } else {
+        let auth_header = request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok());
 
-    let token = match auth_header {
-        Some(h) if h.starts_with("Bearer ") => &h[7..],
-        _ => return Err(StatusCode::UNAUTHORIZED),
+        match auth_header {
+            Some(h) if h.starts_with("Bearer ") => h[7..].to_string(),
+            _ => return Err(StatusCode::UNAUTHORIZED),
+        }
     };
 
     let key = DecodingKey::from_secret(&state.config.jwt_signing_key);
     let validation = Validation::new(Algorithm::HS256);
 
     let token_data =
-        decode::<Claims>(token, &key, &validation).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        decode::<Claims>(&token, &key, &validation).map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     let athlete_id: u64 = token_data
         .claims
