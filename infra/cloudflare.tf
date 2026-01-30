@@ -141,6 +141,10 @@ resource "cloudflare_record" "api_cname" {
   proxied = true
 }
 
+# NOTE: For Strava webhooks to work with the proxied API, you MUST manually DISABLE
+# "Bot Fight Mode" in the Cloudflare Dashboard (Security -> Bots).
+# This feature is not exposed in the Terraform provider for non-Enterprise plans,
+# so it cannot be managed here. If enabled, it will block Strava's validation requests.
 
 # Output the Pages URL
 output "pages_url" {
