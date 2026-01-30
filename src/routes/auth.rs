@@ -357,15 +357,14 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
     Some(frontend_url.to_string())
 }
 
-/// Logout - just a placeholder that clears client-side token.
 /// Logout - clear the auth cookie.
-async fn logout(jar: CookieJar) -> (CookieJar, Redirect) {
+async fn logout(jar: CookieJar) -> (CookieJar, axum::http::StatusCode) {
     let cookie = Cookie::build("midpen_token")
         .path("/")
         .max_age(time::Duration::seconds(0))
         .build();
 
-    (jar.remove(cookie), Redirect::temporary("/"))
+    (jar.remove(cookie), axum::http::StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]

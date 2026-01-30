@@ -93,7 +93,10 @@ export async function fetchPreserveStats(showUnvisited = false): Promise<Preserv
 }
 
 export async function logout(): Promise<void> {
-	await apiFetch('/auth/logout', { method: 'POST' });
+	await fetch(`${API_BASE_URL}/auth/logout`, {
+		method: 'POST',
+		credentials: 'include'
+	});
 }
 
 export async function fetchActivities(
