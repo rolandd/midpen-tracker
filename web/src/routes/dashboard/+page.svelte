@@ -137,8 +137,12 @@
 				<h1>🌲 Midpen Tracker</h1>
 			</div>
 			<div class="header-right">
-				<button class="about-trigger" onclick={() => (uiState.isAboutOpen = true)}>
-					<span class="icon">ⓘ</span>
+				<button
+					class="about-trigger"
+					onclick={() => (uiState.isAboutOpen = true)}
+					aria-label="About Midpen Tracker"
+				>
+					<span class="icon" aria-hidden="true">ⓘ</span>
 					<span>About</span>
 				</button>
 				{#if user}
@@ -159,7 +163,16 @@
 					<span class="progress-total">/ {totalPreserves}</span>
 				</div>
 				<p class="progress-label">Preserves Visited{selectedYear ? ` in ${selectedYear}` : ''}</p>
-				<div class="progress-bar">
+				<div
+					class="progress-bar"
+					role="progressbar"
+					aria-valuenow={totalVisited}
+					aria-valuemin={0}
+					aria-valuemax={totalPreserves}
+					aria-label="{totalVisited} of {totalPreserves} preserves visited{selectedYear
+						? ` in ${selectedYear}`
+						: ''}"
+				>
 					<div
 						class="progress-fill"
 						style="width: {totalPreserves > 0 ? (totalVisited / totalPreserves) * 100 : 0}%"
