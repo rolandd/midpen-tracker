@@ -86,14 +86,14 @@ async fn test_webhook_verification_wrong_token() {
         .await
         .unwrap();
 
-    // Should return 200 but with empty challenge (Strava expects 200)
-    assert_eq!(response.status(), StatusCode::OK);
+    // Should return 403 Forbidden
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = axum::body::to_bytes(response.into_body(), 1024)
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["hub.challenge"], ""); // Empty challenge = rejection
+    assert_eq!(json["hub.challenge"], ""); // Empty challenge
 }
 
 #[tokio::test]
