@@ -84,7 +84,7 @@ fn is_deauthorization(event: &WebhookEvent) -> bool {
 /// Handle incoming webhook events (POST).
 async fn handle_event(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
+    _headers: axum::http::HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> StatusCode {
     tracing::info!(
@@ -117,22 +117,9 @@ async fn handle_event(
                 source: "webhook".to_string(),
             };
 
-            // Construct service URL for Cloud Tasks
-            let host = headers
-                .get(axum::http::header::HOST)
-                .and_then(|h| h.to_str().ok())
-                .unwrap_or("localhost:8080");
-
-            let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-                "http"
-            } else {
-                "https"
-            };
-            let service_url = format!("{}://{}", scheme, host);
-
             if let Err(e) = state
                 .tasks_service
-                .queue_activity(&service_url, payload)
+                .queue_activity(&state.config.api_url, payload)
                 .await
             {
                 tracing::error!(error = %e, "Failed to queue activity");
@@ -161,22 +148,9 @@ async fn handle_event(
                 source: "webhook".to_string(),
             };
 
-            // Construct service URL for Cloud Tasks
-            let host = headers
-                .get(axum::http::header::HOST)
-                .and_then(|h| h.to_str().ok())
-                .unwrap_or("localhost:8080");
-
-            let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-                "http"
-            } else {
-                "https"
-            };
-            let service_url = format!("{}://{}", scheme, host);
-
             if let Err(e) = state
                 .tasks_service
-                .queue_delete_user(&service_url, payload)
+                .queue_delete_user(&state.config.api_url, payload)
                 .await
             {
                 tracing::error!(error = %e, athlete_id = event.owner_id, "Failed to queue user deletion");

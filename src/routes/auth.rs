@@ -128,24 +128,9 @@ pub struct CallbackParams {
 /// OAuth callback - exchange code for tokens, create session.
 async fn auth_callback(
     State(state): State<Arc<AppState>>,
-    jar: CookieJar, // Added CookieJar
-    headers: axum::http::HeaderMap,
+    jar: CookieJar,
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse> {
-    // Changed return type to impl IntoResponse
-    // Construct service URL for Cloud Tasks (assumes HTTPS in production)
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("localhost:8080");
-
-    let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-        "http"
-    } else {
-        "https"
-    };
-    let service_url = format!("{}://{}", scheme, host);
-
     // Decode and verify frontend URL from state parameter
     let frontend_url = verify_and_decode_state(&params.state, &state.config.oauth_state_key)
         .unwrap_or_else(|| {
@@ -193,7 +178,7 @@ async fn auth_callback(
         &state,
         &strava_service,
         oauth_result.athlete_id,
-        &service_url,
+        &state.config.api_url,
     )
     .await;
 
