@@ -11,7 +11,7 @@ use crate::services::tasks::DeleteUserPayload;
 use crate::AppState;
 use axum::{
     extract::{Query, State},
-    routing::{delete, get, post},
+    routing::{delete, get},
     Extension, Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -27,7 +27,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/api/activities", get(get_activities))
         .route("/api/stats/preserves", get(get_preserve_stats))
         .route("/api/account", delete(delete_account))
-        .route("/auth/logout", post(logout))
 }
 
 // ─── User Profile ────────────────────────────────────────────
@@ -64,14 +63,6 @@ async fn get_me(
         profile_picture: user_profile.profile_picture,
         deletion_requested_at: user_profile.deletion_requested_at,
     }))
-}
-
-/// Logout (clear session - client should discard token).
-async fn logout(Extension(user): Extension<AuthUser>) -> Result<Json<serde_json::Value>> {
-    tracing::info!(athlete_id = user.athlete_id, "User logged out");
-    // JWT is stateless, so we just return success
-    // Client is responsible for discarding the token
-    Ok(Json(serde_json::json!({ "success": true })))
 }
 
 // ─── Account Deletion ────────────────────────────────────────
