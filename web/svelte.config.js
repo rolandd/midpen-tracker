@@ -32,7 +32,12 @@ const config = {
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
 				'font-src': ['self', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'https:'],
-				'connect-src': ['self', 'https://*.run.app', 'http://localhost:8080'],
+				'connect-src': [
+					'self',
+					'https://*.run.app',
+					'http://localhost:8080',
+					...(process.env.PUBLIC_API_URL ? [process.env.PUBLIC_API_URL] : [])
+				],
 				'frame-ancestors': ['none']
 			}
 		}
