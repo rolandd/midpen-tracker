@@ -77,6 +77,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "API_URL"
+        value = var.api_host != "" ? "https://${var.api_host}" : google_cloud_run_v2_service.api[0].uri
+      }
+
+      env {
         name = "STRAVA_CLIENT_SECRET"
         value_source {
           secret_key_ref {

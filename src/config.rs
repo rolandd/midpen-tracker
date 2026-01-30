@@ -25,6 +25,8 @@ pub struct Config {
     pub gcp_project_id: String,
     /// GCP region (e.g. us-west1)
     pub gcp_region: String,
+    /// API URL for Cloud Tasks callbacks (e.g. https://api.example.com)
+    pub api_url: String,
     /// Server port
     pub port: u16,
 
@@ -59,6 +61,7 @@ impl Config {
                 .map_err(|_| ConfigError::Missing("STRAVA_CLIENT_ID"))?,
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".to_string()),
+            api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
             gcp_project_id: env::var("GCP_PROJECT_ID").unwrap_or_else(|_| "local-dev".to_string()),
             gcp_region: env::var("GCP_REGION").unwrap_or_else(|_| "us-west1".to_string()),
             port: env::var("PORT")
@@ -90,6 +93,7 @@ impl Config {
             frontend_url: "http://localhost:5173".to_string(),
             gcp_project_id: "test-project".to_string(),
             gcp_region: "us-west1".to_string(),
+            api_url: "http://localhost:8080".to_string(),
             port: 8080,
             strava_client_secret: "test_secret".to_string(),
             jwt_signing_key,
@@ -127,6 +131,7 @@ impl Config {
                 .map_err(|_| ConfigError::Missing("STRAVA_CLIENT_ID"))?,
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".to_string()),
+            api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:8080".to_string()),
             gcp_project_id: project_id,
             gcp_region: env::var("GCP_REGION").unwrap_or_else(|_| "us-west1".to_string()),
             port: env::var("PORT")

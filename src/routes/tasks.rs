@@ -245,22 +245,9 @@ async fn continue_backfill(
         );
     }
 
-    // Construct service URL for Cloud Tasks
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("localhost:8080");
-
-    let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-        "http"
-    } else {
-        "https"
-    };
-    let service_url = format!("{}://{}", scheme, host);
-
     if let Err(e) = state
         .tasks_service
-        .queue_backfill(&service_url, payload.athlete_id, new_activity_ids)
+        .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
         .await
     {
         tracing::error!(error = %e, "Failed to queue activities for backfill");
@@ -294,7 +281,7 @@ async fn continue_backfill(
 
         if let Err(e) = state
             .tasks_service
-            .queue_continue_backfill(&service_url, next_payload)
+            .queue_continue_backfill(&state.config.api_url, next_payload)
             .await
         {
             tracing::error!(error = %e, "Failed to queue next backfill page");

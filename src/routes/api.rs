@@ -11,7 +11,6 @@ use crate::services::tasks::DeleteUserPayload;
 use crate::AppState;
 use axum::{
     extract::{Query, State},
-    http::HeaderMap,
     routing::{delete, get, post},
     Extension, Json, Router,
 };
@@ -98,7 +97,6 @@ pub struct DeleteAccountResponse {
 /// 3. Deauthorize with Strava
 async fn delete_account(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<DeleteAccountResponse>> {
     tracing::info!(
@@ -125,22 +123,9 @@ async fn delete_account(
         source: "user_request".to_string(),
     };
 
-    // Construct service URL for Cloud Tasks
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("localhost:8080");
-
-    let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-        "http"
-    } else {
-        "https"
-    };
-    let service_url = format!("{}://{}", scheme, host);
-
     state
         .tasks_service
-        .queue_delete_user(&service_url, payload)
+        .queue_delete_user(&state.config.api_url, payload)
         .await?;
 
     Ok(Json(DeleteAccountResponse {
