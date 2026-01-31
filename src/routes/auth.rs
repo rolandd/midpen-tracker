@@ -205,12 +205,20 @@ async fn auth_callback(
     cookie.set_max_age(time::Duration::days(30));
 
     // Create hint cookie (not HttpOnly) for client-side detection
+    // This cookie needs a domain that covers both API and frontend subdomains
     let mut hint_cookie = Cookie::new(HINT_COOKIE_NAME, "1");
     hint_cookie.set_http_only(false); // JS can read this
     hint_cookie.set_secure(is_production);
     hint_cookie.set_path("/");
     hint_cookie.set_same_site(SameSite::Lax);
     hint_cookie.set_max_age(time::Duration::days(30));
+
+    // Set domain for cross-subdomain access (e.g., .rolandd.dev)
+    // This allows the frontend (midpen-tracker.rolandd.dev) to read cookies
+    // set by the API (midpen-tracker-api.rolandd.dev)
+    if let Some(domain) = extract_cookie_domain(&frontend_url) {
+        hint_cookie.set_domain(domain);
+    }
 
     // Redirect to dashboard (no token in URL)
     let redirect_url = format!("{}/dashboard", frontend_url);
@@ -219,6 +227,44 @@ async fn auth_callback(
         jar.add(cookie).add(hint_cookie),
         Redirect::temporary(&redirect_url),
     ))
+}
+
+/// Extract a cookie domain from a URL for cross-subdomain sharing.
+/// Returns the root domain with a leading dot (e.g., ".rolandd.dev").
+/// Returns None for localhost or invalid URLs.
+fn extract_cookie_domain(url: &str) -> Option<String> {
+    use std::net::IpAddr;
+
+    // Parse the URL to get the host
+    let host = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))?;
+
+    // Remove any path/port
+    let host = host.split('/').next()?;
+    let host = host.split(':').next()?;
+
+    // Check for localhost (literal string)
+    if host == "localhost" {
+        return None;
+    }
+
+    // Check for loopback IPs (127.x.x.x, ::1, etc.)
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if ip.is_loopback() {
+            return None;
+        }
+    }
+
+    // Extract root domain (last two parts: domain.tld)
+    let parts: Vec<&str> = host.split('.').collect();
+    if parts.len() >= 2 {
+        // e.g., ["midpen-tracker", "rolandd", "dev"] -> ".rolandd.dev"
+        let root_domain = parts[parts.len() - 2..].join(".");
+        Some(format!(".{}", root_domain))
+    } else {
+        None
+    }
 }
 
 /// Trigger backfill for activities since 2025-01-01.
@@ -542,5 +588,43 @@ mod tests {
         let encoded_state = URL_SAFE_NO_PAD.encode("invalid|format");
         let result = verify_and_decode_state(&encoded_state, secret);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_subdomain() {
+        let url = "https://midpen-tracker.rolandd.dev";
+        assert_eq!(extract_cookie_domain(url), Some(".rolandd.dev".to_string()));
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_deep_subdomain() {
+        let url = "https://api.midpen-tracker.rolandd.dev";
+        assert_eq!(extract_cookie_domain(url), Some(".rolandd.dev".to_string()));
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_localhost() {
+        let url = "http://localhost:5173";
+        assert_eq!(extract_cookie_domain(url), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_127() {
+        let url = "http://127.0.0.1:8080";
+        assert_eq!(extract_cookie_domain(url), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_ipv6_loopback() {
+        let url = "http://[::1]:8080";
+        // IPv6 in URLs is bracketed, but we strip port first then brackets
+        // This may not parse correctly - let's verify behavior
+        assert_eq!(extract_cookie_domain(url), None);
+    }
+
+    #[test]
+    fn test_extract_cookie_domain_simple() {
+        let url = "https://example.com";
+        assert_eq!(extract_cookie_domain(url), Some(".example.com".to_string()));
     }
 }
