@@ -4,6 +4,30 @@ Guidance for AI coding agents working on this codebase.
 
 For project architecture, flows, and setup see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Meta-Constraints
+
+1. **Challenge Outdated Constraints**: If a constraint in this file
+   conflicts with a modern best practice, causes deprecation warnings,
+   or makes a solution unnecessarily complex — **stop**. Don't blindly
+   follow it. Instead, propose a revision explaining why the
+   constraint should be updated.
+
+2. **Keep This File Current**: AGENTS.md is a living document. If you
+   implement a change that affects architecture (e.g., new top-level
+   directories, new build steps, new dependencies), update this file
+   or the relevant section of CONTRIBUTING.md in the same commit.
+
+3. **Clarify, Don't Assume**: If a task is ambiguous or missing
+   critical details, ask clarifying questions rather than guessing.
+
+4. **Design First for Complex Changes**: Before writing code for
+   complex features or architectural changes:
+   - Create a design doc in `docs/specs/` outlining data model
+     changes, API endpoints, and UI components
+   - Record significant trade-offs (e.g., library choices) as ADRs in
+     `docs/adr/`
+   - These directories can be created when first needed
+
 ## Commit Conventions
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
