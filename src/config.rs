@@ -37,6 +37,8 @@ pub struct Config {
     pub jwt_signing_key: Vec<u8>,
     /// Webhook verification token
     pub webhook_verify_token: String,
+    /// Strava Subscription ID (for validation)
+    pub strava_subscription_id: u64,
     /// OAuth state signing key (derived from jwt_signing_key)
     pub oauth_state_key: Vec<u8>,
 }
@@ -68,6 +70,10 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
+            strava_subscription_id: env::var("STRAVA_SUBSCRIPTION_ID")
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID"))?
+                .parse()
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID (invalid format)"))?,
 
             // Secrets - from env for local dev, Secret Manager in prod
             strava_client_secret: env::var("STRAVA_CLIENT_SECRET")
@@ -98,6 +104,7 @@ impl Config {
             strava_client_secret: "test_secret".to_string(),
             jwt_signing_key,
             webhook_verify_token: "test_verify_token".to_string(),
+            strava_subscription_id: 12345,
             oauth_state_key,
         }
     }
@@ -138,6 +145,10 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
+            strava_subscription_id: env::var("STRAVA_SUBSCRIPTION_ID")
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID"))?
+                .parse()
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID (invalid format)"))?,
             strava_client_secret: client_secret.trim().to_string(),
             jwt_signing_key,
             webhook_verify_token: webhook_token.trim().to_string(),

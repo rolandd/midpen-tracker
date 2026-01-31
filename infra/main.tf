@@ -32,6 +32,11 @@ variable "strava_client_id" {
   type        = string
 }
 
+variable "strava_subscription_id" {
+  description = "Strava Webhook Subscription ID (defense in depth)"
+  type        = string
+}
+
 variable "frontend_url" {
   description = "Public URL of the frontend (e.g., https://midpen-tracker.pages.dev)"
   type        = string

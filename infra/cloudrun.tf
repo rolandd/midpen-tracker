@@ -62,6 +62,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "STRAVA_SUBSCRIPTION_ID"
+        value = var.strava_subscription_id
+      }
+
+      env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
       }

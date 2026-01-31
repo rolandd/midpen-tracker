@@ -83,6 +83,7 @@ struct WebhookEvent {
     object_id: u64,
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
+    subscription_id: u64,
     /// For athlete events, contains {"authorized": "false"} on deauthorization
     #[serde(default)]
     updates: Option<std::collections::HashMap<String, serde_json::Value>>,
@@ -116,6 +117,21 @@ async fn handle_event(
             return StatusCode::OK; // Still return 200 to Strava to avoid retries
         }
     };
+
+    // Validate Subscription ID
+    if event.subscription_id != state.config.strava_subscription_id {
+        tracing::warn!(
+            received_id = event.subscription_id,
+            expected_id = state.config.strava_subscription_id,
+            "Security Alert: Webhook subscription ID mismatch"
+        );
+        // We reject mismatched events.
+        // Returning 200 to silence Strava would be "safe" but returning 403 highlights the issue.
+        // However, if we return 403, Strava might retry.
+        // But if it's an attacker, we don't care.
+        // If it's Strava sending from an old subscription, we want to know.
+        return StatusCode::FORBIDDEN;
+    }
 
     tracing::info!(
         object_type = %event.object_type,

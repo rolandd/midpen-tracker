@@ -106,7 +106,7 @@ async fn test_webhook_event_create_activity() {
         "object_id": 12345678901_u64,
         "object_type": "activity",
         "owner_id": 123456,
-        "subscription_id": 12345
+        "subscription_id": 12345 // Matches Config::test_default()
     });
 
     let response = app
@@ -241,6 +241,35 @@ async fn test_webhook_event_unknown_type() {
 
     // Should return 200 even for unknown event types
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_webhook_event_wrong_subscription_id() {
+    let app = create_offline_test_app().await;
+
+    let event = json!({
+        "aspect_type": "create",
+        "event_time": 1234567890,
+        "object_id": 12345678901_u64,
+        "object_type": "activity",
+        "owner_id": 123456,
+        "subscription_id": 99999 // Mismatch (Config has 12345)
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 403 Forbidden
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]
