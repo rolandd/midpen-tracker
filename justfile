@@ -23,6 +23,9 @@ strava_client_id := `grep strava_client_id infra/terraform.tfvars | cut -d'"' -f
 # Extract service name (midpen-tracker) from terraform.tfvars
 service_name := `grep service_name infra/terraform.tfvars | cut -d'"' -f2`
 
+# Extract webhook UUID path
+webhook_path_uuid := `grep webhook_path_uuid infra/terraform.tfvars | cut -d'"' -f2`
+
 # ─── Development ──────────────────────────────────────────────
 
 # Format / lint preserve downloader script
@@ -197,13 +200,23 @@ register-webhook:
     CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
     VERIFY_TOKEN=$(gcloud secrets versions access latest --secret=WEBHOOK_VERIFY_TOKEN --project={{project}})
     
-    echo "Registering webhook at {{backend_url}}/webhook"
-    curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+    echo "Registering webhook at {{backend_url}}/webhook/{{webhook_path_uuid}}"
+    RESPONSE=$(curl -s -X POST https://www.strava.com/api/v3/push_subscriptions \
         -d client_id={{strava_client_id}} \
         -d client_secret=$CLIENT_SECRET \
-        -d callback_url={{backend_url}}/webhook \
-        -d verify_token=$VERIFY_TOKEN
-    echo ""
+        -d callback_url={{backend_url}}/webhook/{{webhook_path_uuid}} \
+        -d verify_token=$VERIFY_TOKEN)
+
+    echo "Response: $RESPONSE"
+
+    if command -v jq &> /dev/null; then
+        SUB_ID=$(echo "$RESPONSE" | jq -r .id)
+        if [ "$SUB_ID" != "null" ]; then
+            echo ""
+            echo "✅ Webhook registered with ID: $SUB_ID"
+            echo "⚠️  IMPORTANT: Update infra/terraform.tfvars with: strava_subscription_id = \"$SUB_ID\""
+        fi
+    fi
 
 # Check webhook subscriptions and verify current backend is registered
 check-webhooks:
@@ -214,6 +227,7 @@ check-webhooks:
     CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
     
     echo "Current backend: {{backend_url}}"
+    echo "Webhook UUID path: {{webhook_path_uuid}}"
     echo ""
     echo "Fetching webhook subscriptions..."
     
@@ -227,9 +241,9 @@ check-webhooks:
     fi
     
     # Check if our backend is registered
-    EXPECTED_URL="{{backend_url}}/webhook"
+    EXPECTED_URL="{{backend_url}}/webhook/{{webhook_path_uuid}}"
     if echo "$RESPONSE" | grep -q "$EXPECTED_URL"; then
-        echo "✅ Webhook for $EXPECTED_URL is registered"
+        echo "✅ Webhook for current UUID is registered"
     else
         echo "⚠️  Webhook for $EXPECTED_URL is NOT registered"
         echo "Run: just register-webhook"
