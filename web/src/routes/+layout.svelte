@@ -12,6 +12,14 @@
 
 	let { children } = $props();
 
+	// Reactively remove auth-pending when navigating away from landing page.
+	// The landing page (/) handles its own class removal after auth check.
+	$effect(() => {
+		if ($page.url.pathname !== '/') {
+			document.documentElement.classList.remove('auth-pending');
+		}
+	});
+
 	onMount(() => {
 		// For non-landing pages, remove auth-pending immediately (no FOUC concern).
 		// The landing page (/) handles this itself after auth check in +page.svelte.
