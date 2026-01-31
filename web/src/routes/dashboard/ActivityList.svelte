@@ -72,6 +72,10 @@
 			day: 'numeric'
 		});
 	}
+
+	function getAriaLabel(activity: ActivitySummary): string {
+		return `${activity.sport_type} on ${formatDate(activity.start_date)}: ${activity.name}, opens in new tab`;
+	}
 </script>
 
 <div class="activity-list-container">
@@ -92,6 +96,7 @@
 					rel="noopener"
 					class="activity"
 					onclick={(e) => e.stopPropagation()}
+					aria-label={getAriaLabel(activity)}
 				>
 					<span class="emoji" title={activity.sport_type}>{getEmoji(activity.sport_type)}</span>
 					<span class="date">{formatDate(activity.start_date)}</span>
