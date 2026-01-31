@@ -5,11 +5,11 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 		<!-- FOUC prevention: hide body if logged in, before any content paints -->
-		<script src="/fouc.js"></script>
+		<script src="/fouc-debug.js"></script>
 		<style>
 			html.auth-pending body {
-				visibility: hidden;
-				opacity: 0;
+				visibility: hidden !important;
+				opacity: 0 !important;
 			}
 		</style>
 
