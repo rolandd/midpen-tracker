@@ -7,6 +7,7 @@ remote_repo_uri = "https://github.com/YOUR_USERNAME/midpen-tracker.git"
 # Strava API Config
 strava_client_id = "YOUR_STRAVA_CLIENT_ID"
 strava_subscription_id = "YOUR_SUBSCRIPTION_ID"
+webhook_path_uuid = "YOUR_WEBHOOK_UUID_PATH"
 
 # Frontend Config
 frontend_url = "https://example.com"

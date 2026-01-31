@@ -12,6 +12,10 @@
 	let { children } = $props();
 
 	onMount(() => {
+		// Remove the auth-pending class if it exists (in case the blocking script added it)
+		// This ensures content becomes visible if the user stays on the page (e.g. redirect fails)
+		document.documentElement.classList.remove('auth-pending');
+
 		fetchHealth()
 			.then((h) => {
 				uiState.backendBuildId = h.build_id;
@@ -22,6 +26,21 @@
 
 <svelte:head>
 	<title>Midpen Tracker</title>
+
+	<script>
+		// Blocking script to prevent Flash of Unauthenticated Content (FOUC)
+		// If the user is logged in (cookie present), hide the page body immediately
+		// before it paints. The auth check in +page.svelte will then redirect.
+		if (document.cookie.includes('midpen_logged_in=1')) {
+			document.documentElement.classList.add('auth-pending');
+		}
+	</script>
+	<style>
+		:global(html.auth-pending body) {
+			visibility: hidden;
+			opacity: 0;
+		}
+	</style>
 
 	<meta name="description" content="Track your Strava activities in Midpen Open Space Preserves" />
 

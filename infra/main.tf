@@ -32,9 +32,10 @@ variable "strava_client_id" {
   type        = string
 }
 
-variable "strava_subscription_id" {
-  description = "Strava Webhook Subscription ID (defense in depth)"
+variable "webhook_path_uuid" {
+  description = "UUID path segment for webhook URL (e.g. 1234-5678...)"
   type        = string
+  sensitive   = true
 }
 
 variable "frontend_url" {

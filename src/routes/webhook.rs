@@ -8,7 +8,7 @@ use crate::services::strava::StravaService;
 use crate::services::tasks::{DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
-    extract::{Json, Query, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 /// Webhook routes.
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/webhook", get(verify).post(handle_event))
+    Router::new().route("/webhook/{uuid}", get(verify).post(handle_event))
 }
 
 /// Create a StravaService from app state.
@@ -57,8 +57,18 @@ struct VerifyResponse {
 /// Verify webhook subscription (GET).
 async fn verify(
     State(state): State<Arc<AppState>>,
+    Path(uuid): Path<String>,
     Query(params): Query<VerifyParams>,
 ) -> impl IntoResponse {
+    // Validate Path UUID
+    if uuid != state.config.webhook_path_uuid {
+        tracing::warn!(
+            received_uuid = %uuid,
+            "Security Alert: Webhook path UUID mismatch (verify)"
+        );
+        return (StatusCode::NOT_FOUND, Json(VerifyResponse::default()));
+    }
+
     if params.mode == "subscribe" && params.verify_token == state.config.webhook_verify_token {
         tracing::info!("Webhook subscription verified");
         (
@@ -102,6 +112,7 @@ fn is_deauthorization(event: &WebhookEvent) -> bool {
 /// Handle incoming webhook events (POST).
 async fn handle_event(
     State(state): State<Arc<AppState>>,
+    Path(uuid): Path<String>,
     _headers: axum::http::HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> StatusCode {
@@ -109,6 +120,15 @@ async fn handle_event(
         payload = %payload,
         "Webhook event received (raw)"
     );
+
+    // Validate Path UUID
+    if uuid != state.config.webhook_path_uuid {
+        tracing::warn!(
+            received_uuid = %uuid,
+            "Security Alert: Webhook path UUID mismatch (handle_event)"
+        );
+        return StatusCode::NOT_FOUND;
+    }
 
     let event: WebhookEvent = match serde_json::from_value(payload) {
         Ok(e) => e,
@@ -125,11 +145,6 @@ async fn handle_event(
             expected_id = state.config.strava_subscription_id,
             "Security Alert: Webhook subscription ID mismatch"
         );
-        // We reject mismatched events.
-        // Returning 200 to silence Strava would be "safe" but returning 403 highlights the issue.
-        // However, if we return 403, Strava might retry.
-        // But if it's an attacker, we don't care.
-        // If it's Strava sending from an old subscription, we want to know.
         return StatusCode::FORBIDDEN;
     }
 
@@ -179,11 +194,6 @@ async fn handle_event(
                         }
                         Err(AppError::NotFound(_)) => {
                             // Activity not found in our DB -> Deletion is "real" (or at least irrelevant)
-                            // Actually create_strava_service doesn't return NotFound.
-                            // But get_activity returns NotFound if not found in Strava?
-                            // No, get_activity returns AppError::StravaApi("HTTP 404...") usually.
-                            // But if we use StravaService::get_activity, it maps errors.
-                            // Let's keep it simple.
                             true
                         }
                         Err(AppError::StravaApi(ref s)) if s.contains("404") => {
