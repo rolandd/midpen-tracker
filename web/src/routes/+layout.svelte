@@ -27,21 +27,6 @@
 <svelte:head>
 	<title>Midpen Tracker</title>
 
-	<script>
-		// Blocking script to prevent Flash of Unauthenticated Content (FOUC)
-		// If the user is logged in (cookie present), hide the page body immediately
-		// before it paints. The auth check in +page.svelte will then redirect.
-		if (document.cookie.includes('midpen_logged_in=1')) {
-			document.documentElement.classList.add('auth-pending');
-		}
-	</script>
-	<style>
-		:global(html.auth-pending body) {
-			visibility: hidden;
-			opacity: 0;
-		}
-	</style>
-
 	<meta name="description" content="Track your Strava activities in Midpen Open Space Preserves" />
 
 	<!-- Open Graph / Facebook -->
