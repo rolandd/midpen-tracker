@@ -41,6 +41,14 @@ pub struct DeleteUserPayload {
     pub source: String, // "webhook" or "user_request"
 }
 
+/// Payload for activity deletion task.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeleteActivityPayload {
+    pub activity_id: u64,
+    pub athlete_id: u64,
+    pub source: String, // "webhook"
+}
+
 /// Cloud Tasks client wrapper.
 pub struct TasksService {
     project_id: String,
@@ -89,6 +97,16 @@ impl TasksService {
             "Queuing user deletion task"
         );
         self.queue_task(service_url, "/tasks/delete-user", &payload)
+            .await
+    }
+
+    /// Queue an activity deletion task.
+    pub async fn queue_delete_activity(
+        &self,
+        service_url: &str,
+        payload: DeleteActivityPayload,
+    ) -> Result<()> {
+        self.queue_task(service_url, "/tasks/delete-activity", &payload)
             .await
     }
 

@@ -10,7 +10,9 @@ use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
 use crate::services::strava::StravaService;
-use crate::services::tasks::{ContinueBackfillPayload, DeleteUserPayload, ProcessActivityPayload};
+use crate::services::tasks::{
+    ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload,
+};
 use crate::AppState;
 use axum::{
     extract::{Json, State},
@@ -26,6 +28,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tasks/process-activity", post(process_activity))
         .route("/tasks/continue-backfill", post(continue_backfill))
         .route("/tasks/delete-user", post(delete_user))
+        .route("/tasks/delete-activity", post(delete_activity))
 }
 
 /// Create a StravaService from app state.
@@ -404,6 +407,45 @@ async fn delete_user(
         }
     };
 
+    // Verify-before-Act: If source is webhook (deauthorization), ensure the token is actually invalid.
+    if payload.source == "webhook" {
+        match strava.get_valid_access_token(payload.athlete_id).await {
+            Ok(_) => {
+                // Token is valid -> User is authorized -> Deauth webhook is FAKE
+                tracing::warn!(
+                    athlete_id = payload.athlete_id,
+                    "Security Alert: Received FAKE deauthorization webhook task (token still valid) - Aborting deletion"
+                );
+                // Return 200 to stop retry (we successfully handled the "fake" event by ignoring it)
+                return StatusCode::OK;
+            }
+            Err(AppError::StravaApi(ref s))
+                if s.contains("Token expired") || s.contains("invalid") =>
+            {
+                // Token revoked -> Deauth is REAL -> Proceed
+                tracing::info!(
+                    athlete_id = payload.athlete_id,
+                    "Verified deauthorization via Strava API (token invalid) - Proceeding with deletion"
+                );
+            }
+            Err(AppError::NotFound(_)) => {
+                // No tokens in DB -> User already gone or never authed -> Safe to proceed
+                tracing::info!(
+                    athlete_id = payload.athlete_id,
+                    "No tokens found for verification - Proceeding with cleanup"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    athlete_id = payload.athlete_id,
+                    "Failed to verify deauthorization status - Retrying later"
+                );
+                return StatusCode::INTERNAL_SERVER_ERROR;
+            }
+        }
+    }
+
     // 1. Revoke local tokens immediately (get valid token for later deauth)
     // This blocks concurrent activity processing.
     let access_token_opt = match strava.revoke_local_tokens(payload.athlete_id).await {
@@ -492,6 +534,105 @@ async fn delete_user(
         source = %payload.source,
         "User deletion complete"
     );
+
+    StatusCode::OK
+}
+
+/// Delete an activity.
+/// Called by Cloud Tasks from webhook activity deletion.
+async fn delete_activity(
+    State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<DeleteActivityPayload>,
+) -> StatusCode {
+    // Security Check: Ensure request comes from Cloud Tasks
+    let queue_name_header = headers.get("x-cloudtasks-queuename");
+    let is_valid_queue = queue_name_header
+        .and_then(|h| h.to_str().ok())
+        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
+        .unwrap_or(false);
+
+    if !is_valid_queue {
+        tracing::warn!(
+            activity_id = payload.activity_id,
+            athlete_id = payload.athlete_id,
+            header = ?queue_name_header,
+            "Security Alert: Blocked unauthorized access to delete_activity"
+        );
+        return StatusCode::FORBIDDEN;
+    }
+
+    tracing::info!(
+        activity_id = payload.activity_id,
+        athlete_id = payload.athlete_id,
+        "Processing activity deletion from Cloud Task"
+    );
+
+    // Create StravaService
+    let strava = match create_strava_service(&state).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to create StravaService for deletion");
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    };
+
+    // Verify-before-Act: Check if activity still exists on Strava
+    match strava
+        .get_activity(payload.athlete_id, payload.activity_id)
+        .await
+    {
+        Ok(_) => {
+            // Activity found -> Deletion webhook is FAKE
+            tracing::warn!(
+                activity_id = payload.activity_id,
+                athlete_id = payload.athlete_id,
+                "Security Alert: Received FAKE activity deletion webhook task (activity still exists) - Aborting deletion"
+            );
+            return StatusCode::OK;
+        }
+        Err(AppError::NotFound(_)) => {
+            // Activity not found in our DB -> Deletion is "real" (or at least irrelevant)
+            tracing::info!(
+                activity_id = payload.activity_id,
+                "Activity not found locally - proceeding with cleanup"
+            );
+        }
+        Err(AppError::StravaApi(ref s)) if s.contains("404") => {
+            // Activity not found on Strava -> Deletion is REAL -> Proceed
+            tracing::info!(
+                activity_id = payload.activity_id,
+                "Verified activity deletion via Strava API (404) - Proceeding"
+            );
+        }
+        Err(AppError::StravaApi(ref s)) if s.contains("Token expired") || s.contains("invalid") => {
+            // User revoked access -> Treat as real deletion (or at least harmless)
+            tracing::info!(
+                activity_id = payload.activity_id,
+                "User token invalid during deletion verification - Proceeding"
+            );
+        }
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                activity_id = payload.activity_id,
+                "Failed to verify activity deletion status - Retrying later"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
+    }
+
+    // Delete activity and stats from Firestore
+    if let Err(e) = state
+        .db
+        .delete_activity(payload.activity_id, payload.athlete_id)
+        .await
+    {
+        tracing::error!(error = %e, activity_id = payload.activity_id, "Failed to delete activity");
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    } else {
+        tracing::info!(activity_id = payload.activity_id, "Activity deleted");
+    }
 
     StatusCode::OK
 }

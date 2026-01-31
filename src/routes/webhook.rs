@@ -3,9 +3,7 @@
 
 //! Webhook routes for Strava events.
 
-use crate::error::AppError;
-use crate::services::strava::StravaService;
-use crate::services::tasks::{DeleteUserPayload, ProcessActivityPayload};
+use crate::services::tasks::{DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
     extract::{Json, Path, Query, State},
@@ -20,20 +18,6 @@ use std::sync::Arc;
 /// Webhook routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new().route("/webhook/{uuid}", get(verify).post(handle_event))
-}
-
-/// Create a StravaService from app state.
-/// Helper to avoid duplicating the KMS initialization logic.
-async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
-    StravaService::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-        state.db.clone(),
-        state.config.gcp_project_id.clone(),
-        state.config.gcp_region.clone(),
-        "token-encryption".to_string(),
-    )
-    .await
 }
 
 /// Strava webhook verification query params.
@@ -178,117 +162,38 @@ async fn handle_event(
             tracing::debug!(activity_id = event.object_id, "Activity updated");
         }
         ("activity", "delete") => {
-            // Verify activity against Strava API to prevent unauthorized deletion
-            let should_process = match create_strava_service(&state).await {
-                Ok(strava) => {
-                    // Try to fetch the activity.
-                    match strava.get_activity(event.owner_id, event.object_id).await {
-                        Ok(_) => {
-                            // Activity found -> Deletion webhook is FAKE
-                            tracing::warn!(
-                                activity_id = event.object_id,
-                                athlete_id = event.owner_id,
-                                "Security Alert: Received FAKE activity deletion webhook (activity still exists)"
-                            );
-                            false
-                        }
-                        Err(AppError::NotFound(_)) => {
-                            // Activity not found in our DB -> Deletion is "real" (or at least irrelevant)
-                            true
-                        }
-                        Err(AppError::StravaApi(ref s)) if s.contains("404") => {
-                            // Activity not found on Strava -> Deletion is REAL
-                            true
-                        }
-                        Err(AppError::StravaApi(ref s))
-                            if s.contains("Token expired") || s.contains("invalid") =>
-                        {
-                            // User revoked access -> Treat as real deletion (or at least harmless)
-                            true
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                "Failed to verify activity deletion (assuming real)"
-                            );
-                            true
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to create StravaService for verification");
-                    true // Proceed cautiously
-                }
+            // Queue activity deletion via Cloud Tasks (Verify-before-Act in handler)
+            let payload = DeleteActivityPayload {
+                activity_id: event.object_id,
+                athlete_id: event.owner_id,
+                source: "webhook".to_string(),
             };
 
-            if should_process {
-                // Delete activity and stats from Firestore
-                if let Err(e) = state
-                    .db
-                    .delete_activity(event.object_id, event.owner_id)
-                    .await
-                {
-                    tracing::error!(error = %e, activity_id = event.object_id, "Failed to delete activity");
-                } else {
-                    tracing::info!(activity_id = event.object_id, "Activity deleted");
-                }
+            if let Err(e) = state
+                .tasks_service
+                .queue_delete_activity(&state.config.api_url, payload)
+                .await
+            {
+                tracing::error!(error = %e, activity_id = event.object_id, "Failed to queue activity deletion");
+            } else {
+                tracing::info!(activity_id = event.object_id, "Activity deletion queued");
             }
         }
         ("athlete", "update") if is_deauthorization(&event) => {
-            // Verify user token against Strava API to prevent unauthorized deletion
-            let should_process = match create_strava_service(&state).await {
-                Ok(strava) => {
-                    // Try to get a valid token (refreshes if needed)
-                    match strava.get_valid_access_token(event.owner_id).await {
-                        Ok(_) => {
-                            // Token is valid -> User is authorized -> Deauth webhook is FAKE
-                            tracing::warn!(
-                                athlete_id = event.owner_id,
-                                "Security Alert: Received FAKE deauthorization webhook (token still valid)"
-                            );
-                            false
-                        }
-                        Err(AppError::StravaApi(ref s))
-                            if s.contains("Token expired") || s.contains("invalid") =>
-                        {
-                            // Token revoked -> Deauth is REAL
-                            true
-                        }
-                        Err(AppError::NotFound(_)) => {
-                            // No tokens in DB -> User already gone or never authed -> Safe to proceed
-                            true
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                error = %e,
-                                "Failed to verify deauthorization (assuming real)"
-                            );
-                            true
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to create StravaService for verification");
-                    true
-                }
+            // Queue user deletion via Cloud Tasks (respond immediately to Strava)
+            let payload = DeleteUserPayload {
+                athlete_id: event.owner_id,
+                source: "webhook".to_string(),
             };
 
-            if should_process {
-                // Queue user deletion via Cloud Tasks (respond immediately to Strava)
-                let payload = DeleteUserPayload {
-                    athlete_id: event.owner_id,
-                    source: "webhook".to_string(),
-                };
-
-                if let Err(e) = state
-                    .tasks_service
-                    .queue_delete_user(&state.config.api_url, payload)
-                    .await
-                {
-                    tracing::error!(error = %e, athlete_id = event.owner_id, "Failed to queue user deletion");
-                } else {
-                    tracing::info!(athlete_id = event.owner_id, "User deletion queued");
-                }
+            if let Err(e) = state
+                .tasks_service
+                .queue_delete_user(&state.config.api_url, payload)
+                .await
+            {
+                tracing::error!(error = %e, athlete_id = event.owner_id, "Failed to queue user deletion");
+            } else {
+                tracing::info!(athlete_id = event.owner_id, "User deletion queued");
             }
         }
         _ => {
