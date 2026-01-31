@@ -4,6 +4,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
 	import { uiState } from '$lib/state.svelte';
 	import { AboutModal } from '$lib/components';
 	import { PUBLIC_BASE_URL } from '$env/static/public';
@@ -12,6 +13,12 @@
 	let { children } = $props();
 
 	onMount(() => {
+		// For non-landing pages, remove auth-pending immediately (no FOUC concern).
+		// The landing page (/) handles this itself after auth check in +page.svelte.
+		if ($page.url.pathname !== '/') {
+			document.documentElement.classList.remove('auth-pending');
+		}
+
 		fetchHealth()
 			.then((h) => {
 				uiState.backendBuildId = h.build_id;
