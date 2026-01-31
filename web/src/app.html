@@ -4,6 +4,19 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 
+		<!-- FOUC prevention: hide body if logged in, before any content paints -->
+		<script>
+			if (document.cookie.includes('midpen_logged_in=1')) {
+				document.documentElement.classList.add('auth-pending');
+			}
+		</script>
+		<style>
+			html.auth-pending body {
+				visibility: hidden;
+				opacity: 0;
+			}
+		</style>
+
 		<!-- Favicons -->
 		<link rel="icon" type="image/svg+xml" href="/app-logo.svg" />
 		<link rel="icon" href="/favicon.ico" sizes="any" />
