@@ -113,6 +113,7 @@ just generate-bindings
 
 ### DON'Ts
 
+- **DON'T** call Strava APIs directly in request handlers — use Cloud Tasks to respect [rate limits](https://developers.strava.com/docs/rate-limits/)
 - **DON'T** add dependencies that require OpenSSL — backend runs on distroless, use `rustls` instead
 - **DON'T** use raw JavaScript — use type-safe TypeScript for all frontend code
 - **DON'T** use the `Host` header to construct URLs — use explicit `API_URL` env var instead

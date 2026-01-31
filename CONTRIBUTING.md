@@ -28,7 +28,7 @@ Thank you for your interest in contributing to Midpen Tracker! We welcome contri
 | Frontend | SvelteKit (SPA) | Static adapter, client-side routing |
 | Database | Firestore | NoSQL document store |
 | Hosting | Cloud Run + Cloudflare Pages | Backend + Frontend |
-| Task Queue | Cloud Tasks | Async activity processing |
+| Task Queue | Cloud Tasks | Async activity processing (handles Strava rate limits) |
 | Infrastructure | Terraform | All in `infra/` directory |
 | Task Runner | Just | See `justfile` for all commands |
 
