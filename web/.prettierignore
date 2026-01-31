@@ -7,3 +7,4 @@ dist
 package-lock.json
 build/
 .svelte-kit/
+scripts/fouc.min.js
