@@ -12,10 +12,6 @@
 	let { children } = $props();
 
 	onMount(() => {
-		// Remove the auth-pending class if it exists (in case the blocking script added it)
-		// This ensures content becomes visible if the user stays on the page (e.g. redirect fails)
-		document.documentElement.classList.remove('auth-pending');
-
 		fetchHealth()
 			.then((h) => {
 				uiState.backendBuildId = h.build_id;

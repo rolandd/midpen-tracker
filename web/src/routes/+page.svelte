@@ -11,6 +11,9 @@
 	onMount(async () => {
 		if (await checkAuth()) {
 			await goto('/dashboard');
+		} else {
+			// User is not authenticated, safe to show the landing page
+			document.documentElement.classList.remove('auth-pending');
 		}
 	});
 
