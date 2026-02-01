@@ -18,9 +18,22 @@
 
 interface Env {
 	PUBLIC_API_URL?: string;
+	PUBLIC_BASE_URL?: string;
 }
 
 export const onRequest: PagesFunction<Env> = async (context) => {
+	const url = new URL(context.request.url);
+
+	// Redirect pages.dev to custom domain (if configured)
+	// This prevents issues with Cloudflare Access policies on pages.dev
+	// affecting the custom domain via CNAME resolution
+	if (url.hostname.endsWith('.pages.dev') && context.env.PUBLIC_BASE_URL) {
+		const customDomain = new URL(context.env.PUBLIC_BASE_URL);
+		url.hostname = customDomain.hostname;
+		url.protocol = customDomain.protocol;
+		return Response.redirect(url.toString(), 301);
+	}
+
 	const response = await context.next();
 
 	// Only process HTML responses
