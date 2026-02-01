@@ -28,7 +28,7 @@ const config = {
 			mode: 'hash',
 			directives: {
 				'default-src': ['self'],
-				'script-src': ['self', 'sha256-fjILgSuxVwjCY4WpZhCz6v0RcpWZpe/xfr8tVgR+EDo='],
+				'script-src': ['self'],
 				'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
 				'font-src': ['self', 'https://fonts.gstatic.com'],
 				'img-src': ['self', 'data:', 'https:'],
