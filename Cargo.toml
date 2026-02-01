@@ -64,6 +64,7 @@ ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }
 hmac = "0.12.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
+rand = "0.8"
 hkdf = "0.12.4"
 subtle = "2"
 

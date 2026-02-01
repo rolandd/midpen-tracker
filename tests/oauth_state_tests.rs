@@ -16,7 +16,8 @@ fn encode_state(frontend_url: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let state_data = format!("{}|{:x}", frontend_url, timestamp);
+    let nonce = "test_nonce"; // Match production format (frontend|time|nonce)
+    let state_data = format!("{}|{:x}|{}", frontend_url, timestamp, nonce);
     URL_SAFE_NO_PAD.encode(state_data.as_bytes())
 }
 
