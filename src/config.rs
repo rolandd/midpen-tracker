@@ -37,6 +37,10 @@ pub struct Config {
     pub jwt_signing_key: Vec<u8>,
     /// Webhook verification token
     pub webhook_verify_token: String,
+    /// Strava Subscription ID (for validation)
+    pub strava_subscription_id: u64,
+    /// Webhook path UUID (secret path)
+    pub webhook_path_uuid: String,
     /// OAuth state signing key (derived from jwt_signing_key)
     pub oauth_state_key: Vec<u8>,
 }
@@ -68,6 +72,12 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
+            strava_subscription_id: env::var("STRAVA_SUBSCRIPTION_ID")
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID"))?
+                .parse()
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID (invalid format)"))?,
+            webhook_path_uuid: env::var("WEBHOOK_PATH_UUID")
+                .map_err(|_| ConfigError::Missing("WEBHOOK_PATH_UUID"))?,
 
             // Secrets - from env for local dev, Secret Manager in prod
             strava_client_secret: env::var("STRAVA_CLIENT_SECRET")
@@ -98,6 +108,8 @@ impl Config {
             strava_client_secret: "test_secret".to_string(),
             jwt_signing_key,
             webhook_verify_token: "test_verify_token".to_string(),
+            strava_subscription_id: 12345,
+            webhook_path_uuid: "test-uuid-1234".to_string(),
             oauth_state_key,
         }
     }
@@ -138,6 +150,12 @@ impl Config {
                 .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .unwrap_or(8080),
+            strava_subscription_id: env::var("STRAVA_SUBSCRIPTION_ID")
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID"))?
+                .parse()
+                .map_err(|_| ConfigError::Missing("STRAVA_SUBSCRIPTION_ID (invalid format)"))?,
+            webhook_path_uuid: env::var("WEBHOOK_PATH_UUID")
+                .map_err(|_| ConfigError::Missing("WEBHOOK_PATH_UUID"))?,
             strava_client_secret: client_secret.trim().to_string(),
             jwt_signing_key,
             webhook_verify_token: webhook_token.trim().to_string(),
@@ -191,6 +209,8 @@ mod tests {
         env::set_var("STRAVA_CLIENT_SECRET", "test_secret");
         env::set_var("JWT_SIGNING_KEY", "test_jwt_key_32_bytes_minimum!!");
         env::set_var("WEBHOOK_VERIFY_TOKEN", "test_verify");
+        env::set_var("STRAVA_SUBSCRIPTION_ID", "12345");
+        env::set_var("WEBHOOK_PATH_UUID", "test-uuid-1234");
 
         let config = Config::from_env().expect("Config should load");
 

@@ -178,6 +178,15 @@ set-secret-webhook secret:
     echo -n "{{secret}}" | gcloud secrets versions add WEBHOOK_VERIFY_TOKEN \
         --data-file=- --project={{project}}
 
+# Generate and set a random Webhook UUID
+generate-webhook-uuid:
+    #!/usr/bin/env bash
+    UUID=$(python3 -c 'import uuid; print(uuid.uuid4())')
+    echo "Generated UUID: $UUID"
+    echo -n "$UUID" | gcloud secrets versions add WEBHOOK_PATH_UUID \
+        --data-file=- --project={{project}}
+    echo "✅ Webhook UUID generated and stored"
+
 # Generate and set a random JWT signing key
 generate-jwt-key:
     #!/usr/bin/env bash
@@ -196,14 +205,25 @@ register-webhook:
     echo "Fetching secrets from Secret Manager..."
     CLIENT_SECRET=$(gcloud secrets versions access latest --secret=STRAVA_CLIENT_SECRET --project={{project}})
     VERIFY_TOKEN=$(gcloud secrets versions access latest --secret=WEBHOOK_VERIFY_TOKEN --project={{project}})
+    UUID=$(gcloud secrets versions access latest --secret=WEBHOOK_PATH_UUID --project={{project}})
     
-    echo "Registering webhook at {{backend_url}}/webhook"
-    curl -X POST https://www.strava.com/api/v3/push_subscriptions \
+    echo "Registering webhook at {{backend_url}}/webhook/$UUID"
+    RESPONSE=$(curl -s -X POST https://www.strava.com/api/v3/push_subscriptions \
         -d client_id={{strava_client_id}} \
         -d client_secret=$CLIENT_SECRET \
-        -d callback_url={{backend_url}}/webhook \
-        -d verify_token=$VERIFY_TOKEN
-    echo ""
+        -d callback_url={{backend_url}}/webhook/$UUID \
+        -d verify_token=$VERIFY_TOKEN)
+
+    echo "Response: $RESPONSE"
+
+    if command -v jq &> /dev/null; then
+        SUB_ID=$(echo "$RESPONSE" | jq -r .id)
+        if [ "$SUB_ID" != "null" ]; then
+            echo ""
+            echo "✅ Webhook registered with ID: $SUB_ID"
+            echo "⚠️  IMPORTANT: Update infra/terraform.tfvars with: strava_subscription_id = \"$SUB_ID\""
+        fi
+    fi
 
 # Check webhook subscriptions and verify current backend is registered
 check-webhooks:
@@ -227,9 +247,10 @@ check-webhooks:
     fi
     
     # Check if our backend is registered
-    EXPECTED_URL="{{backend_url}}/webhook"
+    UUID=$(gcloud secrets versions access latest --secret=WEBHOOK_PATH_UUID --project={{project}})
+    EXPECTED_URL="{{backend_url}}/webhook/$UUID"
     if echo "$RESPONSE" | grep -q "$EXPECTED_URL"; then
-        echo "✅ Webhook for $EXPECTED_URL is registered"
+        echo "✅ Webhook for current UUID is registered"
     else
         echo "⚠️  Webhook for $EXPECTED_URL is NOT registered"
         echo "Run: just register-webhook"

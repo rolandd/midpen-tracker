@@ -22,6 +22,7 @@ resource "google_secret_manager_secret_iam_member" "cloudrun_secrets" {
     strava  = google_secret_manager_secret.strava_client_secret.id
     jwt     = google_secret_manager_secret.jwt_signing_key.id
     webhook = google_secret_manager_secret.webhook_verify_token.id
+    uuid    = google_secret_manager_secret.webhook_path_uuid.id
   }
 
   secret_id = each.value
@@ -62,6 +63,11 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       env {
+        name  = "STRAVA_SUBSCRIPTION_ID"
+        value = var.strava_subscription_id
+      }
+
+      env {
         name  = "GCP_PROJECT_ID"
         value = var.project_id
       }
@@ -79,6 +85,16 @@ resource "google_cloud_run_v2_service" "api" {
       env {
         name  = "API_URL"
         value = "https://${var.api_host}"
+      }
+
+      env {
+        name = "WEBHOOK_PATH_UUID"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.webhook_path_uuid.secret_id
+            version = "latest"
+          }
+        }
       }
 
       env {
@@ -125,6 +141,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret.strava_client_secret,
     google_secret_manager_secret.jwt_signing_key,
     google_secret_manager_secret.webhook_verify_token,
+    google_secret_manager_secret.webhook_path_uuid,
   ]
 }
 

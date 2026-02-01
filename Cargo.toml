@@ -65,6 +65,7 @@ hmac = "0.12.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
 hkdf = "0.12.4"
+subtle = "2"
 
 [features]
 binding-generation = ["ts-rs"]
