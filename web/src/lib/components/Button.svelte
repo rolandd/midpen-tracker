@@ -6,11 +6,12 @@
 	import Spinner from './Spinner.svelte';
 
 	interface Props {
-		variant?: 'primary' | 'secondary' | 'ghost';
+		variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 		size?: 'sm' | 'md' | 'lg';
 		onclick?: () => void;
 		disabled?: boolean;
 		isLoading?: boolean;
+		class?: string;
 		children: Snippet;
 	}
 
@@ -20,6 +21,7 @@
 		onclick,
 		disabled = false,
 		isLoading = false,
+		class: className = '',
 		children
 	}: Props = $props();
 
@@ -37,17 +39,22 @@
 			'bg-primary text-white hover:bg-primary-hover hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/30',
 		secondary:
 			'bg-surface text-text-muted border border-border hover:border-primary hover:text-text',
-		ghost: 'bg-transparent text-text-muted hover:text-text hover:bg-surface'
+		ghost: 'bg-transparent text-text-muted hover:text-text hover:bg-surface',
+		danger:
+			'bg-red-500 text-white hover:bg-red-600 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/30'
 	};
 </script>
 
 <button
-	class="{baseClasses} {sizeClasses[size]} {variantClasses[variant]}"
+	class="{baseClasses} {sizeClasses[size]} {variantClasses[variant]} {className}"
 	{onclick}
 	disabled={disabled || isLoading}
 >
 	{#if isLoading}
-		<Spinner size="sm" variant={variant === 'primary' ? 'white' : 'primary'} />
+		<Spinner
+			size="sm"
+			variant={variant === 'primary' || variant === 'danger' ? 'white' : 'primary'}
+		/>
 	{/if}
 	{@render children()}
 </button>

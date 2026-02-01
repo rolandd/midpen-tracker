@@ -5,3 +5,7 @@
 ## 2026-01-24 - Accessibility of New Tab Links
 **Learning:** Links opening in a new tab (`target="_blank"`) without warning can disorient screen reader users. The content of activity links (emoji, date, arrow) was disjointed.
 **Action:** Use `aria-label` to provide a cohesive description and explicitly state "opens in new tab" for such links.
+
+## 2026-02-01 - Standardizing Destructive Actions
+**Learning:** Destructive actions (like delete) were implemented with one-off CSS and markup, leading to inconsistent focus states and loading feedback.
+**Action:** Extended the design system's `Button` component with a `danger` variant to ensure consistent visual language and accessibility (keyboard support, loading states) for all destructive actions.

@@ -3,6 +3,7 @@
 
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
+	import Button from './Button.svelte';
 
 	interface Props {
 		onConfirm: () => Promise<void>;
@@ -120,14 +121,18 @@
 		{/if}
 
 		<div class="actions">
-			<button class="btn-cancel" onclick={onCancel} disabled={isDeleting}> Cancel </button>
-			<button class="btn-delete" onclick={handleConfirm} disabled={isDeleting}>
-				{#if isDeleting}
-					Deleting...
-				{:else}
-					Delete Permanently
-				{/if}
-			</button>
+			<Button variant="secondary" onclick={onCancel} disabled={isDeleting} class="flex-1">
+				Cancel
+			</Button>
+			<Button
+				variant="danger"
+				onclick={handleConfirm}
+				isLoading={isDeleting}
+				disabled={isDeleting}
+				class="flex-1"
+			>
+				Delete Permanently
+			</Button>
 		</div>
 	</div>
 </div>
@@ -242,42 +247,5 @@
 	.actions {
 		display: flex;
 		gap: 0.75rem;
-	}
-
-	.btn-cancel,
-	.btn-delete {
-		flex: 1;
-		padding: 0.75rem 1rem;
-		border-radius: var(--radius-sm);
-		font-size: 0.95rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-
-	.btn-cancel {
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		color: var(--color-text);
-	}
-
-	.btn-cancel:hover:not(:disabled) {
-		background: var(--color-surface-hover);
-	}
-
-	.btn-delete {
-		background: #ef4444;
-		border: none;
-		color: white;
-	}
-
-	.btn-delete:hover:not(:disabled) {
-		background: #dc2626;
-	}
-
-	.btn-cancel:disabled,
-	.btn-delete:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
 	}
 </style>
