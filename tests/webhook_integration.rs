@@ -46,7 +46,7 @@ async fn test_webhook_verification() {
             Request::builder()
                 .method("GET")
                 .uri(format!(
-                    "/webhook?hub.mode=subscribe&hub.challenge={}&hub.verify_token={}",
+                    "/webhook/test-uuid-1234?hub.mode=subscribe&hub.challenge={}&hub.verify_token={}",
                     challenge, verify_token
                 ))
                 .body(Body::empty())
@@ -77,7 +77,7 @@ async fn test_webhook_verification_wrong_token() {
             Request::builder()
                 .method("GET")
                 .uri(format!(
-                    "/webhook?hub.mode=subscribe&hub.challenge={}&hub.verify_token={}",
+                    "/webhook/test-uuid-1234?hub.mode=subscribe&hub.challenge={}&hub.verify_token={}",
                     challenge, wrong_token
                 ))
                 .body(Body::empty())
@@ -113,7 +113,7 @@ async fn test_webhook_event_create_activity() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/webhook")
+                .uri("/webhook/test-uuid-1234")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&event).unwrap()))
                 .unwrap(),
@@ -143,7 +143,7 @@ async fn test_webhook_event_update_activity() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/webhook")
+                .uri("/webhook/test-uuid-1234")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&event).unwrap()))
                 .unwrap(),
@@ -172,7 +172,7 @@ async fn test_webhook_event_delete_activity() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/webhook")
+                .uri("/webhook/test-uuid-1234")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&event).unwrap()))
                 .unwrap(),
@@ -202,7 +202,7 @@ async fn test_webhook_event_athlete_deauthorize() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/webhook")
+                .uri("/webhook/test-uuid-1234")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&event).unwrap()))
                 .unwrap(),
@@ -231,7 +231,7 @@ async fn test_webhook_event_unknown_type() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/webhook")
+                .uri("/webhook/test-uuid-1234")
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_string(&event).unwrap()))
                 .unwrap(),
@@ -241,6 +241,64 @@ async fn test_webhook_event_unknown_type() {
 
     // Should return 200 even for unknown event types
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_webhook_event_wrong_subscription_id() {
+    let app = create_offline_test_app().await;
+
+    let event = json!({
+        "aspect_type": "create",
+        "event_time": 1234567890,
+        "object_id": 12345678901_u64,
+        "object_type": "activity",
+        "owner_id": 123456,
+        "subscription_id": 99999 // Mismatch (Config has 12345)
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook/test-uuid-1234")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 403 Forbidden
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_webhook_event_wrong_uuid() {
+    let app = create_offline_test_app().await;
+
+    let event = json!({
+        "aspect_type": "create",
+        "event_time": 1234567890,
+        "object_id": 12345678901_u64,
+        "object_type": "activity",
+        "owner_id": 123456,
+        "subscription_id": 12345
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/webhook/WRONG_UUID")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&event).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // Should return 404 Not Found (to hide endpoint)
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

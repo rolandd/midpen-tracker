@@ -55,6 +55,16 @@ resource "google_secret_manager_secret" "webhook_verify_token" {
   depends_on = [google_project_service.apis]
 }
 
+resource "google_secret_manager_secret" "webhook_path_uuid" {
+  secret_id = "WEBHOOK_PATH_UUID"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
 # Cloud Tasks queue for rate-limited processing
 resource "google_cloud_tasks_queue" "activity_processing" {
   name     = "activity-processing"

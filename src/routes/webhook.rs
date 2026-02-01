@@ -3,10 +3,10 @@
 
 //! Webhook routes for Strava events.
 
-use crate::services::tasks::{DeleteUserPayload, ProcessActivityPayload};
+use crate::services::tasks::{DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
-    extract::{Json, Query, State},
+    extract::{Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -14,10 +14,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 
 /// Webhook routes.
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/webhook", get(verify).post(handle_event))
+    Router::new().route("/webhook/{uuid}", get(verify).post(handle_event))
 }
 
 /// Strava webhook verification query params.
@@ -41,8 +42,21 @@ struct VerifyResponse {
 /// Verify webhook subscription (GET).
 async fn verify(
     State(state): State<Arc<AppState>>,
+    Path(uuid): Path<String>,
     Query(params): Query<VerifyParams>,
 ) -> impl IntoResponse {
+    // Validate Path UUID (constant-time comparison to prevent timing attacks)
+    if !bool::from(
+        uuid.as_bytes()
+            .ct_eq(state.config.webhook_path_uuid.as_bytes()),
+    ) {
+        tracing::warn!(
+            received_uuid = %uuid,
+            "Security Alert: Webhook path UUID mismatch (verify)"
+        );
+        return (StatusCode::NOT_FOUND, Json(VerifyResponse::default()));
+    }
+
     if params.mode == "subscribe" && params.verify_token == state.config.webhook_verify_token {
         tracing::info!("Webhook subscription verified");
         (
@@ -67,6 +81,7 @@ struct WebhookEvent {
     object_id: u64,
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
+    subscription_id: u64,
     /// For athlete events, contains {"authorized": "false"} on deauthorization
     #[serde(default)]
     updates: Option<std::collections::HashMap<String, serde_json::Value>>,
@@ -85,6 +100,7 @@ fn is_deauthorization(event: &WebhookEvent) -> bool {
 /// Handle incoming webhook events (POST).
 async fn handle_event(
     State(state): State<Arc<AppState>>,
+    Path(uuid): Path<String>,
     _headers: axum::http::HeaderMap,
     Json(payload): Json<serde_json::Value>,
 ) -> StatusCode {
@@ -93,6 +109,18 @@ async fn handle_event(
         "Webhook event received (raw)"
     );
 
+    // Validate Path UUID (constant-time comparison to prevent timing attacks)
+    if !bool::from(
+        uuid.as_bytes()
+            .ct_eq(state.config.webhook_path_uuid.as_bytes()),
+    ) {
+        tracing::warn!(
+            received_uuid = %uuid,
+            "Security Alert: Webhook path UUID mismatch (handle_event)"
+        );
+        return StatusCode::NOT_FOUND;
+    }
+
     let event: WebhookEvent = match serde_json::from_value(payload) {
         Ok(e) => e,
         Err(e) => {
@@ -100,6 +128,16 @@ async fn handle_event(
             return StatusCode::OK; // Still return 200 to Strava to avoid retries
         }
     };
+
+    // Validate Subscription ID
+    if event.subscription_id != state.config.strava_subscription_id {
+        tracing::warn!(
+            received_id = event.subscription_id,
+            expected_id = state.config.strava_subscription_id,
+            "Security Alert: Webhook subscription ID mismatch"
+        );
+        return StatusCode::FORBIDDEN;
+    }
 
     tracing::info!(
         object_type = %event.object_type,
@@ -131,15 +169,21 @@ async fn handle_event(
             tracing::debug!(activity_id = event.object_id, "Activity updated");
         }
         ("activity", "delete") => {
-            // Delete activity and stats from Firestore
+            // Queue activity deletion via Cloud Tasks (Verify-before-Act in handler)
+            let payload = DeleteActivityPayload {
+                activity_id: event.object_id,
+                athlete_id: event.owner_id,
+                source: "webhook".to_string(),
+            };
+
             if let Err(e) = state
-                .db
-                .delete_activity(event.object_id, event.owner_id)
+                .tasks_service
+                .queue_delete_activity(&state.config.api_url, payload)
                 .await
             {
-                tracing::error!(error = %e, activity_id = event.object_id, "Failed to delete activity");
+                tracing::error!(error = %e, activity_id = event.object_id, "Failed to queue activity deletion");
             } else {
-                tracing::info!(activity_id = event.object_id, "Activity deleted");
+                tracing::info!(activity_id = event.object_id, "Activity deletion queued");
             }
         }
         ("athlete", "update") if is_deauthorization(&event) => {

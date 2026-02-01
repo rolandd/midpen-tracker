@@ -9,8 +9,6 @@
 # - Cloud Run service
 # - IAM bindings with least privilege
 
-
-
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
@@ -29,6 +27,11 @@ variable "service_name" {
 
 variable "strava_client_id" {
   description = "Strava OAuth Client ID"
+  type        = string
+}
+
+variable "strava_subscription_id" {
+  description = "Strava webhook subscription ID (returned when registering webhook)"
   type        = string
 }
 
