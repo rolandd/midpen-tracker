@@ -11,6 +11,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite}; // Added axum-extra
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use ring::rand::SecureRandom;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -52,22 +53,31 @@ type HmacSha256 = Hmac<Sha256>;
 /// Start OAuth flow - redirect to Strava authorization.
 async fn auth_start(
     State(state): State<Arc<AppState>>,
+    jar: CookieJar,
     Query(params): Query<AuthStartParams>,
     headers: axum::http::HeaderMap,
-) -> Result<Redirect> {
+) -> Result<impl IntoResponse> {
     // Get the frontend URL from query param or fall back to config
     let frontend_url = params
         .redirect_uri
         .unwrap_or_else(|| state.config.frontend_url.clone());
 
-    // Encode frontend URL + timestamp in state
+    // Generate random nonce (16 bytes)
+    let mut nonce_bytes = [0u8; 16];
+    let rng = ring::rand::SystemRandom::new();
+    rng.fill(&mut nonce_bytes).map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Random number generation failed: {}", e))
+    })?;
+    let nonce_hex = hex::encode(nonce_bytes);
+
+    // Encode frontend URL + timestamp + nonce in state
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("System time error: {}", e)))?
         .as_millis();
 
-    // Create the data payload: "frontend_url|timestamp_hex"
-    let state_payload = format!("{}|{:x}", frontend_url, timestamp);
+    // Create the data payload: "frontend_url|timestamp_hex|nonce_hex"
+    let state_payload = format!("{}|{:x}|{}", frontend_url, timestamp, nonce_hex);
 
     // Sign the payload
     let mut mac = HmacSha256::new_from_slice(&state.config.oauth_state_key)
@@ -76,11 +86,20 @@ async fn auth_start(
     let signature = mac.finalize().into_bytes();
 
     // Combine payload + signature: "payload|signature_hex"
-    // We stick to hex for the signature part to keep it simple within the pipe-delimited format
     let signed_state = format!("{}|{}", state_payload, hex::encode(signature));
 
     // Base64 encode the whole thing for the URL
     let oauth_state = URL_SAFE_NO_PAD.encode(signed_state.as_bytes());
+
+    // Create HttpOnly cookie for the nonce
+    // Path limited to callback to reduce leakage
+    let mut cookie = Cookie::new("midpen_oauth_nonce", nonce_hex);
+    cookie.set_http_only(true);
+    let is_production = state.config.frontend_url.contains("https");
+    cookie.set_secure(is_production);
+    cookie.set_path("/auth/strava/callback");
+    cookie.set_same_site(SameSite::Lax);
+    cookie.set_max_age(time::Duration::minutes(15)); // Matches state expiry
 
     // Get the host from the request headers for callback URL
     let host = headers
@@ -117,7 +136,7 @@ async fn auth_start(
         "Starting OAuth flow, redirecting to Strava"
     );
 
-    Ok(Redirect::temporary(&auth_url))
+    Ok((jar.add(cookie), Redirect::temporary(&auth_url)))
 }
 
 #[derive(Deserialize)]
@@ -134,14 +153,25 @@ async fn auth_callback(
     jar: CookieJar,
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse> {
+    // Get nonce from cookie
+    let nonce_cookie = jar.get("midpen_oauth_nonce").map(|c| c.value().to_string());
+
+    // Cleanup nonce cookie immediately
+    let mut cleanup_cookie = Cookie::new("midpen_oauth_nonce", "");
+    cleanup_cookie.set_path("/auth/strava/callback");
+    cleanup_cookie.set_max_age(time::Duration::seconds(0));
+    let jar = jar.add(cleanup_cookie);
+
     // Decode and verify frontend URL from state parameter
-    let frontend_url = verify_and_decode_state(&params.state, &state.config.oauth_state_key)
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                "Invalid or tampered state parameter, falling back to default frontend URL"
-            );
-            state.config.frontend_url.clone()
-        });
+    let frontend_url = verify_and_decode_state(
+        &params.state,
+        &state.config.oauth_state_key,
+        nonce_cookie.as_deref(),
+    )
+    .ok_or_else(|| {
+        tracing::warn!("Invalid or tampered state parameter, aborting authentication");
+        AppError::Unauthorized
+    })?;
 
     // Check for OAuth errors
     if let Some(error) = params.error {
@@ -383,23 +413,28 @@ async fn trigger_backfill(
 }
 
 /// Verify HMAC signature and decode the frontend URL from the OAuth state parameter.
-fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
+fn verify_and_decode_state(
+    state: &str,
+    secret: &[u8],
+    expected_nonce: Option<&str>,
+) -> Option<String> {
     let bytes = URL_SAFE_NO_PAD.decode(state).ok()?;
     let state_str = String::from_utf8(bytes).ok()?;
 
-    // Format is "frontend_url|timestamp_hex|signature_hex"
-    let parts: Vec<&str> = state_str.splitn(3, '|').collect();
-    if parts.len() != 3 {
+    // Format is "frontend_url|timestamp_hex|nonce_hex|signature_hex"
+    let parts: Vec<&str> = state_str.splitn(4, '|').collect();
+    if parts.len() != 4 {
         tracing::warn!("Invalid OAuth state format");
         return None;
     }
 
     let frontend_url = parts[0];
     let timestamp_hex = parts[1];
-    let signature_hex = parts[2];
+    let nonce_hex = parts[2];
+    let signature_hex = parts[3];
 
     // Reconstruct payload and verify signature
-    let payload = format!("{}|{}", frontend_url, timestamp_hex);
+    let payload = format!("{}|{}|{}", frontend_url, timestamp_hex, nonce_hex);
 
     let mut mac = HmacSha256::new_from_slice(secret).ok()?;
     mac.update(payload.as_bytes());
@@ -408,6 +443,17 @@ fn verify_and_decode_state(state: &str, secret: &[u8]) -> Option<String> {
 
     if signature_hex != expected_signature {
         tracing::warn!("OAuth state signature mismatch! Potential tampering.");
+        return None;
+    }
+
+    // Verify nonce
+    if let Some(expected) = expected_nonce {
+        if nonce_hex != expected {
+            tracing::warn!("OAuth state nonce mismatch! CSRF attack?");
+            return None;
+        }
+    } else {
+        tracing::warn!("Missing nonce cookie for verification");
         return None;
     }
 
@@ -464,8 +510,14 @@ async fn logout(jar: CookieJar) -> (CookieJar, axum::http::StatusCode) {
         .max_age(time::Duration::seconds(0))
         .build();
 
+    // Also clear the nonce cookie just in case
+    let nonce_cookie = Cookie::build("midpen_oauth_nonce")
+        .path("/auth/strava/callback")
+        .max_age(time::Duration::seconds(0))
+        .build();
+
     (
-        jar.remove(cookie).remove(hint_cookie),
+        jar.remove(cookie).remove(hint_cookie).remove(nonce_cookie),
         axum::http::StatusCode::NO_CONTENT,
     )
 }
@@ -475,8 +527,13 @@ mod tests {
     use super::*;
 
     // Helper to generate a valid state for testing
-    fn generate_test_state(frontend_url: &str, timestamp: u128, secret: &[u8]) -> String {
-        let payload = format!("{}|{:x}", frontend_url, timestamp);
+    fn generate_test_state(
+        frontend_url: &str,
+        timestamp: u128,
+        nonce: &str,
+        secret: &[u8],
+    ) -> String {
+        let payload = format!("{}|{:x}|{}", frontend_url, timestamp, nonce);
         let mut mac = HmacSha256::new_from_slice(secret).unwrap();
         mac.update(payload.as_bytes());
         let signature = hex::encode(mac.finalize().into_bytes());
@@ -489,14 +546,15 @@ mod tests {
     fn test_verify_and_decode_state_success() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
+        let nonce = "test_nonce_123";
         // Use current time
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
 
-        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(nonce));
         assert_eq!(result, Some(frontend_url.to_string()));
     }
 
@@ -504,6 +562,7 @@ mod tests {
     fn test_verify_and_decode_state_expired() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
+        let nonce = "nonce";
         // 16 minutes ago
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -511,8 +570,8 @@ mod tests {
             .as_millis()
             - 16 * 60 * 1000;
 
-        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(nonce));
         assert_eq!(result, None);
     }
 
@@ -520,6 +579,7 @@ mod tests {
     fn test_verify_and_decode_state_future() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
+        let nonce = "nonce";
         // 6 minutes in future
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -527,8 +587,8 @@ mod tests {
             .as_millis()
             + 6 * 60 * 1000;
 
-        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(nonce));
         assert_eq!(result, None);
     }
 
@@ -536,6 +596,7 @@ mod tests {
     fn test_verify_and_decode_state_skew_allowed() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
+        let nonce = "nonce";
         // 4 minutes in future (allowed)
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -543,8 +604,8 @@ mod tests {
             .as_millis()
             + 4 * 60 * 1000;
 
-        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(nonce));
         assert_eq!(result, Some(frontend_url.to_string()));
     }
 
@@ -552,18 +613,19 @@ mod tests {
     fn test_verify_and_decode_state_invalid_signature() {
         let secret = b"secret_key";
         let frontend_url = "https://example.com";
+        let nonce = "nonce";
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
 
-        let payload = format!("{}|{:x}", frontend_url, timestamp);
+        let payload = format!("{}|{:x}|{}", frontend_url, timestamp, nonce);
         let signature = "invalid_signature";
 
         let state_data = format!("{}|{}", payload, signature);
         let encoded_state = URL_SAFE_NO_PAD.encode(state_data.as_bytes());
 
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(nonce));
         assert_eq!(result, None);
     }
 
@@ -572,13 +634,45 @@ mod tests {
         let secret = b"secret_key";
         let wrong_secret = b"wrong_key";
         let frontend_url = "https://example.com";
+        let nonce = "nonce";
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis();
 
-        let encoded_state = generate_test_state(frontend_url, timestamp, secret);
-        let result = verify_and_decode_state(&encoded_state, wrong_secret);
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, wrong_secret, Some(nonce));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_nonce_mismatch() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        let nonce = "correct_nonce";
+        let wrong_nonce = "wrong_nonce";
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, Some(wrong_nonce));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_verify_and_decode_state_missing_nonce() {
+        let secret = b"secret_key";
+        let frontend_url = "https://example.com";
+        let nonce = "correct_nonce";
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis();
+
+        let encoded_state = generate_test_state(frontend_url, timestamp, nonce, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, None);
         assert_eq!(result, None);
     }
 
@@ -586,7 +680,7 @@ mod tests {
     fn test_verify_and_decode_state_malformed() {
         let secret = b"secret_key";
         let encoded_state = URL_SAFE_NO_PAD.encode("invalid|format");
-        let result = verify_and_decode_state(&encoded_state, secret);
+        let result = verify_and_decode_state(&encoded_state, secret, None);
         assert_eq!(result, None);
     }
 

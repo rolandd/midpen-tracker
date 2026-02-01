@@ -1672,6 +1672,7 @@ dependencies = [
  "jsonwebtoken",
  "polyline",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "sha2",

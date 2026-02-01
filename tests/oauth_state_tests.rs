@@ -16,7 +16,18 @@ fn encode_state(frontend_url: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let state_data = format!("{}|{:x}", frontend_url, timestamp);
+    let nonce = "test_nonce"; // Match production format (frontend|time|nonce)
+
+    // In actual app, this key comes from config. Here we don't verify signature
+    // in the decode helper below, but we must produce the correct structure:
+    // "frontend_url|timestamp_hex|nonce_hex|signature_hex"
+    let payload = format!("{}|{:x}|{}", frontend_url, timestamp, hex::encode(nonce));
+
+    // We can use a dummy signature since decode_state_frontend below doesn't verify it,
+    // it just splits strings. But to be structurally correct, we append it.
+    let signature = "dummy_signature";
+
+    let state_data = format!("{}|{}", payload, signature);
     URL_SAFE_NO_PAD.encode(state_data.as_bytes())
 }
 
