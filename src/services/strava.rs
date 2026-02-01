@@ -259,10 +259,27 @@ pub struct StravaActivitySummary {
 use crate::db::FirestoreDb;
 use crate::models::{User, UserTokens};
 use crate::services::KmsService;
+use chrono::{DateTime, Duration, Utc};
+use dashmap::DashMap;
 use serde::Serialize;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Margin before token expiration when we proactively refresh (5 minutes).
 const TOKEN_REFRESH_MARGIN_SECS: i64 = 5 * 60;
+
+/// Cached access token with expiry information.
+#[derive(Clone)]
+pub struct CachedToken {
+    access_token: String,
+    expires_at: DateTime<Utc>,
+}
+
+/// Shared token cache type for use in AppState.
+pub type TokenCache = Arc<DashMap<u64, CachedToken>>;
+
+/// Shared refresh locks type for use in AppState.
+pub type RefreshLocks = Arc<DashMap<u64, Arc<Mutex<()>>>>;
 
 /// High-level Strava service that manages token lifecycle and API calls.
 ///
@@ -270,90 +287,150 @@ const TOKEN_REFRESH_MARGIN_SECS: i64 = 5 * 60;
 /// - Token retrieval and decryption from Firestore
 /// - Automatic token refresh when expiring (with 5-minute margin)
 /// - Re-encryption and storage of refreshed tokens
+/// - In-memory token caching to reduce KMS calls
+/// - Per-user locking to prevent duplicate refresh calls
 /// - All Strava API calls
 #[derive(Clone)]
 pub struct StravaService {
     client: StravaClient,
     db: FirestoreDb,
     kms: KmsService,
+    /// In-memory cache of decrypted access tokens (shared across requests).
+    token_cache: TokenCache,
+    /// Per-user mutex to serialize token refresh operations.
+    refresh_locks: RefreshLocks,
 }
 
 impl StravaService {
-    /// Create a new Strava service.
-    pub async fn new(
+    /// Create a new Strava service with shared token cache.
+    ///
+    /// The `token_cache` and `refresh_locks` should be shared across all
+    /// `StravaService` instances to enable caching within a Cloud Run instance.
+    pub fn new(
         client_id: String,
         client_secret: String,
         db: FirestoreDb,
-        project_id: String,
-        location: String,
-        key_name: String,
-    ) -> Result<Self, AppError> {
-        let kms = KmsService::new(&project_id, &location, &key_name).await?;
-
-        Ok(Self {
+        kms: KmsService,
+        token_cache: TokenCache,
+        refresh_locks: RefreshLocks,
+    ) -> Self {
+        Self {
             client: StravaClient::new(client_id, client_secret),
             db,
             kms,
-        })
+            token_cache,
+            refresh_locks,
+        }
     }
 
     // ─── Token Management ────────────────────────────────────────────────────
 
     /// Get a valid (non-expired) access token for the given athlete.
     ///
-    /// This method:
-    /// 1. Retrieves encrypted tokens from Firestore
-    /// 2. Decrypts them using KMS
-    /// 3. Checks expiration (with 5-minute margin)
-    /// 4. Refreshes if needed and updates Firestore
-    /// 5. Returns the valid access token
+    /// This method uses a multi-layer optimization strategy:
+    /// 1. Check in-memory cache (fast path - no I/O)
+    /// 2. Acquire per-user lock to prevent duplicate refresh calls
+    /// 3. Re-check cache after lock (another task may have refreshed)
+    /// 4. Fetch from Firestore and decrypt only the access token (lazy)
+    /// 5. If token is valid, cache and return
+    /// 6. If expired, decrypt refresh token and refresh with Strava
+    /// 7. Handle cross-instance races via retry on invalid_grant
     pub async fn get_valid_access_token(&self, athlete_id: u64) -> Result<String, AppError> {
-        // 1. Get encrypted tokens from DB
+        let now = Utc::now();
+        let margin = Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
+
+        // ─────────────────────────────────────────────────────────────
+        // STEP 1: Check cache (fast path - no I/O)
+        // ─────────────────────────────────────────────────────────────
+        if let Some(cached) = self.token_cache.get(&athlete_id) {
+            if now + margin < cached.expires_at {
+                // Cache hit, token still valid
+                return Ok(cached.access_token.clone());
+            }
+            // Token expired or expiring soon - fall through to refresh
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // STEP 2: Acquire per-user refresh lock
+        // ─────────────────────────────────────────────────────────────
+        // This ensures only one task per user performs the refresh.
+        // Other tasks wait here until refresh completes.
+        let lock = self
+            .refresh_locks
+            .entry(athlete_id)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
+
+        let _guard = lock.lock().await;
+
+        // ─────────────────────────────────────────────────────────────
+        // STEP 3: Re-check cache after acquiring lock (double-check)
+        // ─────────────────────────────────────────────────────────────
+        // Another task may have refreshed while we were waiting.
+        if let Some(cached) = self.token_cache.get(&athlete_id) {
+            if now + margin < cached.expires_at {
+                // Another task already refreshed - use cached token
+                return Ok(cached.access_token.clone());
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // STEP 4: Fetch from Firestore and decrypt (LAZY - access only)
+        // ─────────────────────────────────────────────────────────────
         let tokens = self
             .db
             .get_tokens(athlete_id)
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
 
-        // 2. Decrypt tokens
-        let (access_token, refresh_token) = crate::services::kms::decrypt_tokens(
-            &self.kms,
-            &tokens.access_token_encrypted,
-            &tokens.refresh_token_encrypted,
-        )
-        .await?;
+        // LAZY DECRYPTION: Only decrypt access token first
+        let access_token = self.kms.decrypt(&tokens.access_token_encrypted).await?;
 
-        // 3. Check expiration
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&tokens.expires_at)
+        let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
-            .with_timezone(&chrono::Utc);
+            .with_timezone(&Utc);
 
-        let now = chrono::Utc::now();
-        let margin = chrono::Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
-
-        // 4. Refresh if expiring within margin
-        if now + margin >= expires_at {
-            tracing::info!(athlete_id, "Access token expiring soon, refreshing");
-            return self
-                .refresh_and_store_token(athlete_id, &refresh_token, &tokens)
-                .await;
+        // ─────────────────────────────────────────────────────────────
+        // STEP 5: Check if refresh is needed
+        // ─────────────────────────────────────────────────────────────
+        if now + margin < expires_at {
+            // Token is still valid - cache and return
+            self.token_cache.insert(
+                athlete_id,
+                CachedToken {
+                    access_token: access_token.clone(),
+                    expires_at,
+                },
+            );
+            return Ok(access_token);
         }
 
-        // 5. Token is still valid
-        Ok(access_token)
-    }
+        // ─────────────────────────────────────────────────────────────
+        // STEP 6: Token expired - decrypt refresh token and refresh
+        //         with cross-instance race handling
+        // ─────────────────────────────────────────────────────────────
+        tracing::info!(athlete_id, "Access token expired, refreshing");
 
-    /// Refresh the access token and store the new tokens in Firestore.
-    async fn refresh_and_store_token(
-        &self,
-        athlete_id: u64,
-        refresh_token: &str,
-        existing_tokens: &UserTokens,
-    ) -> Result<String, AppError> {
-        // Call Strava to refresh
-        let new_tokens = self.client.refresh_token(refresh_token).await?;
+        let refresh_token = self.kms.decrypt(&tokens.refresh_token_encrypted).await?;
 
-        // Encrypt new tokens
+        // Handle cross-instance race: if another Cloud Run instance already
+        // refreshed the token, Strava will reject our old refresh token.
+        // In that case, fetch the winner's tokens from Firestore.
+        let new_tokens = match self.client.refresh_token(&refresh_token).await {
+            Ok(t) => t,
+            Err(AppError::StravaApi(ref msg)) if msg.contains("invalid_grant") => {
+                tracing::info!(
+                    athlete_id,
+                    "Refresh token race detected - another instance won, fetching their tokens"
+                );
+                return self.fetch_and_cache_from_db(athlete_id).await;
+            }
+            Err(e) => return Err(e),
+        };
+
+        // ─────────────────────────────────────────────────────────────
+        // STEP 7: Encrypt and store new tokens
+        // ─────────────────────────────────────────────────────────────
         let (new_enc_access, new_enc_refresh) = crate::services::kms::encrypt_tokens(
             &self.kms,
             &new_tokens.access_token,
@@ -361,21 +438,57 @@ impl StravaService {
         )
         .await?;
 
-        // Build updated token document
+        let new_expires_at = DateTime::from_timestamp(new_tokens.expires_at, 0).unwrap_or_default();
+
         let updated_tokens = UserTokens {
             access_token_encrypted: new_enc_access,
             refresh_token_encrypted: new_enc_refresh,
-            expires_at: chrono::DateTime::from_timestamp(new_tokens.expires_at, 0)
-                .unwrap_or_default()
-                .to_rfc3339(),
-            scopes: existing_tokens.scopes.clone(),
+            expires_at: new_expires_at.to_rfc3339(),
+            scopes: tokens.scopes.clone(),
         };
 
-        // Store in Firestore
         self.db.set_tokens(athlete_id, &updated_tokens).await?;
 
-        tracing::info!(athlete_id, "Token refreshed and stored");
+        // ─────────────────────────────────────────────────────────────
+        // STEP 8: Update cache with new token
+        // ─────────────────────────────────────────────────────────────
+        self.token_cache.insert(
+            athlete_id,
+            CachedToken {
+                access_token: new_tokens.access_token.clone(),
+                expires_at: new_expires_at,
+            },
+        );
+
+        tracing::info!(athlete_id, "Token refreshed and cached");
         Ok(new_tokens.access_token)
+    }
+
+    /// Fetch fresh tokens from Firestore (after cross-instance race) and cache.
+    ///
+    /// Used when we detect another Cloud Run instance won the refresh race.
+    async fn fetch_and_cache_from_db(&self, athlete_id: u64) -> Result<String, AppError> {
+        let tokens = self
+            .db
+            .get_tokens(athlete_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
+
+        let access_token = self.kms.decrypt(&tokens.access_token_encrypted).await?;
+
+        let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
+            .with_timezone(&Utc);
+
+        self.token_cache.insert(
+            athlete_id,
+            CachedToken {
+                access_token: access_token.clone(),
+                expires_at,
+            },
+        );
+
+        Ok(access_token)
     }
 
     // ─── OAuth Callback Handling ─────────────────────────────────────────────

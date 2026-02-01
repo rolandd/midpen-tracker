@@ -16,6 +16,7 @@ pub mod services;
 
 use config::Config;
 use db::FirestoreDb;
+use services::strava::{RefreshLocks, TokenCache};
 use services::{PreserveService, TasksService};
 
 /// Shared application state.
@@ -24,4 +25,8 @@ pub struct AppState {
     pub db: FirestoreDb,
     pub preserve_service: PreserveService,
     pub tasks_service: TasksService,
+    /// Shared token cache for decrypted access tokens (reduces KMS calls).
+    pub token_cache: TokenCache,
+    /// Shared per-user locks for serializing token refresh operations.
+    pub refresh_locks: RefreshLocks,
 }

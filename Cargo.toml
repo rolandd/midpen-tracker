@@ -59,6 +59,9 @@ google-cloud-kms = { version = "0.6.0", default-features = false, features = ["r
 google-cloud-googleapis = "0.16"
 futures-util = "0.3.31"
 
+# Concurrent data structures
+dashmap = "6"
+
 # TypeScript bindings generation
 # TypeScript bindings generation
 ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }

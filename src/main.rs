@@ -46,12 +46,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Cloud Tasks service initialized"
     );
 
+    // Initialize shared token cache and refresh locks
+    // These are shared across all StravaService instances within this Cloud Run instance
+    let token_cache = std::sync::Arc::new(dashmap::DashMap::new());
+    let refresh_locks = std::sync::Arc::new(dashmap::DashMap::new());
+    tracing::info!("Token cache initialized");
+
     // Build shared state
     let state = Arc::new(AppState {
         config: config.clone(),
         db,
         preserve_service,
         tasks_service,
+        token_cache,
+        refresh_locks,
     });
 
     // Build router
