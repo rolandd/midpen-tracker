@@ -65,8 +65,9 @@ async fn auth_start(
     // Generate random nonce (16 bytes)
     let mut nonce_bytes = [0u8; 16];
     let rng = ring::rand::SystemRandom::new();
-    rng.fill(&mut nonce_bytes)
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Random number generation failed: {}", e)))?;
+    rng.fill(&mut nonce_bytes).map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Random number generation failed: {}", e))
+    })?;
     let nonce_hex = hex::encode(nonce_bytes);
 
     // Encode frontend URL + timestamp + nonce in state
