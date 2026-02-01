@@ -160,13 +160,15 @@ async fn auth_callback(
     let jar = jar.add(cleanup_cookie);
 
     // Decode and verify frontend URL from state parameter
-    let frontend_url = verify_and_decode_state(&params.state, &state.config.oauth_state_key, nonce_cookie.as_deref())
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                "Invalid or tampered state parameter, falling back to default frontend URL"
-            );
-            state.config.frontend_url.clone()
-        });
+    let frontend_url = verify_and_decode_state(
+        &params.state,
+        &state.config.oauth_state_key,
+        nonce_cookie.as_deref(),
+    )
+    .ok_or_else(|| {
+        tracing::warn!("Invalid or tampered state parameter, aborting authentication");
+        AppError::Unauthorized
+    })?;
 
     // Check for OAuth errors
     if let Some(error) = params.error {
@@ -408,7 +410,11 @@ async fn trigger_backfill(
 }
 
 /// Verify HMAC signature and decode the frontend URL from the OAuth state parameter.
-fn verify_and_decode_state(state: &str, secret: &[u8], expected_nonce: Option<&str>) -> Option<String> {
+fn verify_and_decode_state(
+    state: &str,
+    secret: &[u8],
+    expected_nonce: Option<&str>,
+) -> Option<String> {
     let bytes = URL_SAFE_NO_PAD.decode(state).ok()?;
     let state_str = String::from_utf8(bytes).ok()?;
 
@@ -440,12 +446,12 @@ fn verify_and_decode_state(state: &str, secret: &[u8], expected_nonce: Option<&s
     // Verify nonce
     if let Some(expected) = expected_nonce {
         if nonce_hex != expected {
-             tracing::warn!("OAuth state nonce mismatch! CSRF attack?");
-             return None;
+            tracing::warn!("OAuth state nonce mismatch! CSRF attack?");
+            return None;
         }
     } else {
-         tracing::warn!("Missing nonce cookie for verification");
-         return None;
+        tracing::warn!("Missing nonce cookie for verification");
+        return None;
     }
 
     // Verify timestamp
@@ -518,7 +524,12 @@ mod tests {
     use super::*;
 
     // Helper to generate a valid state for testing
-    fn generate_test_state(frontend_url: &str, timestamp: u128, nonce: &str, secret: &[u8]) -> String {
+    fn generate_test_state(
+        frontend_url: &str,
+        timestamp: u128,
+        nonce: &str,
+        secret: &[u8],
+    ) -> String {
         let payload = format!("{}|{:x}|{}", frontend_url, timestamp, nonce);
         let mut mac = HmacSha256::new_from_slice(secret).unwrap();
         mac.update(payload.as_bytes());
