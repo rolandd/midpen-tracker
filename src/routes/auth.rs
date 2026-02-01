@@ -11,7 +11,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite}; // Added axum-extra
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use rand::RngCore;
+use ring::rand::SecureRandom;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -64,7 +64,9 @@ async fn auth_start(
 
     // Generate random nonce (16 bytes)
     let mut nonce_bytes = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let rng = ring::rand::SystemRandom::new();
+    rng.fill(&mut nonce_bytes)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Random number generation failed: {}", e)))?;
     let nonce_hex = hex::encode(nonce_bytes);
 
     // Encode frontend URL + timestamp + nonce in state

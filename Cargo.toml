@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ring = "0.17"
 # Web framework
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
@@ -64,7 +65,6 @@ ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }
 hmac = "0.12.1"
 sha2 = "0.10.9"
 hex = "0.4.3"
-rand = "0.8"
 hkdf = "0.12.4"
 subtle = "2"
 
