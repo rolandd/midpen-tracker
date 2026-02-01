@@ -29,6 +29,8 @@ async fn create_offline_test_app() -> axum::Router {
         db,
         preserve_service,
         tasks_service,
+        token_cache: Arc::new(dashmap::DashMap::new()),
+        refresh_locks: Arc::new(dashmap::DashMap::new()),
     });
 
     create_router(state)

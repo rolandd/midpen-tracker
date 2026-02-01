@@ -67,6 +67,8 @@ async fn create_test_app() -> (axum::Router, Vec<u8>) {
         db,
         preserve_service,
         tasks_service,
+        token_cache: Arc::new(dashmap::DashMap::new()),
+        refresh_locks: Arc::new(dashmap::DashMap::new()),
     });
 
     (create_router(state), signing_key)

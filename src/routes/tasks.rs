@@ -13,6 +13,7 @@ use crate::services::strava::StravaService;
 use crate::services::tasks::{
     ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload,
 };
+use crate::services::KmsService;
 use crate::AppState;
 use axum::{
     extract::{Json, State},
@@ -33,16 +34,23 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Create a StravaService from app state.
 /// Helper to avoid duplicating the KMS initialization logic.
+/// Uses the shared token cache and refresh locks from AppState.
 async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
-    StravaService::new(
+    let kms = KmsService::new(
+        &state.config.gcp_project_id,
+        &state.config.gcp_region,
+        "token-encryption",
+    )
+    .await?;
+
+    Ok(StravaService::new(
         state.config.strava_client_id.clone(),
         state.config.strava_client_secret.clone(),
         state.db.clone(),
-        state.config.gcp_project_id.clone(),
-        state.config.gcp_region.clone(),
-        "token-encryption".to_string(),
-    )
-    .await
+        kms,
+        state.token_cache.clone(),
+        state.refresh_locks.clone(),
+    ))
 }
 
 /// Process a single activity (called by Cloud Tasks).
