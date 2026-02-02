@@ -81,7 +81,8 @@
 				made with ❤️ in mountain view, ca by <a
 					href="https://github.com/rolandd"
 					target="_blank"
-					rel="noopener">roland</a
+					rel="noopener"
+					aria-label="Roland on GitHub (opens in new tab)">roland</a
 				>
 			</span>
 			<span class="separator">•</span>

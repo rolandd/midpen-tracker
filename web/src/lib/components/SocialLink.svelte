@@ -9,7 +9,13 @@
 	}: { platform: 'github' | 'bluesky'; href: string; username: string } = $props();
 </script>
 
-<a {href} target="_blank" rel="noopener" class="social-btn {platform}">
+<a
+	{href}
+	target="_blank"
+	rel="noopener"
+	class="social-btn {platform}"
+	aria-label="{username} on {platform} (opens in new tab)"
+>
 	{#if platform === 'github'}
 		<svg
 			height="20"
