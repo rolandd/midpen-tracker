@@ -16,6 +16,9 @@ use crate::models::{Activity, ActivityPreserve, User};
 use futures_util::{stream, StreamExt};
 
 const MAX_CONCURRENT_DB_OPS: usize = 50;
+// Firestore limits batch/transaction writes to 500 operations.
+// We use a safe limit of 400 to allow headroom.
+const BATCH_SIZE: usize = 400;
 
 /// Firestore database client.
 #[derive(Clone)]
@@ -509,6 +512,50 @@ impl FirestoreDb {
         Ok(true)
     }
 
+    // ─── Helper Methods ────────────────────────────────────────────
+
+    /// Helper to batch delete documents using transactions.
+    async fn batch_delete<T, F>(
+        &self,
+        items: &[T],
+        collection: &str,
+        id_extractor: F,
+    ) -> Result<(), AppError>
+    where
+        F: Fn(&T) -> String,
+    {
+        let client = self.get_client()?;
+
+        for chunk in items.chunks(BATCH_SIZE) {
+            let mut transaction = client
+                .begin_transaction()
+                .await
+                .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+
+            for item in chunk {
+                let doc_id = id_extractor(item);
+                client
+                    .fluent()
+                    .delete()
+                    .from(collection)
+                    .document_id(&doc_id)
+                    .add_to_transaction(&mut transaction)
+                    .map_err(|e| {
+                        AppError::Database(format!(
+                            "Failed to add deletion to transaction for {}: {}",
+                            collection, e
+                        ))
+                    })?;
+            }
+
+            transaction.commit().await.map_err(|e| {
+                AppError::Database(format!("Failed to commit batch deletion: {}", e))
+            })?;
+        }
+
+        Ok(())
+    }
+
     // ─── User Data Deletion (GDPR) ─────────────────────────────────
 
     /// Delete ALL data for a user (GDPR compliance).
@@ -539,26 +586,15 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))?;
 
         let count = preserve_records.len();
-        let client = self.get_client()?;
-
-        stream::iter(preserve_records)
-            .map(|record| async move {
+        self.batch_delete(
+            &preserve_records,
+            collections::ACTIVITY_PRESERVES,
+            |record: &ActivityPreserve| {
                 let safe_name = urlencoding::encode(&record.preserve_name);
-                let doc_id = format!("{}_{}", record.activity_id, safe_name);
-                client
-                    .fluent()
-                    .delete()
-                    .from(collections::ACTIVITY_PRESERVES)
-                    .document_id(&doc_id)
-                    .execute()
-                    .await
-                    .map_err(|e| AppError::Database(e.to_string()))
-            })
-            .buffer_unordered(MAX_CONCURRENT_DB_OPS)
-            .collect::<Vec<Result<(), AppError>>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<()>, AppError>>()?;
+                format!("{}_{}", record.activity_id, safe_name)
+            },
+        )
+        .await?;
 
         deleted_count += count;
         tracing::debug!(athlete_id, count, "Deleted activity-preserve records");
@@ -576,22 +612,12 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(e.to_string()))?;
 
         let count = activities.len();
-        stream::iter(activities)
-            .map(|activity| async move {
-                client
-                    .fluent()
-                    .delete()
-                    .from(collections::ACTIVITIES)
-                    .document_id(activity.strava_activity_id.to_string())
-                    .execute()
-                    .await
-                    .map_err(|e| AppError::Database(e.to_string()))
-            })
-            .buffer_unordered(MAX_CONCURRENT_DB_OPS)
-            .collect::<Vec<Result<(), AppError>>>()
-            .await
-            .into_iter()
-            .collect::<Result<Vec<()>, AppError>>()?;
+        self.batch_delete(
+            &activities,
+            collections::ACTIVITIES,
+            |activity: &Activity| activity.strava_activity_id.to_string(),
+        )
+        .await?;
 
         deleted_count += count;
         tracing::debug!(athlete_id, count, "Deleted activities");
