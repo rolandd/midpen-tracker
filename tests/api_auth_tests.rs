@@ -52,7 +52,7 @@ fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
 async fn create_test_app() -> (axum::Router, Vec<u8>) {
     use midpen_tracker::config::Config;
     use midpen_tracker::routes::create_router;
-    use midpen_tracker::services::{PreserveService, TasksService};
+    use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
     use midpen_tracker::AppState;
 
     let config = Config::test_default();
@@ -62,13 +62,25 @@ async fn create_test_app() -> (axum::Router, Vec<u8>) {
     let preserve_service = PreserveService::default();
     let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
 
+    let kms = KmsService::new_mock();
+    let token_cache = Arc::new(dashmap::DashMap::new());
+    let refresh_locks = Arc::new(dashmap::DashMap::new());
+
+    let strava_service = StravaService::new(
+        config.strava_client_id.clone(),
+        config.strava_client_secret.clone(),
+        db.clone(),
+        kms,
+        token_cache,
+        refresh_locks,
+    );
+
     let state = Arc::new(AppState {
         config,
         db,
         preserve_service,
         tasks_service,
-        token_cache: Arc::new(dashmap::DashMap::new()),
-        refresh_locks: Arc::new(dashmap::DashMap::new()),
+        strava_service,
     });
 
     (create_router(state), signing_key)

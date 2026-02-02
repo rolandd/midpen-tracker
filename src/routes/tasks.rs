@@ -9,11 +9,9 @@
 use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
-use crate::services::strava::StravaService;
 use crate::services::tasks::{
     ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload,
 };
-use crate::services::KmsService;
 use crate::AppState;
 use axum::{
     extract::{Json, State},
@@ -30,27 +28,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tasks/continue-backfill", post(continue_backfill))
         .route("/tasks/delete-user", post(delete_user))
         .route("/tasks/delete-activity", post(delete_activity))
-}
-
-/// Create a StravaService from app state.
-/// Helper to avoid duplicating the KMS initialization logic.
-/// Uses the shared token cache and refresh locks from AppState.
-async fn create_strava_service(state: &AppState) -> Result<StravaService, AppError> {
-    let kms = KmsService::new(
-        &state.config.gcp_project_id,
-        &state.config.gcp_region,
-        "token-encryption",
-    )
-    .await?;
-
-    Ok(StravaService::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-        state.db.clone(),
-        kms,
-        state.token_cache.clone(),
-        state.refresh_locks.clone(),
-    ))
 }
 
 /// Process a single activity (called by Cloud Tasks).
@@ -85,14 +62,8 @@ async fn process_activity(
         "Processing activity from Cloud Task"
     );
 
-    // Create StravaService
-    let strava = match create_strava_service(&state).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to create StravaService");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
+    // Use shared StravaService
+    let strava = state.strava_service.clone();
 
     // Create activity processor
     let processor =
@@ -176,14 +147,8 @@ async fn continue_backfill(
         "Continuing backfill from Cloud Task"
     );
 
-    // Create StravaService (handles token refresh automatically)
-    let strava = match create_strava_service(&state).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to create StravaService");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
+    // Use shared StravaService (handles token refresh automatically)
+    let strava = state.strava_service.clone();
 
     // Fetch next page of activities (token refresh is handled by StravaService)
     let per_page = 100u32;
@@ -406,14 +371,8 @@ async fn delete_user(
         "Processing user deletion from Cloud Task"
     );
 
-    // Create StravaService
-    let strava = match create_strava_service(&state).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to create StravaService for deletion");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
+    // Use shared StravaService
+    let strava = state.strava_service.clone();
 
     // Verify-before-Act: If source is webhook (deauthorization), ensure the token is actually invalid.
     if payload.source == "webhook" {
@@ -576,14 +535,8 @@ async fn delete_activity(
         "Processing activity deletion from Cloud Task"
     );
 
-    // Create StravaService
-    let strava = match create_strava_service(&state).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to create StravaService for deletion");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-    };
+    // Use shared StravaService
+    let strava = state.strava_service.clone();
 
     // Verify-before-Act: Check if activity still exists on Strava
     match strava

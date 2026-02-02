@@ -15,7 +15,7 @@ async fn create_offline_test_app() -> axum::Router {
     use midpen_tracker::config::Config;
     use midpen_tracker::db::FirestoreDb;
     use midpen_tracker::routes::create_router;
-    use midpen_tracker::services::{PreserveService, TasksService};
+    use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
     use midpen_tracker::AppState;
     use std::sync::Arc;
 
@@ -24,13 +24,25 @@ async fn create_offline_test_app() -> axum::Router {
     let preserve_service = PreserveService::default();
     let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
 
+    let kms = KmsService::new_mock();
+    let token_cache = Arc::new(dashmap::DashMap::new());
+    let refresh_locks = Arc::new(dashmap::DashMap::new());
+
+    let strava_service = StravaService::new(
+        config.strava_client_id.clone(),
+        config.strava_client_secret.clone(),
+        db.clone(),
+        kms,
+        token_cache,
+        refresh_locks,
+    );
+
     let state = Arc::new(AppState {
         config,
         db,
         preserve_service,
         tasks_service,
-        token_cache: Arc::new(dashmap::DashMap::new()),
-        refresh_locks: Arc::new(dashmap::DashMap::new()),
+        strava_service,
     });
 
     create_router(state)
