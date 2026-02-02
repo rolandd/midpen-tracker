@@ -4,7 +4,7 @@
 //! Preserve loading and intersection detection service.
 
 use crate::models::preserve::{Preserve, PreserveGeometry};
-use geo::{LineString, MultiPolygon, Polygon};
+use geo::{BoundingRect, Intersects, LineString, MultiPolygon, Polygon};
 use geojson::GeoJson;
 use std::fs;
 use std::path::Path;
@@ -52,11 +52,16 @@ impl PreserveService {
 
                 if let Some(geom) = feature.geometry {
                     let geometry = Self::convert_geometry(geom.value)?;
-                    preserves.push(Preserve {
-                        name,
-                        url,
-                        geometry,
-                    });
+                    // Calculate bounding box at load time for O(1) checks
+                    // If geometry is empty/invalid (no bbox), we skip it as it can't intersect anything
+                    if let Some(bbox) = geometry.bounding_rect() {
+                        preserves.push(Preserve {
+                            name,
+                            url,
+                            geometry,
+                            bbox,
+                        });
+                    }
                 }
             }
         }
@@ -91,9 +96,21 @@ impl PreserveService {
 
     /// Find all preserves that intersect with a given line string.
     pub fn find_intersections(&self, line: &LineString<f64>) -> Vec<String> {
+        // Optimization: Compute the bounding box of the line once.
+        // If the line is empty (no bbox), it intersects nothing.
+        let line_bbox = match line.bounding_rect() {
+            Some(b) => b,
+            None => return Vec::new(),
+        };
+
         self.preserves
             .iter()
-            .filter(|p| p.geometry.intersects(line))
+            .filter(|p| {
+                // Cheap Bounding Box Check: O(1)
+                p.bbox.intersects(&line_bbox) &&
+                // Expensive Geometry Check: O(N)
+                p.geometry.intersects(line)
+            })
             .map(|p| p.name.clone())
             .collect()
     }
