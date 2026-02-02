@@ -99,6 +99,7 @@
 				target="_blank"
 				rel="noopener noreferrer"
 				class="group flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-[var(--color-text-muted)] no-underline text-sm transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]"
+				aria-label="View on Strava (opens in new tab)"
 			>
 				View on Strava
 				<svg
