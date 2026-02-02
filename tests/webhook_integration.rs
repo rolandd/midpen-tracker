@@ -10,47 +10,11 @@ use axum::{
 use serde_json::json;
 use tower::ServiceExt;
 
-/// Create a test app with mock dependencies (no GCP required)
-async fn create_offline_test_app() -> axum::Router {
-    use midpen_tracker::config::Config;
-    use midpen_tracker::db::FirestoreDb;
-    use midpen_tracker::routes::create_router;
-    use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
-    use midpen_tracker::AppState;
-    use std::sync::Arc;
-
-    let config = Config::test_default();
-    let db = FirestoreDb::new_mock();
-    let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
-
-    let kms = KmsService::new_mock();
-    let token_cache = Arc::new(dashmap::DashMap::new());
-    let refresh_locks = Arc::new(dashmap::DashMap::new());
-
-    let strava_service = StravaService::new(
-        config.strava_client_id.clone(),
-        config.strava_client_secret.clone(),
-        db.clone(),
-        kms,
-        token_cache,
-        refresh_locks,
-    );
-
-    let state = Arc::new(AppState {
-        config,
-        db,
-        preserve_service,
-        tasks_service,
-        strava_service,
-    });
-
-    create_router(state)
-}
+mod common;
 
 #[tokio::test]
 async fn test_webhook_verification() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let challenge = "test_challenge_123";
     let verify_token = "test_verify_token"; // Matches Config::default()
@@ -81,7 +45,7 @@ async fn test_webhook_verification() {
 
 #[tokio::test]
 async fn test_webhook_verification_wrong_token() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let challenge = "test_challenge_123";
     let wrong_token = "wrong_token";
@@ -112,7 +76,7 @@ async fn test_webhook_verification_wrong_token() {
 
 #[tokio::test]
 async fn test_webhook_event_create_activity() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -141,7 +105,7 @@ async fn test_webhook_event_create_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_update_activity() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "update",
@@ -171,7 +135,7 @@ async fn test_webhook_event_update_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_delete_activity() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "delete",
@@ -200,7 +164,7 @@ async fn test_webhook_event_delete_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_athlete_deauthorize() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "update",
@@ -230,7 +194,7 @@ async fn test_webhook_event_athlete_deauthorize() {
 
 #[tokio::test]
 async fn test_webhook_event_unknown_type() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "unknown_aspect",
@@ -259,7 +223,7 @@ async fn test_webhook_event_unknown_type() {
 
 #[tokio::test]
 async fn test_webhook_event_wrong_subscription_id() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -288,7 +252,7 @@ async fn test_webhook_event_wrong_subscription_id() {
 
 #[tokio::test]
 async fn test_webhook_event_wrong_uuid() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -317,7 +281,7 @@ async fn test_webhook_event_wrong_uuid() {
 
 #[tokio::test]
 async fn test_health_endpoint() {
-    let app = create_offline_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(

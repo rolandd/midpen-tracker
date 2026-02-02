@@ -12,46 +12,9 @@ use tower::ServiceExt;
 
 mod common;
 
-/// Create a test app without GCP dependencies
-async fn create_test_app() -> axum::Router {
-    use midpen_tracker::config::Config;
-    use midpen_tracker::routes::create_router;
-    use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
-    use midpen_tracker::AppState;
-    use std::sync::Arc;
-
-    let config = Config::test_default();
-    let db = common::test_db_offline();
-    let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
-
-    let kms = KmsService::new_mock();
-    let token_cache = Arc::new(dashmap::DashMap::new());
-    let refresh_locks = Arc::new(dashmap::DashMap::new());
-
-    let strava_service = StravaService::new(
-        config.strava_client_id.clone(),
-        config.strava_client_secret.clone(),
-        db.clone(),
-        kms,
-        token_cache,
-        refresh_locks,
-    );
-
-    let state = Arc::new(AppState {
-        config,
-        db,
-        preserve_service,
-        tasks_service,
-        strava_service,
-    });
-
-    create_router(state)
-}
-
 #[tokio::test]
 async fn test_process_activity_no_header_forbidden() {
-    let app = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "activity_id": 12345,
@@ -76,7 +39,7 @@ async fn test_process_activity_no_header_forbidden() {
 
 #[tokio::test]
 async fn test_process_activity_with_header_allowed() {
-    let app = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "activity_id": 12345,
@@ -106,7 +69,7 @@ async fn test_process_activity_with_header_allowed() {
 
 #[tokio::test]
 async fn test_process_activity_wrong_queue_name_forbidden() {
-    let app = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "activity_id": 12345,
@@ -132,7 +95,7 @@ async fn test_process_activity_wrong_queue_name_forbidden() {
 
 #[tokio::test]
 async fn test_continue_backfill_no_header_forbidden() {
-    let app = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "athlete_id": 67890,

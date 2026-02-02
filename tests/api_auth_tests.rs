@@ -14,7 +14,6 @@ use axum::{
 };
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use serde::Serialize;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
@@ -48,47 +47,9 @@ fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
     .unwrap()
 }
 
-/// Create a test app with known signing key.
-async fn create_test_app() -> (axum::Router, Vec<u8>) {
-    use midpen_tracker::config::Config;
-    use midpen_tracker::routes::create_router;
-    use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
-    use midpen_tracker::AppState;
-
-    let config = Config::test_default();
-    let signing_key = config.jwt_signing_key.clone();
-
-    let db = common::test_db_offline();
-    let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
-
-    let kms = KmsService::new_mock();
-    let token_cache = Arc::new(dashmap::DashMap::new());
-    let refresh_locks = Arc::new(dashmap::DashMap::new());
-
-    let strava_service = StravaService::new(
-        config.strava_client_id.clone(),
-        config.strava_client_secret.clone(),
-        db.clone(),
-        kms,
-        token_cache,
-        refresh_locks,
-    );
-
-    let state = Arc::new(AppState {
-        config,
-        db,
-        preserve_service,
-        tasks_service,
-        strava_service,
-    });
-
-    (create_router(state), signing_key)
-}
-
 #[tokio::test]
 async fn test_protected_route_without_token() {
-    let (app, _) = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -107,7 +68,7 @@ async fn test_protected_route_without_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_invalid_token() {
-    let (app, _) = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -127,8 +88,8 @@ async fn test_protected_route_with_invalid_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_valid_token() {
-    let (app, signing_key) = create_test_app().await;
-    let token = create_test_jwt(12345, &signing_key);
+    let (app, state) = common::create_test_app();
+    let token = create_test_jwt(12345, &state.config.jwt_signing_key);
 
     let response = app
         .oneshot(
@@ -154,7 +115,7 @@ async fn test_protected_route_with_valid_token() {
 
 #[tokio::test]
 async fn test_cors_preflight() {
-    let (app, _) = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -183,7 +144,7 @@ async fn test_cors_preflight() {
 
 #[tokio::test]
 async fn test_public_route_no_auth_required() {
-    let (app, _) = create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
