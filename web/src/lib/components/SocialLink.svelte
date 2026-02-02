@@ -7,6 +7,13 @@
 		href,
 		username
 	}: { platform: 'github' | 'bluesky'; href: string; username: string } = $props();
+
+	let platformName = $derived(
+		{
+			github: 'GitHub',
+			bluesky: 'Bluesky'
+		}[platform]
+	);
 </script>
 
 <a
@@ -14,7 +21,7 @@
 	target="_blank"
 	rel="noopener"
 	class="social-btn {platform}"
-	aria-label="{username} on {platform} (opens in new tab)"
+	aria-label="{username} on {platformName} (opens in new tab)"
 >
 	{#if platform === 'github'}
 		<svg

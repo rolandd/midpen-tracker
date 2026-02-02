@@ -82,7 +82,7 @@
 					href="https://github.com/rolandd"
 					target="_blank"
 					rel="noopener"
-					aria-label="Roland on GitHub (opens in new tab)">roland</a
+					aria-label="rolandd on GitHub (opens in new tab)">roland</a
 				>
 			</span>
 			<span class="separator">•</span>
