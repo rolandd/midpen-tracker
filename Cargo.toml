@@ -73,3 +73,10 @@ subtle = "2"
 
 [features]
 binding-generation = ["ts-rs"]
+
+[dev-dependencies]
+criterion = "0.8.1"
+
+[[bench]]
+name = "preserve_benchmark"
+harness = false

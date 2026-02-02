@@ -3,7 +3,7 @@
 
 //! Midpen Preserve model and geometry handling.
 
-use geo::{MultiPolygon, Polygon};
+use geo::{BoundingRect, MultiPolygon, Polygon, Rect};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "binding-generation")]
 use ts_rs::TS;
@@ -17,6 +17,8 @@ pub struct Preserve {
     pub url: String,
     /// Boundary geometry (can be Polygon or MultiPolygon)
     pub geometry: PreserveGeometry,
+    /// Bounding box for quick intersection checks
+    pub bbox: Rect<f64>,
 }
 
 /// Preserve geometry - either a simple polygon or multi-polygon.
@@ -27,6 +29,14 @@ pub enum PreserveGeometry {
 }
 
 impl PreserveGeometry {
+    /// Get the bounding rectangle of the geometry.
+    pub fn bounding_rect(&self) -> Option<Rect<f64>> {
+        match self {
+            PreserveGeometry::Polygon(p) => p.bounding_rect(),
+            PreserveGeometry::MultiPolygon(mp) => mp.bounding_rect(),
+        }
+    }
+
     /// Check if a line string intersects this geometry.
     pub fn intersects(&self, line: &geo::LineString<f64>) -> bool {
         use geo::Intersects;
