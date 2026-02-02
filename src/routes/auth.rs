@@ -290,14 +290,16 @@ fn validate_redirect_uri(uri: &str, allowed_base: &str) -> bool {
     }
 
     // 2. Sub-path match (must be a directory boundary)
-    // Ensure allowed_base ends with '/' for the check, unless it already does
-    let base_with_slash = if allowed_base.ends_with('/') {
-        allowed_base.to_string()
-    } else {
-        format!("{}/", allowed_base)
-    };
+    // Normalize allowed_base by removing trailing slash if present
+    // so that we can consistently check for a '/' separator in the suffix
+    let base_trimmed = allowed_base.strip_suffix('/').unwrap_or(allowed_base);
 
-    uri.starts_with(&base_with_slash)
+    // Check if uri starts with base_trimmed followed by '/'
+    if let Some(suffix) = uri.strip_prefix(base_trimmed) {
+        return suffix.starts_with('/');
+    }
+
+    false
 }
 
 /// Extract a cookie domain from a URL for cross-subdomain sharing.
@@ -801,6 +803,34 @@ mod tests {
         assert!(!validate_redirect_uri(
             "https://evil.com",
             "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_query_string() {
+        // Should be rejected as it's not exact match and no '/' separator
+        assert!(!validate_redirect_uri(
+            "https://example.com?foo=bar",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_double_slash() {
+        // "https://example.com//evil" -> suffix "//evil" starts with '/'
+        // Accepted as it is same-origin
+        assert!(validate_redirect_uri(
+            "https://example.com//evil",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_trailing_slash_base() {
+        // Base has trailing slash
+        assert!(validate_redirect_uri(
+            "https://example.com/dashboard",
+            "https://example.com/"
         ));
     }
 }
