@@ -12,3 +12,8 @@
 **Vulnerability:** OAuth state parameter only contained a signed timestamp/url, preventing tampering but allowing replay attacks (Login CSRF) from other sessions.
 **Learning:** Signed stateless tokens verify the *server* generated them, but not *which client* requested them.
 **Prevention:** Bind the OAuth state to the browser session using a short-lived HttpOnly nonce cookie matched against the state payload.
+
+## 2026-07-20 - Open Redirect in OAuth Flow
+**Vulnerability:** Open Redirect in OAuth initialization allowed attackers to redirect users to malicious sites after login via `redirect_uri` parameter.
+**Learning:** Validating redirects against a trusted base URL requires careful handling of trailing slashes to prevent prefix attacks (e.g. `site.com.evil.com`).
+**Prevention:** Strictly validate `redirect_uri` against the configured frontend origin, ensuring directory boundary checks.

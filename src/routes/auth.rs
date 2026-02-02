@@ -59,9 +59,21 @@ async fn auth_start(
     headers: axum::http::HeaderMap,
 ) -> Result<impl IntoResponse> {
     // Get the frontend URL from query param or fall back to config
-    let frontend_url = params
-        .redirect_uri
-        .unwrap_or_else(|| state.config.frontend_url.clone());
+    // Strictly validate redirect_uri to prevent open redirects
+    let frontend_url = if let Some(ref uri) = params.redirect_uri {
+        if validate_redirect_uri(uri, &state.config.frontend_url) {
+            uri.clone()
+        } else {
+            tracing::warn!(
+                requested_uri = %uri,
+                configured_url = %state.config.frontend_url,
+                "Invalid redirect_uri provided, falling back to default"
+            );
+            state.config.frontend_url.clone()
+        }
+    } else {
+        state.config.frontend_url.clone()
+    };
 
     // Generate random nonce (16 bytes)
     let mut nonce_bytes = [0u8; 16];
@@ -265,6 +277,29 @@ async fn auth_callback(
         jar.add(cookie).add(hint_cookie),
         Redirect::temporary(&redirect_url),
     ))
+}
+
+/// Validate that a redirect URI matches the allowed base URL.
+///
+/// Returns true if `uri` equals `allowed_base` OR if `uri` starts with `allowed_base` + "/".
+/// This prevents prefix attacks (e.g., allowed="http://site.com", uri="http://site.com.evil.com").
+fn validate_redirect_uri(uri: &str, allowed_base: &str) -> bool {
+    // 1. Exact match
+    if uri == allowed_base {
+        return true;
+    }
+
+    // 2. Sub-path match (must be a directory boundary)
+    // Normalize allowed_base by removing trailing slash if present
+    // so that we can consistently check for a '/' separator in the suffix
+    let base_trimmed = allowed_base.strip_suffix('/').unwrap_or(allowed_base);
+
+    // Check if uri starts with base_trimmed followed by '/'
+    if let Some(suffix) = uri.strip_prefix(base_trimmed) {
+        return suffix.starts_with('/');
+    }
+
+    false
 }
 
 /// Extract a cookie domain from a URL for cross-subdomain sharing.
@@ -728,5 +763,74 @@ mod tests {
     fn test_extract_cookie_domain_simple() {
         let url = "https://example.com";
         assert_eq!(extract_cookie_domain(url), Some(".example.com".to_string()));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_exact() {
+        assert!(validate_redirect_uri(
+            "https://example.com",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_subpath() {
+        assert!(validate_redirect_uri(
+            "https://example.com/dashboard",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_subpath_with_slash_base() {
+        assert!(validate_redirect_uri(
+            "https://example.com/dashboard",
+            "https://example.com/"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_prefix_attack() {
+        // Should reject if it just starts with the string but isn't a path
+        assert!(!validate_redirect_uri(
+            "https://example.com.evil.com",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_different_domain() {
+        assert!(!validate_redirect_uri(
+            "https://evil.com",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_query_string() {
+        // Should be rejected as it's not exact match and no '/' separator
+        assert!(!validate_redirect_uri(
+            "https://example.com?foo=bar",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_double_slash() {
+        // "https://example.com//evil" -> suffix "//evil" starts with '/'
+        // Accepted as it is same-origin
+        assert!(validate_redirect_uri(
+            "https://example.com//evil",
+            "https://example.com"
+        ));
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_trailing_slash_base() {
+        // Base has trailing slash
+        assert!(validate_redirect_uri(
+            "https://example.com/dashboard",
+            "https://example.com/"
+        ));
     }
 }
