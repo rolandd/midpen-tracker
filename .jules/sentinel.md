@@ -17,3 +17,8 @@
 **Vulnerability:** Open Redirect in OAuth initialization allowed attackers to redirect users to malicious sites after login via `redirect_uri` parameter.
 **Learning:** Validating redirects against a trusted base URL requires careful handling of trailing slashes to prevent prefix attacks (e.g. `site.com.evil.com`).
 **Prevention:** Strictly validate `redirect_uri` against the configured frontend origin, ensuring directory boundary checks.
+
+## 2026-07-20 - Token Caching Bypasses Deauthorization Checks
+**Vulnerability:** The system relied on cached access tokens to "verify" deauthorization webhooks. If a token was cached (valid timestamp), the system assumed the user was still authorized and treated the deauth webhook as fake/spoofed, failing to delete user data.
+**Learning:** Local token caches (based on timestamps) are not authoritative for revocation status. A token can be valid locally but revoked upstream.
+**Prevention:** When verifying destructive events (like deauthorization), bypass the local cache and force a live API call (e.g., `get_athlete`) to confirm the token's status with the provider.

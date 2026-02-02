@@ -35,6 +35,21 @@ pub enum AppError {
     Internal(#[from] anyhow::Error),
 }
 
+impl AppError {
+    pub const STRAVA_TOKEN_ERROR: &'static str = "Token expired or invalid";
+    pub const STRAVA_RATE_LIMIT: &'static str = "Rate limit exceeded";
+
+    /// Check if this error indicates a Strava token issue (expired/revoked).
+    pub fn is_strava_token_error(&self) -> bool {
+        match self {
+            AppError::StravaApi(msg) => {
+                msg.contains("Token expired") || msg.contains("invalid") || msg.contains("Invalid")
+            }
+            _ => false,
+        }
+    }
+}
+
 /// JSON error response body
 #[derive(Serialize)]
 struct ErrorResponse {

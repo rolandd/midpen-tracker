@@ -136,6 +136,12 @@ impl StravaClient {
         Ok(())
     }
 
+    /// Get authenticated athlete profile.
+    pub async fn get_athlete(&self, access_token: &str) -> Result<StravaAthlete, AppError> {
+        let url = format!("{}/athlete", self.base_url);
+        self.get_json(&url, access_token).await
+    }
+
     /// Generic GET request with JSON response.
     async fn get_json<T: for<'de> Deserialize<'de>>(
         &self,
@@ -165,12 +171,14 @@ impl StravaClient {
         // Rate limit - should trigger Cloud Tasks retry
         if status.as_u16() == 429 {
             tracing::warn!("Strava rate limit hit (429)");
-            return Err(AppError::StravaApi("Rate limit exceeded".to_string()));
+            return Err(AppError::StravaApi(AppError::STRAVA_RATE_LIMIT.to_string()));
         }
 
         // Unauthorized - token may be expired
         if status.as_u16() == 401 {
-            return Err(AppError::StravaApi("Token expired or invalid".to_string()));
+            return Err(AppError::StravaApi(
+                AppError::STRAVA_TOKEN_ERROR.to_string(),
+            ));
         }
 
         Err(AppError::StravaApi(format!("HTTP {}: {}", status, body)))
@@ -187,11 +195,13 @@ impl StravaClient {
 
             if status.as_u16() == 429 {
                 tracing::warn!("Strava rate limit hit (429)");
-                return Err(AppError::StravaApi("Rate limit exceeded".to_string()));
+                return Err(AppError::StravaApi(AppError::STRAVA_RATE_LIMIT.to_string()));
             }
 
             if status.as_u16() == 401 {
-                return Err(AppError::StravaApi("Token expired or invalid".to_string()));
+                return Err(AppError::StravaApi(
+                    AppError::STRAVA_TOKEN_ERROR.to_string(),
+                ));
             }
 
             return Err(AppError::StravaApi(format!("HTTP {}: {}", status, body)));
@@ -634,6 +644,26 @@ impl StravaService {
         self.client.deauthorize(access_token).await
     }
 
+    /// Verify that the user's token is still valid by making a request to Strava.
+    /// This bypasses the cache's assumption of validity based on timestamp.
+    /// Returns Ok(true) if active, Ok(false) if revoked/expired, Err on other errors.
+    pub async fn verify_token_active(&self, athlete_id: u64) -> Result<bool, AppError> {
+        // Attempt to get a candidate token (refreshing if needed)
+        let access_token = match self.get_valid_access_token(athlete_id).await {
+            Ok(t) => t,
+            // If we can't get a token due to Auth/Refresh failure, it's definitely not active
+            Err(e) if e.is_strava_token_error() => return Ok(false),
+            Err(e) => return Err(e),
+        };
+
+        // Validate against Strava API using a lightweight call
+        match self.client.get_athlete(&access_token).await {
+            Ok(_) => Ok(true),
+            Err(e) if e.is_strava_token_error() => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Revoke local tokens from DB and return a valid access token for final cleanup.
     ///
     /// This method:
@@ -714,8 +744,8 @@ struct StravaTokenExchangeResponse {
 
 /// Athlete info from OAuth token exchange.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-struct StravaAthlete {
-    id: u64,
+pub struct StravaAthlete {
+    pub id: u64,
     firstname: String,
     lastname: String,
     profile: Option<String>,
