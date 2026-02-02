@@ -9,7 +9,7 @@
 use midpen_tracker::{
     config::Config,
     db::FirestoreDb,
-    services::{PreserveService, TasksService},
+    services::{KmsService, PreserveService, StravaService, TasksService},
     AppState,
 };
 use std::sync::Arc;
@@ -46,11 +46,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Cloud Tasks service initialized"
     );
 
+    // Initialize KMS service
+    let kms = KmsService::new(
+        &config.gcp_project_id,
+        &config.gcp_region,
+        "token-encryption",
+    )
+    .await
+    .expect("Failed to initialize KMS service");
+    tracing::info!("KMS service initialized");
+
     // Initialize shared token cache and refresh locks
     // These are shared across all StravaService instances within this Cloud Run instance
     let token_cache = std::sync::Arc::new(dashmap::DashMap::new());
     let refresh_locks = std::sync::Arc::new(dashmap::DashMap::new());
     tracing::info!("Token cache initialized");
+
+    // Initialize Strava service
+    let strava_service = StravaService::new(
+        config.strava_client_id.clone(),
+        config.strava_client_secret.clone(),
+        db.clone(),
+        kms,
+        token_cache,
+        refresh_locks,
+    );
 
     // Build shared state
     let state = Arc::new(AppState {
@@ -58,8 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db,
         preserve_service,
         tasks_service,
-        token_cache,
-        refresh_locks,
+        strava_service,
     });
 
     // Build router

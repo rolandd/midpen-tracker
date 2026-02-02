@@ -19,7 +19,6 @@ use time; // Added time import for Cookie max_age
 
 use crate::error::{AppError, Result};
 use crate::services::strava::StravaService;
-use crate::services::KmsService;
 use crate::AppState;
 
 /// Cookie name for the client-side login hint (used to prevent FOUC).
@@ -195,27 +194,8 @@ async fn auth_callback(
 
     tracing::info!("Exchanging authorization code for tokens");
 
-    // Initialize KMS service
-    let kms = KmsService::new(
-        &state.config.gcp_project_id,
-        &state.config.gcp_region,
-        "token-encryption",
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(error = %e, "Failed to initialize KMS service");
-        e
-    })?;
-
-    // Create StravaService for OAuth handling
-    let strava_service = StravaService::new(
-        state.config.strava_client_id.clone(),
-        state.config.strava_client_secret.clone(),
-        state.db.clone(),
-        kms,
-        state.token_cache.clone(),
-        state.refresh_locks.clone(),
-    );
+    // Use shared StravaService
+    let strava_service = state.strava_service.clone();
 
     // Handle OAuth callback: exchange code, store user and tokens
     let oauth_result = strava_service.handle_oauth_callback(&params.code).await?;

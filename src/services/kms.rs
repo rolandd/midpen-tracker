@@ -54,6 +54,14 @@ impl KmsService {
         })
     }
 
+    /// Create a mock KMS service for testing (offline mode).
+    pub fn new_mock() -> Self {
+        Self {
+            key_path: "projects/mock/locations/mock/keyRings/mock/cryptoKeys/mock".to_string(),
+            client: None,
+        }
+    }
+
     /// Encrypt plaintext data using KMS.
     /// Returns base64-encoded ciphertext.
     pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
