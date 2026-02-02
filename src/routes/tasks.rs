@@ -97,11 +97,11 @@ async fn process_activity(
             );
             StatusCode::OK
         }
-        Err(AppError::StravaApi(msg)) if msg.contains("Token expired or invalid") => {
+        Err(e) if e.is_strava_token_error() => {
             tracing::warn!(
                 activity_id = payload.activity_id,
                 athlete_id = payload.athlete_id,
-                error = %msg,
+                error = %e,
                 "Token revoked - stopping retry (user likely deauthorized)"
             );
             StatusCode::OK // Stop retrying - will never succeed
@@ -167,10 +167,10 @@ async fn continue_backfill(
             tracing::warn!(athlete_id = payload.athlete_id, "No tokens for backfill");
             return StatusCode::OK;
         }
-        Err(AppError::StravaApi(msg)) if msg.contains("Token expired or invalid") => {
+        Err(e) if e.is_strava_token_error() => {
             tracing::warn!(
                 athlete_id = payload.athlete_id,
-                error = %msg,
+                error = %e,
                 "Token revoked during backfill - stopping retry"
             );
             return StatusCode::OK;
@@ -376,9 +376,11 @@ async fn delete_user(
 
     // Verify-before-Act: If source is webhook (deauthorization), ensure the token is actually invalid.
     if payload.source == "webhook" {
-        match strava.get_valid_access_token(payload.athlete_id).await {
-            Ok(_) => {
-                // Token is valid -> User is authorized -> Deauth webhook is FAKE
+        // We must verify against the LIVE Strava API, not just our cache.
+        // verify_token_active() forces a check if we have a token.
+        match strava.verify_token_active(payload.athlete_id).await {
+            Ok(true) => {
+                // Token worked against API -> User is authorized -> Deauth webhook is FAKE
                 tracing::warn!(
                     athlete_id = payload.athlete_id,
                     "Security Alert: Received FAKE deauthorization webhook task (token still valid) - Aborting deletion"
@@ -386,10 +388,8 @@ async fn delete_user(
                 // Return 200 to stop retry (we successfully handled the "fake" event by ignoring it)
                 return StatusCode::OK;
             }
-            Err(AppError::StravaApi(ref s))
-                if s.contains("Token expired") || s.contains("invalid") =>
-            {
-                // Token revoked -> Deauth is REAL -> Proceed
+            Ok(false) => {
+                // Token rejected by API -> Deauth is REAL -> Proceed
                 tracing::info!(
                     athlete_id = payload.athlete_id,
                     "Verified deauthorization via Strava API (token invalid) - Proceeding with deletion"
@@ -566,7 +566,7 @@ async fn delete_activity(
                 "Verified activity deletion via Strava API (404) - Proceeding"
             );
         }
-        Err(AppError::StravaApi(ref s)) if s.contains("Token expired") || s.contains("invalid") => {
+        Err(e) if e.is_strava_token_error() => {
             // User revoked access -> Treat as real deletion (or at least harmless)
             tracing::info!(
                 activity_id = payload.activity_id,
