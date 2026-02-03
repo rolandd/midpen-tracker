@@ -22,3 +22,8 @@
 **Vulnerability:** The system relied on cached access tokens to "verify" deauthorization webhooks. If a token was cached (valid timestamp), the system assumed the user was still authorized and treated the deauth webhook as fake/spoofed, failing to delete user data.
 **Learning:** Local token caches (based on timestamps) are not authoritative for revocation status. A token can be valid locally but revoked upstream.
 **Prevention:** When verifying destructive events (like deauthorization), bypass the local cache and force a live API call (e.g., `get_athlete`) to confirm the token's status with the provider.
+
+## 2026-02-03 - Missing Security Headers in API
+**Vulnerability:** API endpoints lacked standard security headers (HSTS, X-Frame-Options, etc.), increasing risk of man-in-the-middle or clickjacking attacks if the API is accessed directly.
+**Learning:** Even purely JSON APIs benefit from security headers like HSTS (to enforce HTTPS) and CSP (to prevent content sniffing or framing if accessed by a browser).
+**Prevention:** Implement a global middleware layer that injects strict security headers on all responses, tailored for an API-only environment (e.g. `default-src 'none'`).
