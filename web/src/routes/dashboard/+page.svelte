@@ -193,11 +193,12 @@
 
 		<div class="controls">
 			{#if availableYears.length > 0}
-				<div class="year-filter">
+				<div class="year-filter" role="group" aria-label="Filter preserves by year">
 					<button
 						class="year-pill"
 						class:active={selectedYear === null}
 						onclick={() => (selectedYear = null)}
+						aria-pressed={selectedYear === null}
 					>
 						All Time
 					</button>
@@ -206,6 +207,7 @@
 							class="year-pill"
 							class:active={selectedYear === year}
 							onclick={() => (selectedYear = year)}
+							aria-pressed={selectedYear === year}
 						>
 							{year}
 						</button>

@@ -9,3 +9,7 @@
 ## 2026-02-01 - Standardizing Destructive Actions
 **Learning:** Destructive actions (like delete) were implemented with one-off CSS and markup, leading to inconsistent focus states and loading feedback.
 **Action:** Extended the design system's `Button` component with a `danger` variant to ensure consistent visual language and accessibility (keyboard support, loading states) for all destructive actions.
+
+## 2026-02-03 - Accessibility of Filter Groups
+**Learning:** Filter sets implemented as buttons often lack state information. A group of "radio-style" buttons needs `aria-pressed` (or `aria-current`) to indicate which filter is currently active.
+**Action:** Use `role="group"` on the container and `aria-pressed` on the active button for filter/toggle sets.
