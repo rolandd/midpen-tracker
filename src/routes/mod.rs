@@ -77,6 +77,9 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(middleware::from_fn(
+            crate::middleware::security::add_security_headers,
+        ))
         .layer(cors)
         .layer(
             TraceLayer::new_for_http()
