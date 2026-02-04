@@ -28,7 +28,7 @@ pub fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
 
     let claims = Claims {
         sub: athlete_id.to_string(),
-        exp: now + 86400,
+        exp: now + 86400 * 30,
         iat: now,
     };
 
