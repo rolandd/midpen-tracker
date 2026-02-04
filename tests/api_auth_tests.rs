@@ -12,40 +12,9 @@ use axum::{
     body::Body,
     http::{header, Request, StatusCode},
 };
-use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
-use serde::Serialize;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
 mod common;
-
-/// Create a test JWT token.
-fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
-    #[derive(Serialize)]
-    struct Claims {
-        sub: String,
-        exp: usize,
-        iat: usize,
-    }
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize;
-
-    let claims = Claims {
-        sub: athlete_id.to_string(),
-        exp: now + 86400,
-        iat: now,
-    };
-
-    encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(signing_key),
-    )
-    .unwrap()
-}
 
 #[tokio::test]
 async fn test_protected_route_without_token() {
@@ -89,7 +58,7 @@ async fn test_protected_route_with_invalid_token() {
 #[tokio::test]
 async fn test_protected_route_with_valid_token() {
     let (app, state) = common::create_test_app();
-    let token = create_test_jwt(12345, &state.config.jwt_signing_key);
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
 
     let response = app
         .oneshot(

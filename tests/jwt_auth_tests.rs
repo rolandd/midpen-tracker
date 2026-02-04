@@ -19,29 +19,7 @@ struct Claims {
     iat: usize,
 }
 
-/// Test helper to create a JWT token (mirrors auth.rs logic).
-fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
-    use jsonwebtoken::{encode, EncodingKey, Header};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize;
-
-    let claims = Claims {
-        sub: athlete_id.to_string(),
-        exp: now + 86400 * 30,
-        iat: now,
-    };
-
-    encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(signing_key),
-    )
-    .expect("Failed to create JWT")
-}
+mod common;
 
 #[test]
 fn test_jwt_roundtrip() {
@@ -53,7 +31,7 @@ fn test_jwt_roundtrip() {
     let athlete_id = 12345678u64;
 
     // Create token (like auth.rs does)
-    let token = create_test_jwt(athlete_id, signing_key);
+    let token = common::create_test_jwt(athlete_id, signing_key);
 
     // Decode token (like middleware does)
     let key = DecodingKey::from_secret(signing_key);
@@ -75,7 +53,7 @@ fn test_jwt_athlete_id_parsing() {
     let signing_key = b"test_signing_key_32_bytes_long!!";
     let athlete_id = 98765432u64;
 
-    let token = create_test_jwt(athlete_id, signing_key);
+    let token = common::create_test_jwt(athlete_id, signing_key);
 
     let key = DecodingKey::from_secret(signing_key);
     let validation = Validation::new(Algorithm::HS256);
@@ -95,7 +73,7 @@ fn test_jwt_expiration_is_future() {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     let signing_key = b"test_signing_key_32_bytes_long!!";
-    let token = create_test_jwt(12345, signing_key);
+    let token = common::create_test_jwt(12345, signing_key);
 
     let key = DecodingKey::from_secret(signing_key);
     let mut validation = Validation::new(Algorithm::HS256);

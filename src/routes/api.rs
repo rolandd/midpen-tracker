@@ -194,6 +194,12 @@ async fn get_activities(
 
     let limit = params.per_page.min(MAX_PER_PAGE);
 
+    if params.page < 1 {
+        return Err(crate::error::AppError::BadRequest(
+            "Page must be greater than 0".to_string(),
+        ));
+    }
+
     let activities = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
         let results: Vec<ActivityPreserve> = state
