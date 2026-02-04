@@ -3,6 +3,7 @@
 
 <script lang="ts">
 	import { fetchActivities, type ActivitySummary } from '$lib/api';
+	import { Spinner, Button } from '$lib/components';
 	import { activityCache } from '$lib/cache.svelte';
 
 	let { preserveName } = $props();
@@ -51,8 +52,7 @@
 		}
 	}
 
-	function handleLoadMore(event: MouseEvent) {
-		event.stopPropagation();
+	function handleLoadMore() {
 		page++;
 		loadActivities(page);
 	}
@@ -81,7 +81,7 @@
 <div class="activity-list-container">
 	{#if activities.length === 0 && loading}
 		<div class="loading">
-			<div class="spinner"></div>
+			<Spinner size="sm" />
 		</div>
 	{:else if error}
 		<div class="error">{error}</div>
@@ -108,11 +108,9 @@
 
 		{#if activities.length < total}
 			<div class="load-more-container">
-				{#if loading}
-					<div class="spinner"></div>
-				{:else}
-					<button class="load-more-btn" onclick={handleLoadMore}>Load more</button>
-				{/if}
+				<Button variant="secondary" size="sm" onclick={handleLoadMore} isLoading={loading}>
+					Load more
+				</Button>
 			</div>
 		{/if}
 	{/if}
@@ -181,35 +179,10 @@
 		padding-top: 1rem;
 	}
 
-	.load-more-btn {
-		background: var(--color-surface);
-		border: 1px solid var(--color-border);
-		color: var(--color-text);
-		padding: 0.5rem 1rem;
-		border-radius: var(--radius-sm);
-		font-size: 0.875rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.load-more-btn:hover {
-		background: var(--color-surface-hover);
-		border-color: var(--color-primary);
-	}
-
 	.loading {
 		padding: 1rem;
 		display: flex;
 		justify-content: center;
-	}
-
-	.spinner {
-		width: 20px;
-		height: 20px;
-		border: 2px solid var(--color-border);
-		border-top-color: var(--color-primary);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
 	}
 
 	.error {
@@ -223,11 +196,5 @@
 		font-style: italic;
 		padding: 0.5rem;
 		font-size: 0.875rem;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>

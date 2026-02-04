@@ -15,6 +15,7 @@
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
+	import { Spinner } from '$lib/components';
 	import { uiState } from '$lib/state.svelte';
 	import Toggle from 'svelte-switcher';
 
@@ -224,7 +225,7 @@
 
 		{#if loading}
 			<div class="loading">
-				<div class="spinner"></div>
+				<Spinner size="md" />
 			</div>
 		{:else if error}
 			<div class="card error">{error}</div>
@@ -565,24 +566,9 @@
 	/* Activity styles moved to ActivityList.svelte */
 
 	.loading {
-		text-align: center;
+		display: flex;
+		justify-content: center;
 		padding: 3rem;
-	}
-
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid var(--color-border);
-		border-top-color: var(--color-primary);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-		margin: 0 auto;
-	}
-
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	.error {
