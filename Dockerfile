@@ -10,6 +10,10 @@ WORKDIR /app
 # Copy manifests first for dependency caching
 COPY Cargo.toml Cargo.lock ./
 
+# Remove [[bench]] section to avoid needing actual benchmark files
+# Logic: Find range from [[bench]] to next [section]. Inside range: delete [[bench]] header, delete non-[ header lines.
+RUN sed -i '/^\[\[bench\]\]/,/^\[/ { /^\[\[bench\]\]/d; /^\[/!d; }' Cargo.toml
+
 # Create dummy main.rs to build dependencies
 RUN mkdir src && echo 'fn main() {}' > src/main.rs && echo 'pub fn lib() {}' > src/lib.rs
 
