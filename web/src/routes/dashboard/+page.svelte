@@ -571,12 +571,6 @@
 		padding: 3rem;
 	}
 
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
 	.error {
 		color: #ef4444;
 		text-align: center;
