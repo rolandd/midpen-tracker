@@ -66,11 +66,6 @@ async fn test_pagination_underflow() {
 
     let status = response.status();
 
-    // If the vulnerability exists, this might panic (crashing the test)
-    // or return a weird error.
-    // If fixed, it should handle it gracefully (e.g. treat as page 1 or return 400).
-    // Since the DB is offline/mocked, we expect 500 if logic passes, or 200 if it returns empty list early.
-    // But importantly, it should NOT crash.
-
-    println!("Response status: {}", status);
+    // Expect 400 Bad Request
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

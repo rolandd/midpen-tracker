@@ -193,8 +193,13 @@ async fn get_activities(
     );
 
     let limit = params.per_page.min(MAX_PER_PAGE);
-    // Ensure page is at least 1 to prevent underflow
-    let page = params.page.max(1);
+
+    if params.page < 1 {
+        return Err(crate::error::AppError::BadRequest(
+            "Page must be greater than 0".to_string(),
+        ));
+    }
+    let page = params.page;
 
     let activities = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
