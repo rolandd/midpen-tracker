@@ -13,3 +13,7 @@
 ## 2026-02-03 - Accessibility of Filter Groups
 **Learning:** Filter sets implemented as buttons often lack state information. A group of "radio-style" buttons needs `aria-pressed` (or `aria-current`) to indicate which filter is currently active.
 **Action:** Use `role="group"` on the container and `aria-pressed` on the active button for filter/toggle sets.
+
+## 2025-10-26 - Standardized Loading States
+**Learning:** Replacing ad-hoc loading spinners with a standardized `Button` component (with `isLoading` prop) significantly improves UX by maintaining focus context and preventing layout shifts.
+**Action:** Always check if `Button` component supports `isLoading` before manually adding spinners next to buttons.
