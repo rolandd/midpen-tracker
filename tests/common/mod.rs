@@ -1,12 +1,44 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
 use midpen_tracker::config::Config;
 use midpen_tracker::db::FirestoreDb;
 use midpen_tracker::routes::create_router;
 use midpen_tracker::services::{KmsService, PreserveService, StravaService, TasksService};
 use midpen_tracker::AppState;
+use serde::Serialize;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Create a test JWT token.
+#[allow(dead_code)]
+pub fn create_test_jwt(athlete_id: u64, signing_key: &[u8]) -> String {
+    #[derive(Serialize)]
+    struct Claims {
+        sub: String,
+        exp: usize,
+        iat: usize,
+    }
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize;
+
+    let claims = Claims {
+        sub: athlete_id.to_string(),
+        exp: now + 86400,
+        iat: now,
+    };
+
+    encode(
+        &Header::new(Algorithm::HS256),
+        &claims,
+        &EncodingKey::from_secret(signing_key),
+    )
+    .unwrap()
+}
 
 /// Check if emulator is available via environment variable.
 #[allow(dead_code)]
