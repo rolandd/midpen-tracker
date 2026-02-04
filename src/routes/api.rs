@@ -193,6 +193,8 @@ async fn get_activities(
     );
 
     let limit = params.per_page.min(MAX_PER_PAGE);
+    // Ensure page is at least 1 to prevent underflow
+    let page = params.page.max(1);
 
     let activities = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
@@ -216,7 +218,7 @@ async fn get_activities(
         let total_count = summaries.len() as u32;
 
         // Pagination (simple in-memory for now since these lists are small per preserve)
-        let start = ((params.page - 1) * limit) as usize;
+        let start = ((page - 1) * limit) as usize;
         let paged_activities = if start < summaries.len() {
             let end = (start + limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
@@ -227,7 +229,7 @@ async fn get_activities(
         (paged_activities, total_count)
     } else {
         // Query Firestore for user's activities
-        let offset = (params.page - 1) * limit;
+        let offset = (page - 1) * limit;
         let results = state
             .db
             .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)

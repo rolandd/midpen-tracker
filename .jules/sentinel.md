@@ -27,3 +27,8 @@
 **Vulnerability:** API endpoints lacked standard security headers (HSTS, X-Frame-Options, etc.), increasing risk of man-in-the-middle or clickjacking attacks if the API is accessed directly.
 **Learning:** Even purely JSON APIs benefit from security headers like HSTS (to enforce HTTPS) and CSP (to prevent content sniffing or framing if accessed by a browser).
 **Prevention:** Implement a global middleware layer that injects strict security headers on all responses, tailored for an API-only environment (e.g. `default-src 'none'`).
+
+## 2026-10-27 - Integer Underflow in Pagination
+**Vulnerability:** API pagination logic calculated offset as `(page - 1) * limit`. When `page=0`, this caused an integer underflow panic in debug mode and potentially huge offsets in release mode.
+**Learning:** Rust's integer types do not implicitly handle underflow safely in arithmetic expressions unless checked (e.g. `saturating_sub`). Input validation is critical before arithmetic.
+**Prevention:** Explicitly validate and clamp pagination parameters (e.g. `page.max(1)`) before use.
