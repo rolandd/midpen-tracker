@@ -462,9 +462,9 @@ fn verify_and_decode_state(
     let mut mac = HmacSha256::new_from_slice(secret).ok()?;
     mac.update(payload.as_bytes());
 
-    let expected_signature = hex::encode(mac.finalize().into_bytes());
+    let signature_bytes = hex::decode(signature_hex).ok()?;
 
-    if signature_hex != expected_signature {
+    if mac.verify_slice(&signature_bytes).is_err() {
         tracing::warn!("OAuth state signature mismatch! Potential tampering.");
         return None;
     }
