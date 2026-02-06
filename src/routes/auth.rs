@@ -55,7 +55,6 @@ async fn auth_start(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
     Query(params): Query<AuthStartParams>,
-    headers: axum::http::HeaderMap,
 ) -> Result<impl IntoResponse> {
     // Get the frontend URL from query param or fall back to config
     // Strictly validate redirect_uri to prevent open redirects
@@ -113,22 +112,11 @@ async fn auth_start(
     cookie.set_same_site(SameSite::Lax);
     cookie.set_max_age(time::Duration::minutes(15)); // Matches state expiry
 
-    // Get the host from the request headers for callback URL
-    let host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            std::env::var("API_HOST").unwrap_or_else(|_| "localhost:8080".to_string())
-        });
-
-    let scheme = if host.contains("localhost") || host.contains("127.0.0.1") {
-        "http"
-    } else {
-        "https"
-    };
-
-    let callback_url = format!("{}://{}/auth/strava/callback", scheme, host);
+    // Use configured API URL for callback to prevent Host Header Injection
+    let callback_url = format!(
+        "{}/auth/strava/callback",
+        state.config.api_url.trim_end_matches('/')
+    );
 
     let auth_url = format!(
         "https://www.strava.com/oauth/authorize?\
