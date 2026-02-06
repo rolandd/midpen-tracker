@@ -519,6 +519,7 @@
 		gap: 0.75rem;
 		list-style: none;
 		padding: 0;
+		margin: 0;
 	}
 
 	.preserve-card {
