@@ -222,7 +222,13 @@ async fn get_activities(
         let total_count = summaries.len() as u32;
 
         // Pagination (simple in-memory for now since these lists are small per preserve)
-        let start = ((params.page - 1) * limit) as usize;
+        // Use checked multiplication to prevent overflow and cast to usize safely
+        let start = (params.page as usize - 1)
+            .checked_mul(limit as usize)
+            .ok_or_else(|| {
+                crate::error::AppError::BadRequest("Page number causes overflow".to_string())
+            })?;
+
         let paged_activities = if start < summaries.len() {
             let end = (start + limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
@@ -233,7 +239,11 @@ async fn get_activities(
         (paged_activities, total_count)
     } else {
         // Query Firestore for user's activities
-        let offset = (params.page - 1) * limit;
+        // Use checked multiplication to prevent u32 overflow (DoS risk)
+        let offset = (params.page - 1).checked_mul(limit).ok_or_else(|| {
+            crate::error::AppError::BadRequest("Page number causes overflow".to_string())
+        })?;
+
         let results = state
             .db
             .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)
