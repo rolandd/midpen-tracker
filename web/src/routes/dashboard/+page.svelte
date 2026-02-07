@@ -230,27 +230,29 @@
 		{:else if error}
 			<div class="card error">{error}</div>
 		{:else}
-			<div class="preserve-list">
+			<ul class="preserve-list">
 				{#each preserves as preserve (preserve.name)}
-					<div class="preserve-card card" class:unvisited={preserve.count === 0}>
-						<button
-							type="button"
-							class="preserve-header-btn"
-							aria-expanded={expandedPreserve === preserve.name}
-							onclick={() => togglePreserve(preserve.name)}
-						>
-							<div class="preserve-header">
-								<span class="preserve-name">{preserve.name}</span>
-								<span class="preserve-count">{preserve.count}</span>
-							</div>
-						</button>
+					<li>
+						<div class="preserve-card card" class:unvisited={preserve.count === 0}>
+							<button
+								type="button"
+								class="preserve-header-btn"
+								aria-expanded={expandedPreserve === preserve.name}
+								onclick={() => togglePreserve(preserve.name)}
+							>
+								<div class="preserve-header">
+									<span class="preserve-name">{preserve.name}</span>
+									<span class="preserve-count">{preserve.count}</span>
+								</div>
+							</button>
 
-						{#if expandedPreserve === preserve.name}
-							<ActivityList preserveName={preserve.name} />
-						{/if}
-					</div>
+							{#if expandedPreserve === preserve.name}
+								<ActivityList preserveName={preserve.name} />
+							{/if}
+						</div>
+					</li>
 				{/each}
-			</div>
+			</ul>
 		{/if}
 	</main>
 </div>
@@ -515,6 +517,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
+		list-style: none;
+		padding: 0;
+		margin: 0;
 	}
 
 	.preserve-card {

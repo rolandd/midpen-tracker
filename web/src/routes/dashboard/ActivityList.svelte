@@ -88,23 +88,25 @@
 	{:else if activities.length === 0}
 		<div class="empty">No activities specific to this preserve found.</div>
 	{:else}
-		<div class="activity-list">
+		<ul class="activity-list">
 			{#each activities as activity (activity.id)}
-				<a
-					href="https://www.strava.com/activities/{activity.id}"
-					target="_blank"
-					rel="noopener"
-					class="activity"
-					onclick={(e) => e.stopPropagation()}
-					aria-label={getAriaLabel(activity)}
-				>
-					<span class="emoji" title={activity.sport_type}>{getEmoji(activity.sport_type)}</span>
-					<span class="date">{formatDate(activity.start_date)}</span>
-					<span class="name">{activity.name}</span>
-					<span class="link">↗</span>
-				</a>
+				<li>
+					<a
+						href="https://www.strava.com/activities/{activity.id}"
+						target="_blank"
+						rel="noopener"
+						class="activity"
+						onclick={(e) => e.stopPropagation()}
+						aria-label={getAriaLabel(activity)}
+					>
+						<span class="emoji" title={activity.sport_type}>{getEmoji(activity.sport_type)}</span>
+						<span class="date">{formatDate(activity.start_date)}</span>
+						<span class="name">{activity.name}</span>
+						<span class="link">↗</span>
+					</a>
+				</li>
 			{/each}
-		</div>
+		</ul>
 
 		{#if activities.length < total}
 			<div class="load-more-container">
@@ -127,6 +129,9 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
+		list-style: none;
+		padding: 0;
+		margin: 0;
 	}
 
 	.activity {
