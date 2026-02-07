@@ -15,6 +15,7 @@ use ring::rand::SecureRandom;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use subtle::ConstantTimeEq;
 use time; // Added time import for Cookie max_age
 
 use crate::error::{AppError, Result};
@@ -459,7 +460,7 @@ fn verify_and_decode_state(
 
     // Verify nonce
     if let Some(expected) = expected_nonce {
-        if nonce_hex != expected {
+        if !bool::from(nonce_hex.as_bytes().ct_eq(expected.as_bytes())) {
             tracing::warn!("OAuth state nonce mismatch! CSRF attack?");
             return None;
         }
