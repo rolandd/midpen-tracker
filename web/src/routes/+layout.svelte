@@ -69,7 +69,13 @@
 </svelte:head>
 
 <div class="app-wrapper">
-	<main class="app-content">
+	<a
+		href="#main-content"
+		class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-6 focus:py-3 focus:bg-primary focus:text-white focus:font-medium focus:rounded-lg focus:shadow-xl focus:outline-none transition-all duration-200"
+	>
+		Skip to content
+	</a>
+	<main id="main-content" class="app-content" tabindex="-1">
 		{@render children()}
 	</main>
 
