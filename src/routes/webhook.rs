@@ -57,7 +57,14 @@ async fn verify(
         return (StatusCode::NOT_FOUND, Json(VerifyResponse::default()));
     }
 
-    if params.mode == "subscribe" && params.verify_token == state.config.webhook_verify_token {
+    if params.mode == "subscribe"
+        && bool::from(
+            params
+                .verify_token
+                .as_bytes()
+                .ct_eq(state.config.webhook_verify_token.as_bytes()),
+        )
+    {
         tracing::info!("Webhook subscription verified");
         (
             StatusCode::OK,
