@@ -71,14 +71,14 @@ resource "google_cloud_tasks_queue" "activity_processing" {
   location = var.region
 
   rate_limits {
-    max_dispatches_per_second = 0.1 # ~6 per minute (under Strava's 100/15min)
+    max_dispatches_per_second = var.cloud_tasks_rate_limit
     max_concurrent_dispatches = 2
   }
 
   retry_config {
-    max_attempts  = 5
+    max_attempts  = 100     # ~4 days of retries with 1h backoff
     min_backoff   = "10s"
-    max_backoff   = "300s"
+    max_backoff   = "3600s" # 1 hour
     max_doublings = 4
   }
 
