@@ -17,3 +17,7 @@
 ## 2025-10-26 - Standardized Loading States
 **Learning:** Replacing ad-hoc loading spinners with a standardized `Button` component (with `isLoading` prop) significantly improves UX by maintaining focus context and preventing layout shifts.
 **Action:** Always check if `Button` component supports `isLoading` before manually adding spinners next to buttons.
+
+## 2026-06-03 - Empty States with Actions
+**Learning:** Empty states are often dead ends for users. Providing a direct action (e.g., "Show unvisited") within the empty state transforms a negative experience into a helpful navigation aid.
+**Action:** When implementing empty states, always consider if there is a primary action the user should take next, and include it via the `action` snippet prop in the `EmptyState` component.
