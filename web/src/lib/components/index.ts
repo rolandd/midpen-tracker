@@ -8,3 +8,4 @@ export { default as YearPill } from './YearPill.svelte';
 export { default as SocialLink } from './SocialLink.svelte';
 export { default as AboutModal } from './AboutModal.svelte';
 export { default as DeleteAccountModal } from './DeleteAccountModal.svelte';
+export { default as EmptyState } from './EmptyState.svelte';
