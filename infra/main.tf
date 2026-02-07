@@ -57,6 +57,12 @@ variable "remote_repo_uri" {
   type        = string
 }
 
+variable "cloud_tasks_rate_limit" {
+  description = "Dispatcher rate limit (requests/second). Default 0.1 = 6/min = 90/15min (safe for [Strava limits](https://developers.strava.com/docs/rate-limits/)). Override for production apps with higher limits."
+  type        = number
+  default     = 0.1
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
