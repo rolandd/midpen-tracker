@@ -13,6 +13,9 @@ strava_subscription_id = "YOUR_SUBSCRIPTION_ID"
 frontend_url = "https://example.com"
 # api_host     = "api.example.com" # Optional: Custom domain for API
 
+# Performance & Rate Limits
+# cloud_tasks_rate_limit = 0.1 # Default: 0.1 (matches Strava default limit)
+
 # Cloudflare Config
 domain_name           = "example.com"
 cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
