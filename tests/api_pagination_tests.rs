@@ -38,3 +38,29 @@ async fn test_pagination_underflow() {
     // Expect 400 Bad Request
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_pagination_overflow() {
+    let (app, state) = common::create_test_app();
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
+
+    // Request with large page number that causes overflow:
+    // page = 50,000,000, per_page = 100
+    // (50,000,000 - 1) * 100 = 4,999,999,900 > u32::MAX (4,294,967,295)
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/activities?page=50000000&per_page=100")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+
+    // Expect 400 Bad Request
+    assert_eq!(status, StatusCode::BAD_REQUEST, "Should return 400 Bad Request on pagination overflow");
+}

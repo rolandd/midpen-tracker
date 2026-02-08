@@ -222,7 +222,10 @@ async fn get_activities(
         let total_count = summaries.len() as u32;
 
         // Pagination (simple in-memory for now since these lists are small per preserve)
-        let start = ((params.page - 1) * limit) as usize;
+        let offset = (params.page - 1).checked_mul(limit).ok_or_else(|| {
+            crate::error::AppError::BadRequest("Page number too large".to_string())
+        })?;
+        let start = offset as usize;
         let paged_activities = if start < summaries.len() {
             let end = (start + limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
@@ -233,7 +236,9 @@ async fn get_activities(
         (paged_activities, total_count)
     } else {
         // Query Firestore for user's activities
-        let offset = (params.page - 1) * limit;
+        let offset = (params.page - 1).checked_mul(limit).ok_or_else(|| {
+            crate::error::AppError::BadRequest("Page number too large".to_string())
+        })?;
         let results = state
             .db
             .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)
