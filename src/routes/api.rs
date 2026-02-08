@@ -380,7 +380,6 @@ async fn get_preserve_stats(
     }))
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -402,7 +401,10 @@ mod tests {
         // Simulate DB pagination calculation (u32 math)
         // This MUST always overflow u32::MAX * 100
         let offset_res = (page - 1).checked_mul(limit);
-        assert!(offset_res.is_none(), "Should always overflow u32 (DB query)");
+        assert!(
+            offset_res.is_none(),
+            "Should always overflow u32 (DB query)"
+        );
     }
 
     #[test]
@@ -414,6 +416,9 @@ mod tests {
         let limit = 100;
 
         let offset_res = wrapped_page.checked_mul(limit);
-        assert!(offset_res.is_none(), "Should catch wrapped underflow as overflow");
+        assert!(
+            offset_res.is_none(),
+            "Should catch wrapped underflow as overflow"
+        );
     }
 }
