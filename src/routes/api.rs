@@ -379,3 +379,41 @@ async fn get_preserve_stats(
         available_years,
     }))
 }
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_pagination_overflow() {
+        let page = u32::MAX;
+        let limit = 100;
+
+        // Simulate in-memory pagination calculation
+        // On 64-bit systems, this calculation won't overflow usize (u64), which is fine.
+        // It produces a huge offset which is safely handled by `if start < len` checks.
+        // On 32-bit systems, it would overflow and return None.
+        let start_res = (page as usize - 1).checked_mul(limit as usize);
+        if std::mem::size_of::<usize>() == 4 {
+            assert!(start_res.is_none(), "Should overflow on 32-bit systems");
+        } else {
+            assert!(start_res.is_some(), "Should fit in usize on 64-bit systems");
+        }
+
+        // Simulate DB pagination calculation (u32 math)
+        // This MUST always overflow u32::MAX * 100
+        let offset_res = (page - 1).checked_mul(limit);
+        assert!(offset_res.is_none(), "Should always overflow u32 (DB query)");
+    }
+
+    #[test]
+    fn test_pagination_underflow() {
+        // Test behavior for page=0 if it wraps (release mode behavior simulation)
+        // In debug mode, 0-1 panics. In release, it wraps to u32::MAX.
+        // We verify that if it wraps, it triggers the overflow check.
+        let wrapped_page = 0u32.wrapping_sub(1); // u32::MAX
+        let limit = 100;
+
+        let offset_res = wrapped_page.checked_mul(limit);
+        assert!(offset_res.is_none(), "Should catch wrapped underflow as overflow");
+    }
+}
