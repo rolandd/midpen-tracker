@@ -222,9 +222,15 @@ async fn get_activities(
         let total_count = summaries.len() as u32;
 
         // Pagination (simple in-memory for now since these lists are small per preserve)
-        let start = ((params.page - 1) * limit) as usize;
+        // Use checked multiplication to prevent overflow and cast to usize safely
+        let start = (params.page as usize - 1)
+            .checked_mul(limit as usize)
+            .ok_or_else(|| {
+                crate::error::AppError::BadRequest("Page number causes overflow".to_string())
+            })?;
+
         let paged_activities = if start < summaries.len() {
-            let end = (start + limit as usize).min(summaries.len());
+            let end = start.saturating_add(limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
         } else {
             vec![]
@@ -233,7 +239,11 @@ async fn get_activities(
         (paged_activities, total_count)
     } else {
         // Query Firestore for user's activities
-        let offset = (params.page - 1) * limit;
+        // Use checked multiplication to prevent u32 overflow (DoS risk)
+        let offset = (params.page - 1).checked_mul(limit).ok_or_else(|| {
+            crate::error::AppError::BadRequest("Page number causes overflow".to_string())
+        })?;
+
         let results = state
             .db
             .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)
@@ -248,7 +258,9 @@ async fn get_activities(
         // or effectively disable "total" based logic for this path until we add aggregation.
         // A common pattern is to return `offset + page_count` if `page_count < per_page`,
         // else `offset + page_count + 1` (at least one more).
-        let estimated_total = offset + page_count + if page_count == limit { 1 } else { 0 };
+        let estimated_total = offset
+            .saturating_add(page_count)
+            .saturating_add(if page_count == limit { 1 } else { 0 });
 
         let summaries = results
             .into_iter()
@@ -368,4 +380,47 @@ async fn get_preserve_stats(
         pending_activities: stats.pending_activities,
         available_years,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_pagination_overflow() {
+        let page = u32::MAX;
+        let limit = 100;
+
+        // Simulate in-memory pagination calculation
+        // On 64-bit systems, this calculation won't overflow usize (u64), which is fine.
+        // It produces a huge offset which is safely handled by `if start < len` checks.
+        // On 32-bit systems, it would overflow and return None.
+        let start_res = (page as usize - 1).checked_mul(limit as usize);
+        if std::mem::size_of::<usize>() == 4 {
+            assert!(start_res.is_none(), "Should overflow on 32-bit systems");
+        } else {
+            assert!(start_res.is_some(), "Should fit in usize on 64-bit systems");
+        }
+
+        // Simulate DB pagination calculation (u32 math)
+        // This MUST always overflow u32::MAX * 100
+        let offset_res = (page - 1).checked_mul(limit);
+        assert!(
+            offset_res.is_none(),
+            "Should always overflow u32 (DB query)"
+        );
+    }
+
+    #[test]
+    fn test_pagination_underflow() {
+        // Test behavior for page=0 if it wraps (release mode behavior simulation)
+        // In debug mode, 0-1 panics. In release, it wraps to u32::MAX.
+        // We verify that if it wraps, it triggers the overflow check.
+        let wrapped_page = 0u32.wrapping_sub(1); // u32::MAX
+        let limit = 100;
+
+        let offset_res = wrapped_page.checked_mul(limit);
+        assert!(
+            offset_res.is_none(),
+            "Should catch wrapped underflow as overflow"
+        );
+    }
 }

@@ -32,3 +32,8 @@
 **Vulnerability:** API pagination logic calculated offset as `(page - 1) * limit`. When `page=0`, this caused an integer underflow panic in debug mode and potentially huge offsets in release mode.
 **Learning:** Rust's integer types do not implicitly handle underflow safely in arithmetic expressions unless checked (e.g. `saturating_sub`). Input validation is critical before arithmetic.
 **Prevention:** Explicitly validate pagination parameters (e.g. `page < 1`) and return clear errors (400 Bad Request) rather than silent clamping or unsafe math.
+
+## 2026-02-04 - Integer Overflow in Pagination
+**Vulnerability:** API pagination logic calculated offset as `(page - 1) * limit` or `next_page + 1` without overflow checks. Large inputs (`u32::MAX`) caused panics (DoS) or logic errors (wrapping to 0).
+**Learning:** Rust arithmetic panics on overflow in debug builds and wraps in release builds. Both are dangerous for security (DoS or Logic Flaw).
+**Prevention:** Use `checked_mul`, `checked_add`, or safe casts (e.g. `u64`) for all arithmetic operations involving user-controlled inputs. Explicitly handle overflows with `400 Bad Request`.
