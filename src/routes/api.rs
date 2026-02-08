@@ -230,7 +230,7 @@ async fn get_activities(
             })?;
 
         let paged_activities = if start < summaries.len() {
-            let end = (start + limit as usize).min(summaries.len());
+            let end = start.saturating_add(limit as usize).min(summaries.len());
             summaries[start..end].to_vec()
         } else {
             vec![]
@@ -258,7 +258,9 @@ async fn get_activities(
         // or effectively disable "total" based logic for this path until we add aggregation.
         // A common pattern is to return `offset + page_count` if `page_count < per_page`,
         // else `offset + page_count + 1` (at least one more).
-        let estimated_total = offset + page_count + if page_count == limit { 1 } else { 0 };
+        let estimated_total = offset
+            .saturating_add(page_count)
+            .saturating_add(if page_count == limit { 1 } else { 0 });
 
         let summaries = results
             .into_iter()
