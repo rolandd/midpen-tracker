@@ -62,5 +62,9 @@ async fn test_pagination_overflow() {
     let status = response.status();
 
     // Expect 400 Bad Request
-    assert_eq!(status, StatusCode::BAD_REQUEST, "Should return 400 Bad Request on pagination overflow");
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "Should return 400 Bad Request on pagination overflow"
+    );
 }
