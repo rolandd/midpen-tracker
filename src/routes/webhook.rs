@@ -6,7 +6,7 @@
 use crate::services::tasks::{DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{DefaultBodyLimit, Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
@@ -19,7 +19,10 @@ use subtle::ConstantTimeEq;
 
 /// Webhook routes.
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/webhook/{uuid}", get(verify).post(handle_event))
+    Router::new()
+        .route("/webhook/{uuid}", get(verify).post(handle_event))
+        // Strava payloads are small (<1KB), so 16KB is a safe conservative limit
+        .layer(DefaultBodyLimit::max(16384))
 }
 
 /// Strava webhook verification query params.
