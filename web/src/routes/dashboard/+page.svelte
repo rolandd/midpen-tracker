@@ -12,7 +12,7 @@
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
-	import { Spinner } from '$lib/components';
+	import { Spinner, EmptyState, Button } from '$lib/components';
 	import { uiState } from '$lib/state.svelte';
 	import Toggle from 'svelte-switcher';
 
@@ -206,6 +206,24 @@
 			</div>
 		{:else if error}
 			<div class="card error">{error}</div>
+		{:else if preserves.length === 0}
+			<EmptyState
+				icon={selectedYear ? '📅' : '🌲'}
+				title={selectedYear ? `No visits in ${selectedYear}` : 'No preserves visited yet'}
+				description={selectedYear
+					? "You haven't visited any preserves in this year. Try selecting a different year or check 'Show unvisited preserves'."
+					: "You haven't visited any preserves yet. Get out there and explore!"}
+			>
+				{#snippet action()}
+					{#if selectedYear}
+						<Button variant="secondary" onclick={() => (selectedYear = null)}>Clear filter</Button>
+					{:else if !showUnvisited}
+						<Button variant="secondary" onclick={() => (showUnvisited = true)}
+							>Show all preserves</Button
+						>
+					{/if}
+				{/snippet}
+			</EmptyState>
 		{:else}
 			<ul class="preserve-list">
 				{#each preserves as preserve (preserve.name)}
