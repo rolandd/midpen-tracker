@@ -136,7 +136,7 @@ impl TasksService {
         let http_request = HttpRequest::default()
             .set_url(format!("{}{}", service_url, endpoint))
             .set_http_method("POST")
-            .set_body(bytes::Bytes::from(body))
+            .set_body(axum::body::Bytes::from(body))
             .set_headers(std::collections::HashMap::from([(
                 "Content-Type".to_string(),
                 "application/json".to_string(),

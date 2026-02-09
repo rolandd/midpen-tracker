@@ -6,13 +6,13 @@
 use crate::services::tasks::{DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
+    body::Bytes,
     extract::{DefaultBodyLimit, Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
     Router,
 };
-use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
