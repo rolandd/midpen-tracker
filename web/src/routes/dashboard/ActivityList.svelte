@@ -3,7 +3,7 @@
 
 <script lang="ts">
 	import { fetchActivities, type ActivitySummary } from '$lib/api';
-	import { Spinner, Button } from '$lib/components';
+	import { Spinner, Button, EmptyState } from '$lib/components';
 	import { activityCache } from '$lib/cache.svelte';
 
 	let { preserveName } = $props();
@@ -86,7 +86,11 @@
 	{:else if error}
 		<div class="error">{error}</div>
 	{:else if activities.length === 0}
-		<div class="empty">No activities specific to this preserve found.</div>
+		<EmptyState
+			title="No activities found"
+			description="We couldn't find any activities for this preserve."
+			variant="compact"
+		/>
 	{:else}
 		<ul class="activity-list">
 			{#each activities as activity (activity.id)}
@@ -192,13 +196,6 @@
 
 	.error {
 		color: var(--color-danger);
-		padding: 0.5rem;
-		font-size: 0.875rem;
-	}
-
-	.empty {
-		color: var(--color-text-muted);
-		font-style: italic;
 		padding: 0.5rem;
 		font-size: 0.875rem;
 	}

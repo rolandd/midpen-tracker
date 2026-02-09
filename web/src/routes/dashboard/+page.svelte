@@ -12,7 +12,7 @@
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
-	import { Spinner } from '$lib/components';
+	import { Spinner, EmptyState } from '$lib/components';
 	import { uiState } from '$lib/state.svelte';
 	import Toggle from 'svelte-switcher';
 
@@ -230,6 +230,13 @@
 					</li>
 				{/each}
 			</ul>
+
+			{#if preserves.length === 0}
+				<EmptyState
+					title="No preserves found"
+					description="Try adjusting your filters or go for a hike!"
+				/>
+			{/if}
 		{/if}
 	</main>
 </div>
