@@ -37,3 +37,8 @@
 **Vulnerability:** API pagination logic calculated offset as `(page - 1) * limit` or `next_page + 1` without overflow checks. Large inputs (`u32::MAX`) caused panics (DoS) or logic errors (wrapping to 0).
 **Learning:** Rust arithmetic panics on overflow in debug builds and wraps in release builds. Both are dangerous for security (DoS or Logic Flaw).
 **Prevention:** Use `checked_mul`, `checked_add`, or safe casts (e.g. `u64`) for all arithmetic operations involving user-controlled inputs. Explicitly handle overflows with `400 Bad Request`.
+
+## 2026-08-15 - Unauthenticated Resource Consumption in Webhook Handler
+**Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
+**Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
+**Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
