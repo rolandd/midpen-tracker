@@ -12,6 +12,7 @@ use axum::{
     routing::get,
     Router,
 };
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
@@ -109,14 +110,10 @@ async fn handle_event(
     State(state): State<Arc<AppState>>,
     Path(uuid): Path<String>,
     _headers: axum::http::HeaderMap,
-    Json(payload): Json<serde_json::Value>,
+    body: Bytes,
 ) -> StatusCode {
-    tracing::info!(
-        payload = %payload,
-        "Webhook event received (raw)"
-    );
-
     // Validate Path UUID (constant-time comparison to prevent timing attacks)
+    // CRITICAL: Check this BEFORE parsing the body to prevent DoS via large payloads
     if !bool::from(
         uuid.as_bytes()
             .ct_eq(state.config.webhook_path_uuid.as_bytes()),
@@ -128,7 +125,7 @@ async fn handle_event(
         return StatusCode::NOT_FOUND;
     }
 
-    let event: WebhookEvent = match serde_json::from_value(payload) {
+    let event: WebhookEvent = match serde_json::from_slice(&body) {
         Ok(e) => e,
         Err(e) => {
             tracing::error!(error = %e, "Failed to parse webhook event");
