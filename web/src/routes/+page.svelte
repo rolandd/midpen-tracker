@@ -2,17 +2,18 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { checkAuth, API_BASE_URL } from '$lib/api';
+	import { API_BASE_URL } from '$lib/api';
+	import { uiState } from '$lib/state.svelte';
 
 	let isConnecting = $state(false);
 
-	onMount(async () => {
-		if (await checkAuth()) {
-			await goto('/dashboard');
-		} else {
-			// User is not authenticated, safe to show the landing page
+	// Reactively check auth state. If we have a user, go to dashboard.
+	// If loading finishes and no user, we stay here and show the page.
+	$effect(() => {
+		if (uiState.user) {
+			goto('/dashboard');
+		} else if (!uiState.isUserLoading) {
 			document.documentElement.classList.remove('auth-pending');
 		}
 	});
