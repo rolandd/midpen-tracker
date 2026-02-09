@@ -249,9 +249,21 @@ async fn continue_backfill(
 
     // If we got a full page, there might be more - queue next page
     if total_fetched >= per_page as usize {
+        // Fix: Use checked_add to prevent u32 overflow (infinite loop risk)
+        let next_page = match payload.next_page.checked_add(1) {
+            Some(p) => p,
+            None => {
+                tracing::warn!(
+                    athlete_id = payload.athlete_id,
+                    "Backfill page limit reached (u32 overflow) - stopping"
+                );
+                return StatusCode::OK;
+            }
+        };
+
         let next_payload = ContinueBackfillPayload {
             athlete_id: payload.athlete_id,
-            next_page: payload.next_page + 1,
+            next_page,
             after_timestamp: payload.after_timestamp,
         };
 
