@@ -5,10 +5,11 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { uiState } from '$lib/state.svelte';
 	import { AboutModal } from '$lib/components';
 	import { PUBLIC_BASE_URL } from '$env/static/public';
-	import { fetchHealth } from '$lib/api';
+	import { fetchHealth, fetchMe } from '$lib/api';
 
 	let { children } = $props();
 
@@ -32,6 +33,24 @@
 				uiState.backendBuildId = h.build_id;
 			})
 			.catch((e) => console.debug('Failed to fetch backend health:', e));
+
+		// Fetch user globally once
+		fetchMe()
+			.then((u) => {
+				uiState.user = u;
+				if (u.deletion_requested_at) {
+					goto('/account-deletion-in-progress');
+				}
+			})
+			.catch((e) => {
+				// 401/404 means not logged in, which is fine.
+				// We just leave uiState.user as null.
+				console.debug('User not authenticated', e);
+				uiState.user = null;
+			})
+			.finally(() => {
+				uiState.isUserLoading = false;
+			});
 	});
 </script>
 

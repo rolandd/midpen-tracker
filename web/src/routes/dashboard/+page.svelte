@@ -5,13 +5,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
-		checkAuth,
 		fetchPreserveStats,
 		logout as apiLogout,
-		fetchMe,
 		type PreserveSummary,
-		type PreserveStatsResponse,
-		type UserResponse
+		type PreserveStatsResponse
 	} from '$lib/api';
 	import ActivityList from './ActivityList.svelte';
 	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
@@ -21,7 +18,7 @@
 
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let user = $state<UserResponse | null>(null);
+	let user = $derived(uiState.user);
 	let allTimePreserves = $state<PreserveSummary[]>([]);
 	let preservesByYear = $state<PreserveStatsResponse['preserves_by_year']>({});
 	let availableYears = $state<string[]>([]);
@@ -61,16 +58,14 @@
 
 	let totalVisited = $derived(preserves.filter((p) => p.count > 0).length);
 
-	onMount(() => {
-		(async () => {
-			if (!(await checkAuth())) {
-				goto('/');
-				return;
-			}
-		})();
+	$effect(() => {
+		if (!uiState.isUserLoading && !uiState.user) {
+			goto('/');
+		}
+	});
 
+	onMount(() => {
 		loadStats();
-		fetchUser();
 
 		// Auto-refresh while backfill is in progress
 		const interval = setInterval(() => {
@@ -101,25 +96,6 @@
 		}
 	}
 
-	async function fetchUser() {
-		try {
-			user = await fetchMe();
-			if (user.deletion_requested_at) {
-				goto('/account-deletion-in-progress');
-			}
-		} catch (e) {
-			console.error('Failed to fetch user profile', e);
-
-			// If we get a 404, the user record is gone (e.g. revoked/deleted),
-			// but we still have a valid JWT. We should log them out locally.
-			const msg = e instanceof Error ? e.message : String(e);
-			if (msg.includes('404')) {
-				await apiLogout(); // This clears token and hits logout endpoint
-				goto('/');
-			}
-		}
-	}
-
 	function togglePreserve(name: string) {
 		expandedPreserve = expandedPreserve === name ? null : name;
 	}
@@ -127,6 +103,7 @@
 	async function handleLogout() {
 		isLoggingOut = true;
 		await apiLogout();
+		uiState.user = null; // Explicitly clear global user state
 		await goto('/');
 	}
 </script>

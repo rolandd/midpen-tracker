@@ -6,19 +6,6 @@ import { DEMO_MODE, mockUser, mockPreserveStats, getMockActivitiesForPreserve } 
 // API configuration
 export const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
-// Auth state helpers
-// Deprecated: We now use HttpOnly cookies, so we can't synchronously check login status
-// without an API call. Components should try to fetch user or handle 401s.
-export async function checkAuth(): Promise<boolean> {
-	if (DEMO_MODE) return true;
-	try {
-		await fetchMe();
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 // API fetch wrapper with auth
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 	const headers: HeadersInit = {
