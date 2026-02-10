@@ -23,10 +23,7 @@ pub async fn add_security_headers(req: Request, next: Next) -> Response {
         "Content-Security-Policy",
         HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
     );
-    headers.insert(
-        "Referrer-Policy",
-        HeaderValue::from_static("no-referrer"),
-    );
+    headers.insert("Referrer-Policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         "Permissions-Policy",
         HeaderValue::from_static("accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"),
