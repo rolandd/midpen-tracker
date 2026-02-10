@@ -58,15 +58,19 @@
 
 		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 			event.preventDefault();
+			// Select only enabled menu items
 			const items = Array.from(
-				dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]') || []
+				dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') || []
 			);
 			if (items.length === 0) return;
 
 			const currentIndex = items.indexOf(document.activeElement as HTMLElement);
 			let nextIndex;
 
-			if (event.key === 'ArrowDown') {
+			if (currentIndex === -1) {
+				// If no item is focused, start from the first one
+				nextIndex = event.key === 'ArrowDown' ? 0 : items.length - 1;
+			} else if (event.key === 'ArrowDown') {
 				nextIndex = (currentIndex + 1) % items.length;
 			} else {
 				nextIndex = (currentIndex - 1 + items.length) % items.length;
