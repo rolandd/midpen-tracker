@@ -2,7 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { UserResponse } from '../generated';
 	import { DeleteAccountModal } from '$lib/components';
@@ -21,8 +21,13 @@
 	let dropdownRef = $state<HTMLDivElement>();
 	let triggerRef = $state<HTMLButtonElement>();
 
-	function toggleDropdown() {
+	async function toggleDropdown() {
 		isOpen = !isOpen;
+		if (isOpen) {
+			await tick();
+			const firstItem = dropdownRef?.querySelector<HTMLElement>('[role="menuitem"]');
+			firstItem?.focus();
+		}
 	}
 
 	function closeDropdown() {
@@ -42,10 +47,32 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
-		if (isOpen && event.key === 'Escape') {
+		if (!isOpen) return;
+
+		if (event.key === 'Escape') {
 			event.preventDefault();
 			closeDropdown();
 			triggerRef?.focus();
+			return;
+		}
+
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			const items = Array.from(
+				dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]') || []
+			);
+			if (items.length === 0) return;
+
+			const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+			let nextIndex;
+
+			if (event.key === 'ArrowDown') {
+				nextIndex = (currentIndex + 1) % items.length;
+			} else {
+				nextIndex = (currentIndex - 1 + items.length) % items.length;
+			}
+
+			items[nextIndex].focus();
 		}
 	}
 
