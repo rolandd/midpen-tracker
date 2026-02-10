@@ -41,6 +41,14 @@
 		}
 	}
 
+	function handleKeydown(event: KeyboardEvent) {
+		if (isOpen && event.key === 'Escape') {
+			event.preventDefault();
+			closeDropdown();
+			triggerRef?.focus();
+		}
+	}
+
 	onMount(() => {
 		document.addEventListener('click', handleClickOutside);
 		return () => {
@@ -53,6 +61,8 @@
 		return ((firstname.charAt(0) || '') + (lastname.charAt(0) || '')).toUpperCase();
 	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <div class="relative flex items-center">
 	<!-- Trigger Button -->
@@ -86,6 +96,7 @@
 		<div
 			class="absolute top-[calc(100%+0.5rem)] right-0 w-[220px] bg-[var(--color-surface)] rounded-xl shadow-lg ring-1 ring-[var(--color-border)] p-2 z-50 origin-top-right animate-in fade-in zoom-in-95 duration-200"
 			bind:this={dropdownRef}
+			role="menu"
 		>
 			<div class="px-3 pt-3 pb-2 border-b border-[var(--color-border)] mb-1">
 				<span class="block font-semibold text-[var(--color-text)] text-[0.95rem]">
@@ -98,8 +109,9 @@
 				href="https://www.strava.com/athletes/{user.athlete_id}"
 				target="_blank"
 				rel="noopener noreferrer"
-				class="group flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-[var(--color-text-muted)] no-underline text-sm transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)]"
+				class="group flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-[var(--color-text-muted)] no-underline text-sm transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-primary)] focus-visible:bg-[var(--color-surface-hover)] focus-visible:text-[var(--color-primary)] focus-visible:outline-none"
 				aria-label="View on Strava (opens in new tab)"
+				role="menuitem"
 			>
 				View on Strava
 				<svg
@@ -123,12 +135,13 @@
 			<div class="h-px bg-[var(--color-border)] my-1"></div>
 
 			<button
-				class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-colors border-none bg-transparent cursor-pointer text-left text-red-500 hover:bg-red-500/10 hover:text-red-700"
+				class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-colors border-none bg-transparent cursor-pointer text-left text-red-500 hover:bg-red-500/10 hover:text-red-700 focus-visible:bg-red-500/10 focus-visible:text-red-700 focus-visible:outline-none"
 				onclick={async () => {
 					await onLogout();
 					closeDropdown();
 				}}
 				disabled={isLoggingOut}
+				role="menuitem"
 			>
 				{#if isLoggingOut}
 					Logging out...
@@ -138,12 +151,13 @@
 			</button>
 
 			<button
-				class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-colors border-none bg-transparent cursor-pointer text-left text-red-500 hover:bg-red-500/10 hover:text-red-700 font-medium mt-1"
+				class="flex items-center justify-between w-full px-3 py-2.5 rounded-lg text-sm transition-colors border-none bg-transparent cursor-pointer text-left text-red-500 hover:bg-red-500/10 hover:text-red-700 font-medium mt-1 focus-visible:bg-red-500/10 focus-visible:text-red-700 focus-visible:outline-none"
 				onclick={() => {
 					showDeleteConfirmation = true;
 					closeDropdown();
 				}}
 				disabled={isLoggingOut}
+				role="menuitem"
 			>
 				Delete My Account
 			</button>
