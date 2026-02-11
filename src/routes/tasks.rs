@@ -221,30 +221,65 @@ async fn continue_backfill(
         );
     }
 
-    if let Err(e) = state
+    match state
         .tasks_service
         .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
         .await
     {
-        tracing::error!(error = %e, "Failed to queue activities for backfill");
+        Ok(result) => {
+            if result.failed > 0 {
+                tracing::warn!(
+                    athlete_id = payload.athlete_id,
+                    failed = result.failed,
+                    failed_ids = ?result.failed_ids,
+                    "Some activities failed to queue during backfill (tasks.rs)"
+                );
 
-        // Rollback pending count to avoid "phantom" backlog
-        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-            Ok(s) => s.unwrap_or_else(UserStats::default),
-            Err(err) => {
-                tracing::error!(error = %err, "Failed to fetch stats for rollback");
-                UserStats::default()
-            }
-        };
-        if stats.pending_activities >= count as u32 {
-            stats.pending_activities -= count as u32;
-            stats.updated_at = chrono::Utc::now().to_rfc3339();
-            if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-                tracing::error!(error = %db_err, "Failed to rollback pending count");
+                let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
+                    Ok(s) => s.unwrap_or_else(UserStats::default),
+                    Err(err) => {
+                        tracing::error!(
+                            error = %err,
+                            "Failed to fetch stats for partial rollback"
+                        );
+                        UserStats::default()
+                    }
+                };
+
+                let failed_count = result.failed as u32;
+                if stats.pending_activities >= failed_count {
+                    stats.pending_activities -= failed_count;
+                    stats.updated_at = chrono::Utc::now().to_rfc3339();
+                    if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
+                        tracing::error!(
+                            error = %db_err,
+                            "Failed to rollback partial pending count"
+                        );
+                    }
+                }
             }
         }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to queue activities for backfill");
 
-        return StatusCode::INTERNAL_SERVER_ERROR;
+            // Rollback pending count to avoid "phantom" backlog
+            let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
+                Ok(s) => s.unwrap_or_else(UserStats::default),
+                Err(err) => {
+                    tracing::error!(error = %err, "Failed to fetch stats for rollback");
+                    UserStats::default()
+                }
+            };
+            if stats.pending_activities >= count as u32 {
+                stats.pending_activities -= count as u32;
+                stats.updated_at = chrono::Utc::now().to_rfc3339();
+                if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
+                    tracing::error!(error = %db_err, "Failed to rollback pending count");
+                }
+            }
+
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
     }
 
     // If we got a full page, there might be more - queue next page

@@ -16,6 +16,17 @@ use serde::{Deserialize, Serialize};
 
 const MAX_CONCURRENT_TASKS: usize = 100;
 
+/// Result of a bulk enqueue operation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnqueueResult {
+    /// Number of tasks successfully queued.
+    pub queued: usize,
+    /// Number of tasks failed to queue.
+    pub failed: usize,
+    /// IDs of activities that failed to queue.
+    pub failed_ids: Vec<u64>,
+}
+
 /// Payload sent to the activity processing task.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessActivityPayload {
@@ -54,6 +65,11 @@ pub struct TasksService {
     project_id: String,
     location: String,
     queue_name: String,
+
+    #[cfg(test)]
+    mock_mode: bool,
+    #[cfg(test)]
+    mock_fail_ids: std::sync::Arc<std::sync::RwLock<std::collections::HashSet<u64>>>,
 }
 
 impl TasksService {
@@ -62,6 +78,34 @@ impl TasksService {
             project_id: project_id.to_string(),
             location: region.to_string(),
             queue_name: crate::config::ACTIVITY_QUEUE_NAME.to_string(),
+            #[cfg(test)]
+            mock_mode: false,
+            #[cfg(test)]
+            mock_fail_ids: std::sync::Arc::new(std::sync::RwLock::new(
+                std::collections::HashSet::new(),
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn new_mock() -> Self {
+        Self {
+            project_id: "mock-project".to_string(),
+            location: "mock-location".to_string(),
+            queue_name: "mock-queue".to_string(),
+            mock_mode: true,
+            mock_fail_ids: std::sync::Arc::new(std::sync::RwLock::new(
+                std::collections::HashSet::new(),
+            )),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_mock_fail_ids(&self, ids: Vec<u64>) {
+        let mut fail_ids = self.mock_fail_ids.write().unwrap();
+        fail_ids.clear();
+        for id in ids {
+            fail_ids.insert(id);
         }
     }
 
@@ -71,6 +115,17 @@ impl TasksService {
         service_url: &str,
         payload: ProcessActivityPayload,
     ) -> Result<()> {
+        #[cfg(test)]
+        if self.mock_mode {
+            let fail_ids = self.mock_fail_ids.read().unwrap();
+            if fail_ids.contains(&payload.activity_id) {
+                return Err(AppError::Internal(anyhow::anyhow!(
+                    "Mock failure for activity {}",
+                    payload.activity_id
+                )));
+            }
+        }
+
         self.queue_task(service_url, "/tasks/process-activity", &payload)
             .await
     }
@@ -117,6 +172,11 @@ impl TasksService {
         endpoint: &str,
         payload: &T,
     ) -> Result<()> {
+        #[cfg(test)]
+        if self.mock_mode {
+            return Ok(());
+        }
+
         use google_cloud_tasks_v2::client::CloudTasks;
         use google_cloud_tasks_v2::model::{HttpRequest, OidcToken, Task};
 
@@ -164,29 +224,117 @@ impl TasksService {
     }
 
     /// Queue multiple activities for backfill.
+    /// Returns detailed results about which activities were queued and which failed.
     pub async fn queue_backfill(
         &self,
         service_url: &str,
         athlete_id: u64,
         activity_ids: Vec<u64>,
-    ) -> Result<usize> {
-        let count = activity_ids.len();
-
-        stream::iter(activity_ids)
-            .for_each_concurrent(MAX_CONCURRENT_TASKS, |activity_id| async move {
+    ) -> Result<EnqueueResult> {
+        let results: Vec<std::result::Result<(), u64>> = stream::iter(activity_ids)
+            .map(|activity_id| async move {
                 let payload = ProcessActivityPayload {
                     activity_id,
                     athlete_id,
                     source: "backfill".to_string(),
                 };
 
-                if let Err(e) = self.queue_activity(service_url, payload).await {
-                    tracing::warn!(activity_id, error = ?e, "Failed to queue activity for backfill");
+                match self.queue_activity(service_url, payload).await {
+                    Ok(_) => Ok(()),
+                    Err(e) => {
+                        tracing::warn!(activity_id, error = ?e, "Failed to queue activity for backfill");
+                        Err(activity_id)
+                    }
                 }
             })
+            .buffer_unordered(MAX_CONCURRENT_TASKS)
+            .collect()
             .await;
 
-        tracing::info!(athlete_id, count, "Queued activities for backfill");
-        Ok(count)
+        let mut queued = 0;
+        let mut failed = 0;
+        let mut failed_ids = Vec::new();
+
+        for res in results {
+            match res {
+                Ok(_) => queued += 1,
+                Err(id) => {
+                    failed += 1;
+                    failed_ids.push(id);
+                }
+            }
+        }
+
+        tracing::info!(
+            athlete_id,
+            queued,
+            failed,
+            "Queued activities for backfill processing"
+        );
+
+        Ok(EnqueueResult {
+            queued,
+            failed,
+            failed_ids,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_queue_backfill_partial_failure() {
+        let tasks_service = TasksService::new_mock();
+
+        // Fail activity 2 and 4
+        tasks_service.set_mock_fail_ids(vec![2, 4]);
+
+        let activity_ids = vec![1, 2, 3, 4, 5];
+        let result = tasks_service
+            .queue_backfill("http://mock-service", 123, activity_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(result.queued, 3);
+        assert_eq!(result.failed, 2);
+
+        // Sorting might be needed as buffer_unordered doesn't guarantee order
+        let mut failed_ids = result.failed_ids;
+        failed_ids.sort();
+        assert_eq!(failed_ids, vec![2, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_queue_backfill_all_success() {
+        let tasks_service = TasksService::new_mock();
+        let activity_ids = vec![1, 2, 3];
+        let result = tasks_service
+            .queue_backfill("http://mock-service", 123, activity_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(result.queued, 3);
+        assert_eq!(result.failed, 0);
+        assert!(result.failed_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_queue_backfill_all_failure() {
+        let tasks_service = TasksService::new_mock();
+        tasks_service.set_mock_fail_ids(vec![1, 2, 3]);
+
+        let activity_ids = vec![1, 2, 3];
+        let result = tasks_service
+            .queue_backfill("http://mock-service", 123, activity_ids)
+            .await
+            .unwrap();
+
+        assert_eq!(result.queued, 0);
+        assert_eq!(result.failed, 3);
+        let mut failed_ids = result.failed_ids;
+        failed_ids.sort();
+        assert_eq!(failed_ids, vec![1, 2, 3]);
     }
 }

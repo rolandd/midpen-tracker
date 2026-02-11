@@ -381,25 +381,59 @@ async fn trigger_backfill(
         }
 
         // Queue only the new activities
-        if let Err(e) = state
+        match state
             .tasks_service
             .queue_backfill(service_url, athlete_id, new_activity_ids)
             .await
         {
-            // Rollback pending count
-            let mut rollback_stats = state
-                .db
-                .get_user_stats(athlete_id)
-                .await?
-                .unwrap_or_else(UserStats::default);
-            if rollback_stats.pending_activities >= new_count {
-                rollback_stats.pending_activities -= new_count;
-                rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
-                    tracing::error!(error = %db_err, "Failed to rollback pending count in auth handler");
+            Ok(result) => {
+                if result.failed > 0 {
+                    tracing::warn!(
+                        athlete_id,
+                        failed = result.failed,
+                        failed_ids = ?result.failed_ids,
+                        "Some activities failed to queue during backfill"
+                    );
+
+                    // Rollback pending count for failed tasks
+                    let mut rollback_stats = state
+                        .db
+                        .get_user_stats(athlete_id)
+                        .await?
+                        .unwrap_or_else(UserStats::default);
+
+                    let failed_count = result.failed as u32;
+                    if rollback_stats.pending_activities >= failed_count {
+                        rollback_stats.pending_activities -= failed_count;
+                        rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
+                        if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
+                            tracing::error!(
+                                error = %db_err,
+                                "Failed to rollback pending count for failed tasks"
+                            );
+                        }
+                    }
                 }
             }
-            return Err(e);
+            Err(e) => {
+                // Rollback pending count (all failed)
+                let mut rollback_stats = state
+                    .db
+                    .get_user_stats(athlete_id)
+                    .await?
+                    .unwrap_or_else(UserStats::default);
+                if rollback_stats.pending_activities >= new_count {
+                    rollback_stats.pending_activities -= new_count;
+                    rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
+                    if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
+                        tracing::error!(
+                            error = %db_err,
+                            "Failed to rollback pending count in auth handler"
+                        );
+                    }
+                }
+                return Err(e);
+            }
         }
     }
 
