@@ -406,7 +406,9 @@ async fn trigger_backfill(
                     if rollback_stats.pending_activities >= failed_count {
                         rollback_stats.pending_activities -= failed_count;
                         rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                        if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
+                        if let Err(db_err) =
+                            state.db.set_user_stats(athlete_id, &rollback_stats).await
+                        {
                             tracing::error!(
                                 error = %db_err,
                                 "Failed to rollback pending count for failed tasks"
@@ -425,7 +427,8 @@ async fn trigger_backfill(
                 if rollback_stats.pending_activities >= new_count {
                     rollback_stats.pending_activities -= new_count;
                     rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                    if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
+                    if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await
+                    {
                         tracing::error!(
                             error = %db_err,
                             "Failed to rollback pending count in auth handler"
