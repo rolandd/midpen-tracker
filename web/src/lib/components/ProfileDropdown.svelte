@@ -58,18 +58,21 @@
 			return;
 		}
 
-		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-			event.preventDefault();
-			// Select only enabled menu items
-			const items = Array.from(
-				dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') || []
-			);
-			if (items.length === 0) return;
+		const items = Array.from(
+			dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') || []
+		);
+		if (items.length === 0) return;
 
+		if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+			event.preventDefault();
 			const currentIndex = items.indexOf(document.activeElement as HTMLElement);
 			let nextIndex;
 
-			if (currentIndex === -1) {
+			if (event.key === 'Home') {
+				nextIndex = 0;
+			} else if (event.key === 'End') {
+				nextIndex = items.length - 1;
+			} else if (currentIndex === -1) {
 				// If no item is focused, start from the first one
 				nextIndex = event.key === 'ArrowDown' ? 0 : items.length - 1;
 			} else if (event.key === 'ArrowDown') {
@@ -81,6 +84,15 @@
 			items[nextIndex].focus();
 		}
 	}
+
+	$effect(() => {
+		if (isOpen) {
+			window.addEventListener('keydown', handleKeydown);
+			return () => {
+				window.removeEventListener('keydown', handleKeydown);
+			};
+		}
+	});
 
 	onMount(() => {
 		document.addEventListener('click', handleClickOutside);
@@ -94,8 +106,6 @@
 		return ((firstname.charAt(0) || '') + (lastname.charAt(0) || '')).toUpperCase();
 	}
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class="relative flex items-center">
 	<!-- Trigger Button -->
