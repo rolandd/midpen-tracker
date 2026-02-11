@@ -237,7 +237,25 @@
 							>
 								<div class="preserve-header">
 									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="preserve-meta">
+										<span class="preserve-count">{preserve.count}</span>
+										<svg
+											class="chevron"
+											class:expanded={expandedPreserve === preserve.name}
+											xmlns="http://www.w3.org/2000/svg"
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									</div>
 								</div>
 							</button>
 
@@ -561,6 +579,30 @@
 		border-radius: 999px;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.preserve-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
+	.chevron {
+		color: var(--color-text-muted);
+		transition: transform 0.2s ease;
+	}
+
+	.chevron.expanded {
+		transform: rotate(180deg);
+		color: var(--color-primary);
+	}
+
+	/* Enhance hover state */
+	.preserve-card:hover .chevron {
+		color: var(--color-text);
+	}
+	.preserve-card:hover .chevron.expanded {
+		color: var(--color-primary-hover);
 	}
 
 	/* Activity styles moved to ActivityList.svelte */
