@@ -28,7 +28,9 @@ async fn test_concurrent_activity_processing_race_condition() {
         last_active: chrono::Utc::now().to_rfc3339(),
         deletion_requested_at: None,
     };
-    db.upsert_user(&user).await.unwrap();
+    db.upsert_user(&user)
+        .await
+        .expect("Failed to create test user");
 
     // We will spawn N concurrent tasks, each adding an activity with distance 100.0
     // Total distance should be N * 100.0
@@ -62,11 +64,18 @@ async fn test_concurrent_activity_processing_race_condition() {
 
     // Wait for all
     for handle in handles {
-        handle.await.unwrap().unwrap();
+        handle
+            .await
+            .expect("Task join failed")
+            .expect("Activity processing failed");
     }
 
     // Check stats
-    let stats = db.get_user_stats(athlete_id).await.unwrap().unwrap();
+    let stats = db
+        .get_user_stats(athlete_id)
+        .await
+        .expect("Failed to fetch user stats")
+        .expect("User stats document not found");
 
     println!("Total activities: {}", stats.total_activities);
     println!("Total distance: {}", stats.total_distance_meters);
