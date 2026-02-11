@@ -25,7 +25,9 @@
 		isOpen = !isOpen;
 		if (isOpen) {
 			await tick();
-			const firstItem = dropdownRef?.querySelector<HTMLElement>('[role="menuitem"]');
+			const firstItem = dropdownRef?.querySelector<HTMLElement>(
+				'[role="menuitem"]:not([disabled])'
+			);
 			firstItem?.focus();
 		}
 	}
