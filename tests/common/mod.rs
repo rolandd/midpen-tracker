@@ -188,7 +188,6 @@ pub fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, A
 
     let kms = KmsService::new_mock();
     let token_cache = Arc::new(dashmap::DashMap::new());
-    let refresh_locks = Arc::new(dashmap::DashMap::new());
 
     let strava_service = StravaService::new(
         config.strava_client_id.clone(),
@@ -196,7 +195,6 @@ pub fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, A
         db.clone(),
         kms,
         token_cache,
-        refresh_locks,
     );
 
     let state = Arc::new(AppState {
