@@ -12,7 +12,7 @@ use midpen_tracker::models::user::{User, UserTokens};
 use midpen_tracker::models::{Activity, ActivityPreserve};
 
 mod common;
-use common::test_db;
+use common::{parse_time, test_db};
 
 /// Generate a unique athlete ID for test isolation.
 
@@ -189,7 +189,7 @@ async fn test_new_activity_processing() {
         athlete_id,
         name: "Morning Ride at Rancho".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2024-01-15T08:00:00Z".to_string(),
+        start_date: parse_time("2024-01-15T08:00:00Z"),
         distance_meters: 15000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string()],
         source: "webhook".to_string(),
@@ -203,7 +203,7 @@ async fn test_new_activity_processing() {
         athlete_id,
         activity_id,
         preserve_name: "Rancho San Antonio".to_string(),
-        start_date: "2024-01-15T08:00:00Z".to_string(),
+        start_date: parse_time("2024-01-15T08:00:00Z"),
         activity_name: "Morning Ride at Rancho".to_string(),
         sport_type: "Ride".to_string(),
     }];
@@ -253,7 +253,7 @@ async fn test_activity_idempotency() {
         athlete_id,
         name: "Duplicate Test".to_string(),
         sport_type: "Run".to_string(),
-        start_date: "2024-01-15T09:00:00Z".to_string(),
+        start_date: parse_time("2024-01-15T09:00:00Z"),
         distance_meters: 5000.0,
         preserves_visited: vec!["Monte Bello".to_string()],
         source: "webhook".to_string(),
@@ -300,7 +300,7 @@ async fn test_multiple_activities_accumulate_stats() {
         athlete_id,
         name: "Ride 1".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2024-01-10T08:00:00Z".to_string(),
+        start_date: parse_time("2024-01-10T08:00:00Z"),
         distance_meters: 10000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string()],
         source: "backfill".to_string(),
@@ -316,7 +316,7 @@ async fn test_multiple_activities_accumulate_stats() {
         athlete_id,
         name: "Ride 2".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2024-01-12T08:00:00Z".to_string(),
+        start_date: parse_time("2024-01-12T08:00:00Z"),
         distance_meters: 8000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string()],
         source: "backfill".to_string(),
@@ -332,7 +332,7 @@ async fn test_multiple_activities_accumulate_stats() {
         athlete_id,
         name: "Hike at Monte Bello".to_string(),
         sport_type: "Hike".to_string(),
-        start_date: "2024-01-14T10:00:00Z".to_string(),
+        start_date: parse_time("2024-01-14T10:00:00Z"),
         distance_meters: 6000.0,
         preserves_visited: vec!["Monte Bello".to_string()],
         source: "webhook".to_string(),
@@ -387,7 +387,7 @@ async fn test_activity_with_multiple_preserves() {
         athlete_id,
         name: "Epic Multi-Preserve Ride".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2024-01-15T07:00:00Z".to_string(),
+        start_date: parse_time("2024-01-15T07:00:00Z"),
         distance_meters: 50000.0,
         preserves_visited: vec![
             "Rancho San Antonio".to_string(),
@@ -408,7 +408,7 @@ async fn test_activity_with_multiple_preserves() {
             athlete_id,
             activity_id,
             preserve_name: p.clone(),
-            start_date: activity.start_date.clone(),
+            start_date: activity.start_date,
             activity_name: activity.name.clone(),
             sport_type: activity.sport_type.clone(),
         })
@@ -468,7 +468,7 @@ async fn test_preserves_by_year_tracking() {
         athlete_id,
         name: "2024 Ride".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2024-06-15T08:00:00Z".to_string(),
+        start_date: parse_time("2024-06-15T08:00:00Z"),
         distance_meters: 10000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string()],
         source: "backfill".to_string(),
@@ -486,7 +486,7 @@ async fn test_preserves_by_year_tracking() {
         athlete_id,
         name: "2025 Ride".to_string(),
         sport_type: "Ride".to_string(),
-        start_date: "2025-01-10T08:00:00Z".to_string(),
+        start_date: parse_time("2025-01-10T08:00:00Z"),
         distance_meters: 8000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string(), "Monte Bello".to_string()],
         source: "webhook".to_string(),
@@ -540,19 +540,19 @@ async fn test_activity_pagination() {
     for i in 1..=total_activities {
         let timestamp = 1704103200 + (i * 60); // Base + i minutes
         let dt = chrono::DateTime::from_timestamp(timestamp as i64, 0).unwrap();
-        let start_date = dt.to_rfc3339();
+        let processed_at = dt.to_rfc3339();
 
         let activity = Activity {
             strava_activity_id: athlete_id + i,
             athlete_id,
             name: format!("Activity {}", i),
             sport_type: "Run".to_string(),
-            start_date,
+            start_date: dt,
             distance_meters: 1000.0,
             preserves_visited: vec![],
             source: "test".to_string(),
             annotation_added: false,
-            processed_at: dt.to_rfc3339(),
+            processed_at,
             device_name: None,
         };
         // Use set_activity directly as we only care about the activities collection query
@@ -596,15 +596,17 @@ async fn test_activity_pagination() {
         .unwrap();
     assert_eq!(page4.len(), 0, "Page 4 should be empty");
 
-    // Test with after_date filter
+    // Test with after filter
     // Filter after activity 50's date. Should return 51, 52, 53, 54, 55 (5 items)
     let split_time = 1704103200 + (50 * 60);
-    let split_date = chrono::DateTime::from_timestamp(split_time as i64, 0)
-        .unwrap()
-        .to_rfc3339();
 
     let filtered = db
-        .get_activities_for_user(athlete_id, Some(&split_date), 20, 0)
+        .get_activities_for_user(
+            athlete_id,
+            chrono::DateTime::from_timestamp(split_time as i64, 0),
+            20,
+            0,
+        )
         .await
         .unwrap();
     assert_eq!(filtered.len(), 5, "Should have 5 activities after ID 50");
