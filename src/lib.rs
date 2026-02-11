@@ -13,6 +13,7 @@ pub mod middleware;
 pub mod models;
 pub mod routes;
 pub mod services;
+pub mod time_utils;
 
 use config::Config;
 use db::FirestoreDb;
