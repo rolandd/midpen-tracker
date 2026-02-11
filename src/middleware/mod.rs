@@ -5,5 +5,7 @@
 
 pub mod auth;
 pub mod security;
+pub mod tasks_auth;
 
 pub use auth::require_auth;
+pub use tasks_auth::require_tasks_auth;
