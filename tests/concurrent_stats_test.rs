@@ -71,6 +71,13 @@ async fn test_concurrent_activity_processing_race_condition() {
     println!("Total activities: {}", stats.total_activities);
     println!("Total distance: {}", stats.total_distance_meters);
 
-    assert_eq!(stats.total_activities, n as u32, "Total activities count mismatch due to race condition");
-    assert_eq!(stats.total_distance_meters, (n as f64) * 100.0, "Total distance mismatch due to race condition");
+    assert_eq!(
+        stats.total_activities, n as u32,
+        "Total activities count mismatch due to race condition"
+    );
+    assert_eq!(
+        stats.total_distance_meters,
+        (n as f64) * 100.0,
+        "Total distance mismatch due to race condition"
+    );
 }
