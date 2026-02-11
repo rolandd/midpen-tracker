@@ -210,3 +210,10 @@ pub fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, A
 
     (create_router(state.clone()), state)
 }
+
+#[allow(dead_code)]
+pub fn parse_time(rfc3339: &str) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(rfc3339)
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+}

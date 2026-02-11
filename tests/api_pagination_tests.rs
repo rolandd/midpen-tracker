@@ -38,3 +38,23 @@ async fn test_pagination_underflow() {
     // Expect 400 Bad Request
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_after_rejects_invalid_rfc3339() {
+    let (app, state) = common::create_test_app();
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/activities?after=not-a-date&page=1&per_page=10")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

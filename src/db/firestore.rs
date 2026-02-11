@@ -198,7 +198,7 @@ impl FirestoreDb {
     pub async fn get_activities_for_user(
         &self,
         athlete_id: u64,
-        after_date: Option<&str>,
+        after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
         limit: u32,
         offset: u32,
     ) -> Result<Vec<Activity>, AppError> {
@@ -208,12 +208,12 @@ impl FirestoreDb {
             .select()
             .from(collections::ACTIVITIES);
 
-        let query = if let Some(date) = after_date {
-            let date = date.to_string();
+        let query = if let Some(timestamp) = after_timestamp {
             query.filter(move |q| {
                 q.for_all([
                     q.field("athlete_id").eq(athlete_id),
-                    q.field("start_date").greater_than(date.clone()),
+                    q.field("start_date")
+                        .greater_than(firestore::FirestoreTimestamp(timestamp)),
                 ])
             })
         } else {

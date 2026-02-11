@@ -8,6 +8,7 @@ use crate::middleware::auth::AuthUser;
 use crate::models::preserve::PreserveSummary;
 use crate::models::ActivityPreserve;
 use crate::services::tasks::DeleteUserPayload;
+use crate::time_utils::format_utc_rfc3339;
 use crate::AppState;
 use axum::{
     extract::{Query, State},
@@ -152,6 +153,20 @@ fn default_per_page() -> u32 {
 
 const MAX_PER_PAGE: u32 = 100;
 
+fn parse_after_timestamp(after: Option<&str>) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    after
+        .map(|raw| {
+            chrono::DateTime::parse_from_rfc3339(raw)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .map_err(|_| {
+                    crate::error::AppError::BadRequest(
+                        "Invalid 'after' parameter: must be RFC3339 datetime".to_string(),
+                    )
+                })
+        })
+        .transpose()
+}
+
 #[derive(Serialize)]
 #[cfg_attr(feature = "binding-generation", derive(TS))]
 #[cfg_attr(
@@ -195,6 +210,7 @@ async fn get_activities(
     );
 
     let limit = params.per_page.min(MAX_PER_PAGE);
+    let after_timestamp = parse_after_timestamp(params.after.as_deref())?;
 
     if params.page < 1 {
         return Err(crate::error::AppError::BadRequest(
@@ -216,7 +232,7 @@ async fn get_activities(
                 id: r.activity_id,
                 name: r.activity_name,
                 sport_type: r.sport_type,
-                start_date: r.start_date,
+                start_date: format_utc_rfc3339(r.start_date),
                 preserves: vec![r.preserve_name],
             })
             .collect();
@@ -248,7 +264,7 @@ async fn get_activities(
 
         let results = state
             .db
-            .get_activities_for_user(user.athlete_id, params.after.as_deref(), limit, offset)
+            .get_activities_for_user(user.athlete_id, after_timestamp, limit, offset)
             .await?;
 
         let page_count = results.len() as u32;
@@ -270,7 +286,7 @@ async fn get_activities(
                 id: a.strava_activity_id,
                 name: a.name,
                 sport_type: a.sport_type,
-                start_date: a.start_date,
+                start_date: format_utc_rfc3339(a.start_date),
                 preserves: a.preserves_visited,
             })
             .collect();

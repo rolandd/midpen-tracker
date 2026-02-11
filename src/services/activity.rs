@@ -89,13 +89,23 @@ impl ActivityProcessor {
             };
 
         // 4. Build activity record and preserve join records
+        let start_date = chrono::DateTime::parse_from_rfc3339(&strava_activity.start_date)
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!(
+                    "Invalid Strava start_date for activity {}: {}",
+                    activity_id,
+                    e
+                ))
+            })?
+            .with_timezone(&chrono::Utc);
+
         let now = chrono::Utc::now().to_rfc3339();
         let activity = Activity {
             strava_activity_id: activity_id,
             athlete_id,
             name: strava_activity.name,
             sport_type: strava_activity.sport_type,
-            start_date: strava_activity.start_date,
+            start_date,
             distance_meters: strava_activity.distance,
             preserves_visited: preserves_visited.clone(),
             source: source.to_string(),
@@ -112,7 +122,7 @@ impl ActivityProcessor {
                 athlete_id,
                 activity_id,
                 preserve_name: p_name.clone(),
-                start_date: activity.start_date.clone(),
+                start_date: activity.start_date,
                 activity_name: activity.name.clone(),
                 sport_type: activity.sport_type.clone(),
             })

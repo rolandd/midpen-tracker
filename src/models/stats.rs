@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 use crate::models::Activity;
+use crate::time_utils::format_utc_rfc3339;
+use chrono::{DateTime, Utc};
 
 /// Pre-computed statistics for a user.
 ///
@@ -120,11 +122,13 @@ impl UserStats {
             // Track first visit
             self.preserve_first_visit
                 .entry(preserve_name.clone())
-                .or_insert_with(|| activity.start_date.clone());
+                .or_insert_with(|| format_utc_rfc3339(activity.start_date));
 
             // Always update last visit (assuming activities processed in order)
-            self.preserve_last_visit
-                .insert(preserve_name.clone(), activity.start_date.clone());
+            self.preserve_last_visit.insert(
+                preserve_name.clone(),
+                format_utc_rfc3339(activity.start_date),
+            );
         }
 
         // Update activity totals
@@ -142,40 +146,30 @@ impl UserStats {
             .or_insert(0.0) += activity.distance_meters;
 
         // Update time series (extract YYYY-MM and YYYY from start_date)
-        if let Some(month_key) = extract_month_key(&activity.start_date) {
-            *self.activities_by_month.entry(month_key).or_insert(0) += 1;
-        }
-        if let Some(year_key) = extract_year_key(&activity.start_date) {
-            *self.activities_by_year.entry(year_key.clone()).or_insert(0) += 1;
+        let month_key = extract_month_key(activity.start_date);
+        *self.activities_by_month.entry(month_key).or_insert(0) += 1;
 
-            // Update preserves_by_year for year-filtered queries
-            let year_preserves = self.preserves_by_year.entry(year_key).or_default();
-            for preserve_name in &activity.preserves_visited {
-                *year_preserves.entry(preserve_name.clone()).or_insert(0) += 1;
-            }
+        let year_key = extract_year_key(activity.start_date);
+        *self.activities_by_year.entry(year_key.clone()).or_insert(0) += 1;
+
+        // Update preserves_by_year for year-filtered queries
+        let year_preserves = self.preserves_by_year.entry(year_key).or_default();
+        for preserve_name in &activity.preserves_visited {
+            *year_preserves.entry(preserve_name.clone()).or_insert(0) += 1;
         }
 
         true
     }
 }
 
-/// Extract "YYYY-MM" from an ISO 8601 date string.
-fn extract_month_key(date: &str) -> Option<String> {
-    // ISO 8601: "2024-01-15T10:30:00Z" -> "2024-01"
-    if date.len() >= 7 {
-        Some(date[..7].to_string())
-    } else {
-        None
-    }
+/// Extract "YYYY-MM" from a UTC timestamp.
+fn extract_month_key(date: DateTime<Utc>) -> String {
+    date.format("%Y-%m").to_string()
 }
 
-/// Extract "YYYY" from an ISO 8601 date string.
-fn extract_year_key(date: &str) -> Option<String> {
-    if date.len() >= 4 {
-        Some(date[..4].to_string())
-    } else {
-        None
-    }
+/// Extract "YYYY" from a UTC timestamp.
+fn extract_year_key(date: DateTime<Utc>) -> String {
+    date.format("%Y").to_string()
 }
 
 #[cfg(test)]
@@ -189,12 +183,16 @@ mod tests {
         distance: f64,
         preserves: Vec<&str>,
     ) -> Activity {
+        let start_date = chrono::DateTime::parse_from_rfc3339(date)
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
         Activity {
             strava_activity_id: id,
             athlete_id: 12345,
             name: format!("Test Activity {}", id),
             sport_type: sport.to_string(),
-            start_date: date.to_string(),
+            start_date,
             distance_meters: distance,
             preserves_visited: preserves.into_iter().map(String::from).collect(),
             source: "test".to_string(),

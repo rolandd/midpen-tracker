@@ -28,7 +28,9 @@ fn test_device_name_parsing() {
         athlete_id: 123,
         name: strava_activity.name.clone(),
         sport_type: strava_activity.sport_type.clone(),
-        start_date: strava_activity.start_date.clone(),
+        start_date: chrono::DateTime::parse_from_rfc3339(&strava_activity.start_date)
+            .unwrap()
+            .with_timezone(&chrono::Utc),
         distance_meters: strava_activity.distance,
         preserves_visited: vec![],
         source: "test".to_string(),
