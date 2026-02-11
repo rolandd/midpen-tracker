@@ -235,47 +235,32 @@ async fn continue_backfill(
                     "Some activities failed to queue during backfill (tasks.rs)"
                 );
 
-                let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-                    Ok(s) => s.unwrap_or_else(UserStats::default),
-                    Err(err) => {
-                        tracing::error!(
-                            error = %err,
-                            "Failed to fetch stats for partial rollback"
-                        );
-                        UserStats::default()
-                    }
-                };
-
-                let failed_count = result.failed as u32;
-                if stats.pending_activities >= failed_count {
-                    stats.pending_activities -= failed_count;
-                    stats.updated_at = chrono::Utc::now().to_rfc3339();
-                    if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-                        tracing::error!(
-                            error = %db_err,
-                            "Failed to rollback partial pending count"
-                        );
-                    }
+                // Atomically rollback partial pending count
+                if let Err(db_err) = state
+                    .db
+                    .update_pending_activities(payload.athlete_id, -(result.failed as i32))
+                    .await
+                {
+                    tracing::error!(
+                        error = %db_err,
+                        "Failed to rollback partial pending count (atomic)"
+                    );
                 }
             }
         }
         Err(e) => {
             tracing::error!(error = %e, "Failed to queue activities for backfill");
 
-            // Rollback pending count to avoid "phantom" backlog
-            let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-                Ok(s) => s.unwrap_or_else(UserStats::default),
-                Err(err) => {
-                    tracing::error!(error = %err, "Failed to fetch stats for rollback");
-                    UserStats::default()
-                }
-            };
-            if stats.pending_activities >= count as u32 {
-                stats.pending_activities -= count as u32;
-                stats.updated_at = chrono::Utc::now().to_rfc3339();
-                if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-                    tracing::error!(error = %db_err, "Failed to rollback pending count");
-                }
+            // Rollback pending count to avoid "phantom" backlog (atomic)
+            if let Err(db_err) = state
+                .db
+                .update_pending_activities(payload.athlete_id, -(count as i32))
+                .await
+            {
+                tracing::error!(
+                    error = %db_err,
+                    "Failed to rollback pending count (atomic)"
+                );
             }
 
             return StatusCode::INTERNAL_SERVER_ERROR;
@@ -349,19 +334,8 @@ async fn decrement_pending(
     state: &Arc<AppState>,
     athlete_id: u64,
 ) -> Result<(), crate::error::AppError> {
-    let mut stats = state
-        .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
-
-    if stats.pending_activities > 0 {
-        stats.pending_activities -= 1;
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-        state.db.set_user_stats(athlete_id, &stats).await?;
-    }
-
-    Ok(())
+    // Use atomic update to prevent race conditions
+    state.db.update_pending_activities(athlete_id, -1).await
 }
 
 /// Increment the pending activities count when queuing new activities.
@@ -370,17 +344,11 @@ async fn increment_pending(
     athlete_id: u64,
     count: u32,
 ) -> Result<(), crate::error::AppError> {
-    let mut stats = state
+    // Use atomic update to prevent race conditions
+    state
         .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
-
-    stats.pending_activities += count;
-    stats.updated_at = chrono::Utc::now().to_rfc3339();
-    state.db.set_user_stats(athlete_id, &stats).await?;
-
-    Ok(())
+        .update_pending_activities(athlete_id, count as i32)
+        .await
 }
 
 /// Delete a user and all their data (GDPR compliance).

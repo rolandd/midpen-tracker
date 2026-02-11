@@ -379,6 +379,64 @@ impl FirestoreDb {
         Ok(())
     }
 
+    /// Atomically update the pending activities count for a user.
+    ///
+    /// Uses a Firestore transaction to prevent race conditions during concurrent backfills.
+    /// `delta`: Positive to increment, negative to decrement.
+    pub async fn update_pending_activities(
+        &self,
+        athlete_id: u64,
+        delta: i32,
+    ) -> Result<(), AppError> {
+        let client = self.get_client()?;
+        let mut transaction = client
+            .begin_transaction()
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+
+        // 1. Read current stats (with transaction lock)
+        let current_stats: Option<crate::models::UserStats> = client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await
+            .map_err(|e| {
+                AppError::Database(format!("Failed to read stats in transaction: {}", e))
+            })?;
+
+        let mut stats = current_stats.unwrap_or_default();
+
+        // 2. Apply delta safely
+        if delta > 0 {
+            stats.pending_activities = stats.pending_activities.saturating_add(delta as u32);
+        } else {
+            let decrement = (-delta) as u32;
+            stats.pending_activities = stats.pending_activities.saturating_sub(decrement);
+        }
+        stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+        // 3. Write back
+        client
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)
+            .map_err(|e| {
+                AppError::Database(format!("Failed to add stats update to transaction: {}", e))
+            })?;
+
+        transaction
+            .commit()
+            .await
+            .map_err(|e| AppError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(())
+    }
+
     // ─── Atomic Activity Processing ─────────────────────────────────
 
     /// Atomically process an activity: store the activity, preserve joins, and update stats.
