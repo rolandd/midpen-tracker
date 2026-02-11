@@ -418,7 +418,7 @@ impl FirestoreDb {
         if delta > 0 {
             stats.pending_activities = stats.pending_activities.saturating_add(delta as u32);
         } else {
-            let decrement = (-delta) as u32;
+            let decrement = delta.unsigned_abs();
             stats.pending_activities = stats.pending_activities.saturating_sub(decrement);
         }
         stats.updated_at = chrono::Utc::now().to_rfc3339();
