@@ -50,9 +50,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
 	// Build the CSP header
 	const apiUrl = context.env.PUBLIC_API_URL || '';
-	const connectSrc = ["'self'", 'https://cloudflareinsights.com', apiUrl]
-		.filter(Boolean)
-		.join(' ');
+	const connectSrc = ["'self'", 'https://cloudflareinsights.com', apiUrl].filter(Boolean).join(' ');
 
 	const csp = [
 		"default-src 'self'",
@@ -86,10 +84,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 		'Permissions-Policy',
 		'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
 	);
-	newHeaders.set(
-		'Strict-Transport-Security',
-		'max-age=31536000; includeSubDomains; preload'
-	);
+	newHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 
 	return new Response(transformedResponse.body, {
 		status: transformedResponse.status,
