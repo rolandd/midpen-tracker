@@ -13,6 +13,7 @@ use crate::db::collections;
 use crate::error::AppError;
 use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
+use firestore::FirestoreConsistencySelector;
 use futures_util::{stream, StreamExt};
 
 const MAX_CONCURRENT_DB_OPS: usize = 50;
@@ -394,8 +395,13 @@ impl FirestoreDb {
             .await
             .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
 
+        // Clone client with transaction consistency to ensure read is part of transaction
+        let client_tx = client.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
         // 1. Read current stats (with transaction lock)
-        let current_stats: Option<crate::models::UserStats> = client
+        let current_stats: Option<crate::models::UserStats> = client_tx
             .fluent()
             .select()
             .by_id_in(collections::USER_STATS)
