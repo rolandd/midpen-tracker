@@ -50,7 +50,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
 	// Build the CSP header
 	const apiUrl = context.env.PUBLIC_API_URL || '';
-	const connectSrc = ["'self'", 'https://cloudflareinsights.com', 'https://*.run.app', apiUrl]
+	const connectSrc = ["'self'", 'https://cloudflareinsights.com', apiUrl]
 		.filter(Boolean)
 		.join(' ');
 
@@ -77,6 +77,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 	// Create new Response with mutable headers (avoids errors on cached/immutable responses)
 	const newHeaders = new Headers(transformedResponse.headers);
 	newHeaders.set('Content-Security-Policy', csp);
+	newHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+	newHeaders.set('X-Content-Type-Options', 'nosniff');
+	newHeaders.set('X-Frame-Options', 'DENY');
+	newHeaders.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	newHeaders.set(
+		'Permissions-Policy',
+		'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
+	);
 
 	return new Response(transformedResponse.body, {
 		status: transformedResponse.status,
