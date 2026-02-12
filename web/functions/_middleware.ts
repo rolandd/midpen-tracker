@@ -50,9 +50,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
 	// Build the CSP header
 	const apiUrl = context.env.PUBLIC_API_URL || '';
-	const connectSrc = ["'self'", 'https://cloudflareinsights.com', apiUrl]
-		.filter(Boolean)
-		.join(' ');
+	const connectSrc = ["'self'", 'https://cloudflareinsights.com', apiUrl].filter(Boolean).join(' ');
 
 	const csp = [
 		"default-src 'self'",
