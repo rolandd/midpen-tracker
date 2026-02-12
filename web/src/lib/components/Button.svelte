@@ -3,26 +3,23 @@
 
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import type { HTMLButtonAttributes } from 'svelte/elements';
 	import Spinner from './Spinner.svelte';
 
-	interface Props {
+	interface Props extends HTMLButtonAttributes {
 		variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
 		size?: 'sm' | 'md' | 'lg';
-		onclick?: () => void;
-		disabled?: boolean;
 		isLoading?: boolean;
-		class?: string;
 		children: Snippet;
 	}
 
 	let {
 		variant = 'primary',
 		size = 'md',
-		onclick,
-		disabled = false,
 		isLoading = false,
 		class: className = '',
-		children
+		children,
+		...rest
 	}: Props = $props();
 
 	const baseClasses =
@@ -46,9 +43,9 @@
 </script>
 
 <button
+	{...rest}
 	class="{baseClasses} {sizeClasses[size]} {variantClasses[variant]} {className}"
-	{onclick}
-	disabled={disabled || isLoading}
+	disabled={rest.disabled || isLoading}
 >
 	{#if isLoading}
 		<Spinner
