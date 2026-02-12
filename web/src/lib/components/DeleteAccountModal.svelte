@@ -147,13 +147,7 @@
 		{/if}
 
 		<div class="actions">
-			<Button
-				variant="secondary"
-				onclick={onCancel}
-				disabled={isDeleting}
-				class="flex-1"
-				autofocus
-			>
+			<Button variant="secondary" onclick={onCancel} disabled={isDeleting} class="flex-1" autofocus>
 				Cancel
 			</Button>
 			<Button
