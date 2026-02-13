@@ -15,8 +15,10 @@ use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
 use firestore::FirestoreConsistencySelector;
 use futures_util::{stream, StreamExt};
+use tokio::time::{sleep, Duration};
 
 const MAX_CONCURRENT_DB_OPS: usize = 50;
+const MAX_TRANSACTION_RETRIES: u32 = 5;
 // Firestore limits batch/transaction writes to 500 operations.
 // We use a safe limit of 400 to allow headroom.
 const BATCH_SIZE: usize = 400;
@@ -384,63 +386,121 @@ impl FirestoreDb {
     ///
     /// Uses a Firestore transaction to prevent race conditions during concurrent backfills.
     /// `delta`: Positive to increment, negative to decrement.
+    ///
+    /// Retries up to `MAX_TRANSACTION_RETRIES` times on commit failure (e.g. contention).
     pub async fn update_pending_activities(
         &self,
         athlete_id: u64,
         delta: i32,
     ) -> Result<(), AppError> {
         let client = self.get_client()?;
-        let mut transaction = client
-            .begin_transaction()
-            .await
-            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+        let mut attempts = 0;
 
-        // Clone client with transaction consistency to ensure read is part of transaction
-        let client_tx = client.clone_with_consistency_selector(
-            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
-        );
+        loop {
+            attempts += 1;
 
-        // 1. Read current stats (with transaction lock)
-        let current_stats: Option<crate::models::UserStats> = client_tx
-            .fluent()
-            .select()
-            .by_id_in(collections::USER_STATS)
-            .obj()
-            .one(&athlete_id.to_string())
-            .await
-            .map_err(|e| {
-                AppError::Database(format!("Failed to read stats in transaction: {}", e))
-            })?;
+            // Start a new transaction for each attempt
+            let mut transaction = match client.begin_transaction().await {
+                Ok(tx) => tx,
+                Err(e) => {
+                    // If we can't even start a transaction, it might be a connection issue.
+                    // We'll retry a few times but this is less likely to be contention.
+                    if attempts >= MAX_TRANSACTION_RETRIES {
+                        return Err(AppError::Database(format!(
+                            "Failed to begin transaction after {} attempts: {}",
+                            attempts, e
+                        )));
+                    }
+                    tracing::warn!(
+                        error = %e,
+                        attempt = attempts,
+                        "Failed to begin transaction, retrying..."
+                    );
+                    sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                    continue;
+                }
+            };
 
-        let mut stats = current_stats.unwrap_or_default();
+            // Clone client with transaction consistency to ensure read is part of transaction
+            let client_tx = client.clone_with_consistency_selector(
+                FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+            );
 
-        // 2. Apply delta safely
-        if delta > 0 {
-            stats.pending_activities = stats.pending_activities.saturating_add(delta as u32);
-        } else {
-            let decrement = delta.unsigned_abs();
-            stats.pending_activities = stats.pending_activities.saturating_sub(decrement);
+            // 1. Read current stats (with transaction lock)
+            let current_stats: Option<crate::models::UserStats> = match client_tx
+                .fluent()
+                .select()
+                .by_id_in(collections::USER_STATS)
+                .obj()
+                .one(&athlete_id.to_string())
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    // Read failure might be transient
+                    if attempts >= MAX_TRANSACTION_RETRIES {
+                        return Err(AppError::Database(format!(
+                            "Failed to read stats in transaction after {} attempts: {}",
+                            attempts, e
+                        )));
+                    }
+                    tracing::warn!(
+                        error = %e,
+                        attempt = attempts,
+                        "Failed to read stats in transaction, retrying..."
+                    );
+                    sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                    continue;
+                }
+            };
+
+            let mut stats = current_stats.unwrap_or_default();
+
+            // 2. Apply delta safely
+            if delta > 0 {
+                stats.pending_activities = stats.pending_activities.saturating_add(delta as u32);
+            } else {
+                let decrement = delta.unsigned_abs();
+                stats.pending_activities = stats.pending_activities.saturating_sub(decrement);
+            }
+            stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+            // 3. Write back
+            if let Err(e) = client
+                .fluent()
+                .update()
+                .in_col(collections::USER_STATS)
+                .document_id(athlete_id.to_string())
+                .object(&stats)
+                .add_to_transaction(&mut transaction)
+            {
+                // Adding to transaction shouldn't fail due to contention, but let's handle it
+                return Err(AppError::Database(format!(
+                    "Failed to add stats update to transaction: {}",
+                    e
+                )));
+            }
+
+            // 4. Commit
+            match transaction.commit().await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    if attempts >= MAX_TRANSACTION_RETRIES {
+                        return Err(AppError::Database(format!(
+                            "Transaction commit failed after {} attempts: {}",
+                            attempts, e
+                        )));
+                    }
+                    tracing::warn!(
+                        error = %e,
+                        attempt = attempts,
+                        "Transaction commit failed (likely contention), retrying..."
+                    );
+                    // Exponential backoff: 100ms, 200ms, 400ms, 800ms...
+                    sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                }
+            }
         }
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-
-        // 3. Write back
-        client
-            .fluent()
-            .update()
-            .in_col(collections::USER_STATS)
-            .document_id(athlete_id.to_string())
-            .object(&stats)
-            .add_to_transaction(&mut transaction)
-            .map_err(|e| {
-                AppError::Database(format!("Failed to add stats update to transaction: {}", e))
-            })?;
-
-        transaction
-            .commit()
-            .await
-            .map_err(|e| AppError::Database(format!("Transaction commit failed: {}", e)))?;
-
-        Ok(())
     }
 
     // ─── Atomic Activity Processing ─────────────────────────────────
