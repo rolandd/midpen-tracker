@@ -2,6 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fetchActivities, type ActivitySummary } from '$lib/api';
 	import { Spinner, Button, EmptyState } from '$lib/components';
 	import { activityCache } from '$lib/cache.svelte';
@@ -17,10 +18,11 @@
 	let currentController = $state<AbortController | null>(null);
 
 	$effect(() => {
+		const currentPreserveName = preserveName;
 		const controller = new AbortController();
 		currentController = controller;
 
-		const cached = activityCache.get(preserveName);
+		const cached = untrack(() => activityCache.get(currentPreserveName));
 		if (cached) {
 			activities = cached.activities;
 			total = cached.total;
@@ -32,7 +34,7 @@
 			activities = [];
 			page = 1;
 			total = 0;
-			loadActivities(1, controller.signal);
+			loadActivities(currentPreserveName, 1, controller.signal);
 		}
 
 		return () => {
@@ -40,20 +42,20 @@
 		};
 	});
 
-	async function loadActivities(pageNum: number, signal?: AbortSignal) {
+	async function loadActivities(preserve: string, pageNum: number, signal?: AbortSignal) {
 		loading = true;
 		error = null;
 
 		try {
-			const data = await fetchActivities(preserveName, pageNum, signal);
+			const data = await fetchActivities(preserve, pageNum, signal);
 			if (signal?.aborted) return;
 
 			if (pageNum === 1) {
 				activities = data.activities;
-				activityCache.set(preserveName, data.activities, data.total, 1);
+				activityCache.set(preserve, data.activities, data.total, 1);
 			} else {
 				activities = [...activities, ...data.activities];
-				activityCache.append(preserveName, data.activities, data.total, pageNum);
+				activityCache.append(preserve, data.activities, data.total, pageNum);
 			}
 			total = data.total;
 		} catch (e) {
@@ -67,8 +69,9 @@
 	}
 
 	function handleLoadMore() {
-		page++;
-		loadActivities(page, currentController?.signal);
+		const nextPage = page + 1;
+		page = nextPage;
+		loadActivities(preserveName, nextPage, currentController?.signal);
 	}
 
 	function getEmoji(sportType: string): string {
