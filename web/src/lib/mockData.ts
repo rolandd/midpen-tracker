@@ -141,6 +141,7 @@ export function getMockActivitiesForPreserve(
 		activities: slicedActivities,
 		total: allActivities.length,
 		page,
-		per_page
+		per_page,
+		next_cursor: null
 	};
 }

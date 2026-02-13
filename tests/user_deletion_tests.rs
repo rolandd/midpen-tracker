@@ -89,7 +89,7 @@ async fn test_delete_user_data_removes_all_records() {
     assert!(db.get_tokens(athlete_id).await.unwrap().is_some());
     assert!(db.get_activity(1001).await.unwrap().is_some());
     assert!(!db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
         .await
         .unwrap()
         .is_empty());
@@ -107,7 +107,7 @@ async fn test_delete_user_data_removes_all_records() {
     assert!(db.get_user(athlete_id).await.unwrap().is_none());
     assert!(db.get_activity(1001).await.unwrap().is_none());
     assert!(db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
         .await
         .unwrap()
         .is_empty());

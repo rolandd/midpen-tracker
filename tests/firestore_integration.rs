@@ -431,7 +431,7 @@ async fn test_activity_with_multiple_preserves() {
 
     // Query preserve-specific activities
     let rancho_activities = db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
         .await
         .unwrap();
     assert_eq!(rancho_activities.len(), 1);
@@ -441,10 +441,20 @@ async fn test_activity_with_multiple_preserves() {
     );
 
     let monte_bello_activities = db
-        .get_activities_for_preserve(athlete_id, "Monte Bello")
+        .get_activities_for_preserve(athlete_id, "Monte Bello", None)
         .await
         .unwrap();
     assert_eq!(monte_bello_activities.len(), 1);
+
+    let rancho_after = db
+        .get_activities_for_preserve(
+            athlete_id,
+            "Rancho San Antonio",
+            Some(parse_time("2025-01-16T00:00:00Z")),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rancho_after.len(), 0);
 
     println!(
         "✓ Multi-preserve activity handled correctly: activity_id={}",
@@ -562,36 +572,51 @@ async fn test_activity_pagination() {
     // Test Page 1: Limit 20, Offset 0
     // Should return IDs 55 down to 36
     let page1 = db
-        .get_activities_for_user(athlete_id, None, 20, 0)
+        .get_activities_for_user(athlete_id, None, None, 20)
         .await
         .unwrap();
     assert_eq!(page1.len(), 20, "Page 1 should have 20 items");
     assert_eq!(page1[0].name, "Activity 55", "First item should be newest");
     assert_eq!(page1[19].name, "Activity 36", "Last item on page 1 check");
 
-    // Test Page 2: Limit 20, Offset 20
+    let page1_cursor = midpen_tracker::db::firestore::ActivityQueryCursor {
+        start_date: page1.last().unwrap().start_date,
+        activity_id: page1.last().unwrap().strava_activity_id,
+    };
+
+    // Test Page 2: Limit 20, Cursor from page 1
     // Should return IDs 35 down to 16
     let page2 = db
-        .get_activities_for_user(athlete_id, None, 20, 20)
+        .get_activities_for_user(athlete_id, None, Some(page1_cursor), 20)
         .await
         .unwrap();
     assert_eq!(page2.len(), 20, "Page 2 should have 20 items");
     assert_eq!(page2[0].name, "Activity 35", "First item on page 2 check");
 
-    // Test Page 3: Limit 20, Offset 40
+    let page2_cursor = midpen_tracker::db::firestore::ActivityQueryCursor {
+        start_date: page2.last().unwrap().start_date,
+        activity_id: page2.last().unwrap().strava_activity_id,
+    };
+
+    // Test Page 3: Limit 20, Cursor from page 2
     // Should return IDs 15 down to 1
     let page3 = db
-        .get_activities_for_user(athlete_id, None, 20, 40)
+        .get_activities_for_user(athlete_id, None, Some(page2_cursor), 20)
         .await
         .unwrap();
     assert_eq!(page3.len(), 15, "Page 3 should have remaining 15 items");
     assert_eq!(page3[0].name, "Activity 15", "First item on page 3 check");
     assert_eq!(page3[14].name, "Activity 1", "Last item should be oldest");
 
-    // Test Page 4: Limit 20, Offset 60
+    let page3_cursor = midpen_tracker::db::firestore::ActivityQueryCursor {
+        start_date: page3.last().unwrap().start_date,
+        activity_id: page3.last().unwrap().strava_activity_id,
+    };
+
+    // Test Page 4: Limit 20, Cursor from page 3
     // Should return empty
     let page4 = db
-        .get_activities_for_user(athlete_id, None, 20, 60)
+        .get_activities_for_user(athlete_id, None, Some(page3_cursor), 20)
         .await
         .unwrap();
     assert_eq!(page4.len(), 0, "Page 4 should be empty");
@@ -604,8 +629,8 @@ async fn test_activity_pagination() {
         .get_activities_for_user(
             athlete_id,
             chrono::DateTime::from_timestamp(split_time as i64, 0),
+            None,
             20,
-            0,
         )
         .await
         .unwrap();
