@@ -9,7 +9,7 @@
 use midpen_tracker::{
     config::Config,
     db::FirestoreDb,
-    services::{KmsService, PreserveService, StravaService, TasksService},
+    services::{GoogleOidcVerifier, KmsService, PreserveService, StravaService, TasksService},
     AppState,
 };
 use std::sync::Arc;
@@ -40,11 +40,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Initialize Cloud Tasks service
-    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
+    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region).await;
     tracing::info!(
         project = %config.gcp_project_id,
         "Cloud Tasks service initialized"
     );
+
+    let google_oidc_verifier =
+        Arc::new(GoogleOidcVerifier::new(&config).expect("Failed to initialize OIDC verifier"));
 
     // Initialize KMS service
     let kms = KmsService::new(
@@ -54,12 +57,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await
     .expect("Failed to initialize KMS service");
+
     tracing::info!("KMS service initialized");
 
-    // Initialize shared token cache and refresh locks
-    // These are shared across all StravaService instances within this Cloud Run instance
+    // Initialize shared token cache
+    // This is shared across all StravaService instances within this Cloud Run instance
     let token_cache = std::sync::Arc::new(dashmap::DashMap::new());
-    let refresh_locks = std::sync::Arc::new(dashmap::DashMap::new());
+
     tracing::info!("Token cache initialized");
 
     // Initialize Strava service
@@ -69,7 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db.clone(),
         kms,
         token_cache,
-        refresh_locks,
     );
 
     // Build shared state
@@ -78,6 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db,
         preserve_service,
         tasks_service,
+        google_oidc_verifier,
         strava_service,
     });
 

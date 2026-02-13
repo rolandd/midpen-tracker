@@ -272,11 +272,16 @@ use crate::services::KmsService;
 use chrono::{DateTime, Duration, Utc};
 use dashmap::DashMap;
 use serde::Serialize;
+use std::hash::{BuildHasher, Hasher};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Margin before token expiration when we proactively refresh (5 minutes).
 const TOKEN_REFRESH_MARGIN_SECS: i64 = 5 * 60;
+
+/// Number of shards for refresh locks.
+/// 64 is sufficient to minimize contention for thousands of concurrent users.
+const LOCK_SHARDS: usize = 64;
 
 /// Cached access token with expiry information.
 #[derive(Clone)]
@@ -287,9 +292,6 @@ pub struct CachedToken {
 
 /// Shared token cache type for use in AppState.
 pub type TokenCache = Arc<DashMap<u64, CachedToken>>;
-
-/// Shared refresh locks type for use in AppState.
-pub type RefreshLocks = Arc<DashMap<u64, Arc<Mutex<()>>>>;
 
 /// High-level Strava service that manages token lifecycle and API calls.
 ///
@@ -307,30 +309,51 @@ pub struct StravaService {
     kms: KmsService,
     /// In-memory cache of decrypted access tokens (shared across requests).
     token_cache: TokenCache,
-    /// Per-user mutex to serialize token refresh operations.
-    refresh_locks: RefreshLocks,
+    /// Sharded mutexes to serialize token refresh operations.
+    refresh_locks: Arc<Vec<Mutex<()>>>,
+    /// Hasher for mapping athlete IDs to lock shards.
+    hasher_builder: std::hash::RandomState,
 }
 
 impl StravaService {
     /// Create a new Strava service with shared token cache.
     ///
-    /// The `token_cache` and `refresh_locks` should be shared across all
-    /// `StravaService` instances to enable caching within a Cloud Run instance.
+    /// The `token_cache` should be shared across all `StravaService` instances
+    /// to enable caching within a Cloud Run instance.
+    /// The refresh locks are initialized internally.
     pub fn new(
         client_id: String,
         client_secret: String,
         db: FirestoreDb,
         kms: KmsService,
         token_cache: TokenCache,
-        refresh_locks: RefreshLocks,
     ) -> Self {
+        const {
+            // make sure we don't accidentally break things
+            assert!(LOCK_SHARDS > 0, "LOCK_SHARDS must be greater than 0.");
+        }
+        let refresh_locks = Arc::new((0..LOCK_SHARDS).map(|_| Mutex::new(())).collect());
+
         Self {
             client: StravaClient::new(client_id, client_secret),
             db,
             kms,
             token_cache,
             refresh_locks,
+            hasher_builder: std::hash::RandomState::new(),
         }
+    }
+
+    /// Acquire the refresh lock for a specific athlete.
+    ///
+    /// Uses sharding with hashing to map athlete_id to a fixed set of locks.
+    /// This prevents unbounded memory growth and avoids deterministic collision attacks.
+    async fn acquire_refresh_lock(&self, athlete_id: u64) -> tokio::sync::MutexGuard<'_, ()> {
+        let mut hasher = self.hasher_builder.build_hasher();
+        hasher.write_u64(athlete_id);
+        let hash = hasher.finish();
+        let shard_idx = (hash as usize) % self.refresh_locks.len();
+        self.refresh_locks[shard_idx].lock().await
     }
 
     // ─── Token Management ────────────────────────────────────────────────────
@@ -365,13 +388,7 @@ impl StravaService {
         // ─────────────────────────────────────────────────────────────
         // This ensures only one task per user performs the refresh.
         // Other tasks wait here until refresh completes.
-        let lock = self
-            .refresh_locks
-            .entry(athlete_id)
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone();
-
-        let _guard = lock.lock().await;
+        let _guard = self.acquire_refresh_lock(athlete_id).await;
 
         // ─────────────────────────────────────────────────────────────
         // STEP 3: Re-check cache after acquiring lock (double-check)
@@ -659,7 +676,26 @@ impl StravaService {
         // Validate against Strava API using a lightweight call
         match self.client.get_athlete(&access_token).await {
             Ok(_) => Ok(true),
-            Err(e) if e.is_strava_token_error() => Ok(false),
+            Err(e) if e.is_strava_token_error() => {
+                tracing::info!(
+                    athlete_id,
+                    "Token invalid during verification, cleaning up tokens"
+                );
+
+                // Acquire lock to synchronize with get_valid_access_token
+                let _guard = self.acquire_refresh_lock(athlete_id).await;
+
+                // Invalidate cache
+                self.token_cache.remove(&athlete_id);
+
+                // Also remove from DB to prevent future loops where we load a "valid-looking" token that is actually revoked
+                if let Err(db_err) = self.db.delete_tokens(athlete_id).await {
+                    tracing::warn!(error = %db_err, athlete_id, "Failed to delete invalid tokens during verification");
+                    return Err(db_err);
+                }
+
+                Ok(false)
+            }
             Err(e) => Err(e),
         }
     }
@@ -668,22 +704,30 @@ impl StravaService {
     ///
     /// This method:
     /// 1. Reads tokens from DB.
-    /// 2. Deletes tokens from DB immediately (to block concurrent processing).
-    /// 3. Decrypts and checks expiration.
-    /// 4. Refreshes token with Strava if needed (in-memory only).
-    /// 5. Returns the valid access token.
+    /// 2. Invalidate cache
+    /// 3. Deletes tokens from DB immediately (to block concurrent processing).
+    /// 4. Decrypts and checks expiration.
+    /// 5. Refreshes token with Strava if needed (in-memory only).
+    /// 6. Returns the valid access token.
     pub async fn revoke_local_tokens(&self, athlete_id: u64) -> Result<Option<String>, AppError> {
+        // Acquire lock to synchronize with get_valid_access_token and prevent race conditions
+        let _guard = self.acquire_refresh_lock(athlete_id).await;
+
         // 1. Get tokens
         let tokens_opt = self.db.get_tokens(athlete_id).await?;
+
+        // 2. Invalidate cache (even if DB is empty; cache might be stale)
+        self.token_cache.remove(&athlete_id);
+
         let tokens = match tokens_opt {
             Some(t) => t,
-            None => return Ok(None),
+            None => return Ok(None), // Cache is cleaned, just return
         };
 
-        // 2. Delete tokens immediately
+        // 3. Delete tokens from DB immediately
         self.db.delete_tokens(athlete_id).await?;
 
-        // 3. Decrypt
+        // 4. Decrypt
         let (mut access_token, refresh_token) = match crate::services::kms::decrypt_tokens(
             &self.kms,
             &tokens.access_token_encrypted,
@@ -702,7 +746,7 @@ impl StravaService {
             }
         };
 
-        // 4. Check expiration & Refresh in-memory
+        // 5. Check expiration & Refresh in-memory
         let expires_at = chrono::DateTime::parse_from_rfc3339(&tokens.expires_at)
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now());

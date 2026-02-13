@@ -27,6 +27,7 @@ FROM dependencies AS builder
 # Copy actual source code
 COPY src ./src
 COPY data ./data
+COPY permissions-policy.txt ./
 
 ARG BUILD_ID=unknown
 ENV BUILD_ID=${BUILD_ID}

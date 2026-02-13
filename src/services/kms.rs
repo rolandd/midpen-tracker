@@ -55,6 +55,8 @@ impl KmsService {
     }
 
     /// Create a mock KMS service for testing (offline mode).
+    /// Only available in debug/test builds.
+    #[cfg(debug_assertions)]
     pub fn new_mock() -> Self {
         Self {
             key_path: "projects/mock/locations/mock/keyRings/mock/cryptoKeys/mock".to_string(),
@@ -67,6 +69,17 @@ impl KmsService {
     pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
+        // Mock mode (Debug builds only)
+        #[cfg(debug_assertions)]
+        {
+            if self.client.is_none() {
+                return Ok(BASE64.encode(plaintext));
+            }
+        }
+
+        // Production/Real mode
+        // In release builds, this check ensures we return an error if the
+        // client is missing, preventing insecure operations.
         let client = self
             .client
             .as_ref()
@@ -92,6 +105,20 @@ impl KmsService {
     pub async fn decrypt(&self, ciphertext_b64: &str) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
+        // Mock mode (Debug builds only)
+        #[cfg(debug_assertions)]
+        {
+            if self.client.is_none() {
+                let bytes = BASE64.decode(ciphertext_b64).map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Base64 output decode failed (mock): {}", e))
+                })?;
+                return String::from_utf8(bytes).map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("UTF-8 decode failed (mock): {}", e))
+                });
+            }
+        }
+
+        // Production/Real mode
         let client = self
             .client
             .as_ref()

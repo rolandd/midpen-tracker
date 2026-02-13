@@ -2,6 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fetchActivities, type ActivitySummary } from '$lib/api';
 	import { Spinner, Button, EmptyState } from '$lib/components';
 	import { activityCache } from '$lib/cache.svelte';
@@ -14,8 +15,14 @@
 	let page = $state(1);
 	let total = $state(0);
 
+	let currentController = $state<AbortController | null>(null);
+
 	$effect(() => {
-		const cached = activityCache.get(preserveName);
+		const currentPreserveName = preserveName;
+		const controller = new AbortController();
+		currentController = controller;
+
+		const cached = untrack(() => activityCache.get(currentPreserveName));
 		if (cached) {
 			activities = cached.activities;
 			total = cached.total;
@@ -27,34 +34,44 @@
 			activities = [];
 			page = 1;
 			total = 0;
-			loadActivities(1);
+			loadActivities(currentPreserveName, 1, controller.signal);
 		}
+
+		return () => {
+			controller.abort();
+		};
 	});
 
-	async function loadActivities(pageNum: number) {
+	async function loadActivities(preserve: string, pageNum: number, signal?: AbortSignal) {
 		loading = true;
 		error = null;
 
 		try {
-			const data = await fetchActivities(preserveName, pageNum);
+			const data = await fetchActivities(preserve, pageNum, signal);
+			if (signal?.aborted) return;
+
 			if (pageNum === 1) {
 				activities = data.activities;
-				activityCache.set(preserveName, data.activities, data.total, 1);
+				activityCache.set(preserve, data.activities, data.total, 1);
 			} else {
 				activities = [...activities, ...data.activities];
-				activityCache.append(preserveName, data.activities, data.total, pageNum);
+				activityCache.append(preserve, data.activities, data.total, pageNum);
 			}
 			total = data.total;
 		} catch (e) {
+			if (signal?.aborted) return;
 			error = e instanceof Error ? e.message : 'Failed to load activities';
 		} finally {
-			loading = false;
+			if (!signal?.aborted) {
+				loading = false;
+			}
 		}
 	}
 
 	function handleLoadMore() {
-		page++;
-		loadActivities(page);
+		const nextPage = page + 1;
+		page = nextPage;
+		loadActivities(preserveName, nextPage, currentController?.signal);
 	}
 
 	function getEmoji(sportType: string): string {

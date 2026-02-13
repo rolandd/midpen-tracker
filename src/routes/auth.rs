@@ -529,30 +529,43 @@ fn verify_and_decode_state(
 }
 
 /// Logout - clear the auth cookie.
-async fn logout(jar: CookieJar) -> (CookieJar, axum::http::StatusCode) {
+async fn logout(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+) -> (CookieJar, axum::http::StatusCode) {
+    let is_production = state.config.frontend_url.contains("https");
+
     // Cookie removal must match the same attributes as when it was set
     // (path, secure, httponly, samesite) for browser to recognize it
     let cookie = Cookie::build("midpen_token")
         .path("/")
         .http_only(true)
-        .secure(true) // Must match what was set during login
+        .secure(is_production) // Match environment
         .same_site(SameSite::Lax)
         .max_age(time::Duration::seconds(0))
         .build();
 
-    let hint_cookie = Cookie::build(HINT_COOKIE_NAME)
+    let mut hint_cookie = Cookie::build(HINT_COOKIE_NAME)
         .path("/")
         .http_only(false)
-        .secure(true)
+        .secure(is_production)
         .same_site(SameSite::Lax)
         .max_age(time::Duration::seconds(0))
         .build();
 
+    // Set domain if needed (must match what was set in auth_callback)
+    if let Some(domain) = extract_cookie_domain(&state.config.frontend_url) {
+        hint_cookie.set_domain(domain);
+    }
+
     // Also clear the nonce cookie just in case
-    let nonce_cookie = Cookie::build("midpen_oauth_nonce")
+    let mut nonce_cookie = Cookie::build("midpen_oauth_nonce")
         .path("/auth/strava/callback")
+        .http_only(true)
+        .same_site(SameSite::Lax)
         .max_age(time::Duration::seconds(0))
         .build();
+    nonce_cookie.set_secure(is_production);
 
     (
         jar.remove(cookie).remove(hint_cookie).remove(nonce_cookie),

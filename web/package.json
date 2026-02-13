@@ -4,6 +4,8 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"prebuild": "node ../scripts/generate-security-config.js",
+		"predev": "node ../scripts/generate-security-config.js",
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",

@@ -9,6 +9,7 @@ pub mod tasks;
 pub mod webhook;
 
 use crate::middleware::auth::require_auth;
+use crate::middleware::tasks_auth::require_tasks_auth;
 use crate::AppState;
 use axum::http::{header, Method};
 use axum::{middleware, routing::get, Json, Router};
@@ -68,7 +69,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/health", get(health_check))
         .merge(auth::routes())
         .merge(webhook::routes())
-        .merge(tasks::routes()); // Task handler (called by Cloud Tasks)
+        .merge(tasks::routes().route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_tasks_auth,
+        )));
 
     // Protected routes (auth required)
     let protected_routes =

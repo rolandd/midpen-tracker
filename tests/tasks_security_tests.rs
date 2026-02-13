@@ -14,7 +14,7 @@ mod common;
 
 #[tokio::test]
 async fn test_process_activity_no_header_forbidden() {
-    let (app, _) = common::create_test_app();
+    let (app, _) = common::create_test_app().await;
 
     let payload = json!({
         "activity_id": 12345,
@@ -38,8 +38,8 @@ async fn test_process_activity_no_header_forbidden() {
 }
 
 #[tokio::test]
-async fn test_process_activity_with_header_allowed() {
-    let (app, _) = common::create_test_app();
+async fn test_process_activity_missing_auth_forbidden() {
+    let (app, _) = common::create_test_app().await;
 
     let payload = json!({
         "activity_id": 12345,
@@ -53,7 +53,35 @@ async fn test_process_activity_with_header_allowed() {
                 .method("POST")
                 .uri("/tasks/process-activity")
                 .header("content-type", "application/json")
-                .header("x-cloudtasks-queuename", "activity-processing") // Authorization header with correct queue
+                .header("x-cloudtasks-queuename", "activity-processing")
+                .body(Body::from(serde_json::to_string(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_process_activity_with_header_allowed() {
+    let (app, state) = common::create_test_app().await;
+    let token = common::create_test_tasks_oidc_jwt(&state.config);
+
+    let payload = json!({
+        "activity_id": 12345,
+        "athlete_id": 67890,
+        "source": "test"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/tasks/process-activity")
+                .header("content-type", "application/json")
+                .header("x-cloudtasks-queuename", "activity-processing")
+                .header("authorization", format!("Bearer {token}"))
                 .body(Body::from(serde_json::to_string(&payload).unwrap()))
                 .unwrap(),
         )
@@ -69,7 +97,8 @@ async fn test_process_activity_with_header_allowed() {
 
 #[tokio::test]
 async fn test_process_activity_wrong_queue_name_forbidden() {
-    let (app, _) = common::create_test_app();
+    let (app, state) = common::create_test_app().await;
+    let token = common::create_test_tasks_oidc_jwt(&state.config);
 
     let payload = json!({
         "activity_id": 12345,
@@ -83,7 +112,8 @@ async fn test_process_activity_wrong_queue_name_forbidden() {
                 .method("POST")
                 .uri("/tasks/process-activity")
                 .header("content-type", "application/json")
-                .header("x-cloudtasks-queuename", "wrong-queue") // Wrong queue name
+                .header("x-cloudtasks-queuename", "wrong-queue")
+                .header("authorization", format!("Bearer {token}"))
                 .body(Body::from(serde_json::to_string(&payload).unwrap()))
                 .unwrap(),
         )
@@ -95,7 +125,7 @@ async fn test_process_activity_wrong_queue_name_forbidden() {
 
 #[tokio::test]
 async fn test_continue_backfill_no_header_forbidden() {
-    let (app, _) = common::create_test_app();
+    let (app, _) = common::create_test_app().await;
 
     let payload = json!({
         "athlete_id": 67890,

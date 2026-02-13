@@ -643,7 +643,7 @@ impl FirestoreDb {
             );
 
             // Execute the operation
-            let mut transaction = match operation(client_tx, transaction).await {
+            let transaction = match operation(client_tx, transaction).await {
                 Ok(tx) => tx,
                 Err(e) => {
                     // Check if error is transient/retryable

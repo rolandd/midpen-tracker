@@ -13,6 +13,14 @@
 	let { onConfirm, onCancel }: Props = $props();
 	let isDeleting = $state(false);
 	let error = $state<string | null>(null);
+	let previousActiveElement = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		previousActiveElement = document.activeElement as HTMLElement;
+		return () => {
+			previousActiveElement?.focus();
+		};
+	});
 
 	async function handleConfirm() {
 		isDeleting = true;
@@ -30,35 +38,61 @@
 		}
 	}
 
+	let modalRef = $state<HTMLElement>();
+
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' && !isDeleting) {
+		if (isDeleting) return;
+
+		if (e.key === 'Escape') {
+			e.preventDefault();
 			onCancel();
+			return;
+		}
+
+		if (e.key === 'Tab' && modalRef) {
+			const focusable = modalRef.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+			);
+
+			if (!focusable || focusable.length === 0) return;
+
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+
+			if (e.shiftKey) {
+				if (document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else {
+				if (document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
 		}
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="backdrop"
 	transition:fade={{ duration: 200 }}
-	onclick={() => {
-		if (!isDeleting) onCancel();
+	onclick={(e) => {
+		if (e.target === e.currentTarget && !isDeleting) onCancel();
 	}}
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !isDeleting) onCancel();
-	}}
-	role="button"
-	tabindex="0"
 >
 	<div
+		bind:this={modalRef}
 		class="modal"
 		transition:fly={{ y: 20, duration: 300 }}
-		onclick={(e) => e.stopPropagation()}
-		onkeydown={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-modal="true"
 		aria-labelledby="delete-account-title"
+		aria-describedby="delete-account-desc"
 		tabindex="-1"
 	>
 		<div class="icon-container">
@@ -83,7 +117,7 @@
 
 		<h2 id="delete-account-title">Delete Your Account?</h2>
 
-		<p class="warning">
+		<p class="warning" id="delete-account-desc">
 			This action is <strong>permanent</strong> and cannot be undone.
 		</p>
 
@@ -121,7 +155,7 @@
 		{/if}
 
 		<div class="actions">
-			<Button variant="secondary" onclick={onCancel} disabled={isDeleting} class="flex-1">
+			<Button variant="secondary" onclick={onCancel} disabled={isDeleting} class="flex-1" autofocus>
 				Cancel
 			</Button>
 			<Button

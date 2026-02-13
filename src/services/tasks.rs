@@ -65,6 +65,8 @@ pub struct TasksService {
     project_id: String,
     location: String,
     queue_name: String,
+    // Client is cached to reuse the connection pool (reqwest::Client inside)
+    client: google_cloud_tasks_v2::client::CloudTasks,
 
     #[cfg(test)]
     mock_mode: bool,
@@ -73,11 +75,17 @@ pub struct TasksService {
 }
 
 impl TasksService {
-    pub fn new(project_id: &str, region: &str) -> Self {
+    pub async fn new(project_id: &str, region: &str) -> Self {
+        let client = google_cloud_tasks_v2::client::CloudTasks::builder()
+            .build()
+            .await
+            .expect("Failed to create Cloud Tasks client");
+
         Self {
             project_id: project_id.to_string(),
             location: region.to_string(),
             queue_name: crate::config::ACTIVITY_QUEUE_NAME.to_string(),
+            client,
             #[cfg(test)]
             mock_mode: false,
             #[cfg(test)]
@@ -88,11 +96,17 @@ impl TasksService {
     }
 
     #[cfg(test)]
-    pub fn new_mock() -> Self {
+    pub async fn new_mock() -> Self {
+        let client = google_cloud_tasks_v2::client::CloudTasks::builder()
+            .build()
+            .await
+            .expect("Failed to create Cloud Tasks client");
+
         Self {
             project_id: "mock-project".to_string(),
             location: "mock-location".to_string(),
             queue_name: "mock-queue".to_string(),
+            client,
             mock_mode: true,
             mock_fail_ids: std::sync::Arc::new(std::sync::RwLock::new(
                 std::collections::HashSet::new(),
@@ -177,13 +191,7 @@ impl TasksService {
             return Ok(());
         }
 
-        use google_cloud_tasks_v2::client::CloudTasks;
         use google_cloud_tasks_v2::model::{HttpRequest, OidcToken, Task};
-
-        let client = CloudTasks::builder()
-            .build()
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Cloud Tasks client error: {}", e)))?;
 
         let queue_path = format!(
             "projects/{}/locations/{}/queues/{}",
@@ -212,7 +220,8 @@ impl TasksService {
 
         let task = Task::default().set_http_request(http_request);
 
-        let _response = client
+        let _response = self
+            .client
             .create_task()
             .set_parent(queue_path)
             .set_task(task)
@@ -286,7 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_backfill_partial_failure() {
-        let tasks_service = TasksService::new_mock();
+        let tasks_service = TasksService::new_mock().await;
 
         // Fail activity 2 and 4
         tasks_service.set_mock_fail_ids(vec![2, 4]);
@@ -308,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_backfill_all_success() {
-        let tasks_service = TasksService::new_mock();
+        let tasks_service = TasksService::new_mock().await;
         let activity_ids = vec![1, 2, 3];
         let result = tasks_service
             .queue_backfill("http://mock-service", 123, activity_ids)
@@ -322,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_queue_backfill_all_failure() {
-        let tasks_service = TasksService::new_mock();
+        let tasks_service = TasksService::new_mock().await;
         tasks_service.set_mock_fail_ids(vec![1, 2, 3]);
 
         let activity_ids = vec![1, 2, 3];
