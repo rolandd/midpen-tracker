@@ -5,7 +5,7 @@
 //!
 //! These tests verify that:
 //! 1. Pagination parameters are validated correctly
-//! 2. Integer underflows/overflows are prevented
+//! 2. Cursor/query parameters are validated correctly
 
 use axum::{
     body::Body,
@@ -49,6 +49,46 @@ async fn test_after_rejects_invalid_rfc3339() {
             Request::builder()
                 .method("GET")
                 .uri("/api/activities?after=not-a-date&page=1&per_page=10")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_page_rejected_for_non_preserve_queries() {
+    let (app, state) = common::create_test_app();
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/activities?page=2&per_page=10")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_cursor_rejects_invalid_format() {
+    let (app, state) = common::create_test_app();
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/activities?cursor=not-valid-cursor&page=1&per_page=10")
                 .header(header::AUTHORIZATION, format!("Bearer {}", token))
                 .body(Body::empty())
                 .unwrap(),

@@ -3,6 +3,7 @@
 
 //! API routes for authenticated users.
 
+use crate::db::firestore::ActivityQueryCursor;
 use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::models::preserve::PreserveSummary;
@@ -15,6 +16,7 @@ use axum::{
     routing::{delete, get},
     Extension, Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
@@ -136,6 +138,8 @@ struct ActivitiesQuery {
     preserve: Option<String>,
     /// Filter by start date (ISO 8601)
     after: Option<String>,
+    /// Cursor for forward pagination (opaque token).
+    cursor: Option<String>,
     /// Pagination: page number (1-indexed)
     #[serde(default = "default_page")]
     page: u32,
@@ -152,6 +156,7 @@ fn default_per_page() -> u32 {
 }
 
 const MAX_PER_PAGE: u32 = 100;
+const CURSOR_PARTS: usize = 3;
 
 fn parse_after_timestamp(after: Option<&str>) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
     after
@@ -167,6 +172,44 @@ fn parse_after_timestamp(after: Option<&str>) -> Result<Option<chrono::DateTime<
         .transpose()
 }
 
+fn parse_cursor(cursor: Option<&str>) -> Result<Option<ActivityQueryCursor>> {
+    cursor
+        .map(|raw| {
+            let invalid_cursor =
+                || crate::error::AppError::BadRequest("Invalid 'cursor' parameter".to_string());
+
+            let decoded = URL_SAFE_NO_PAD.decode(raw).map_err(|_| invalid_cursor())?;
+            let decoded_str = std::str::from_utf8(&decoded).map_err(|_| invalid_cursor())?;
+
+            let parts: Vec<&str> = decoded_str.split(':').collect();
+            if parts.len() != CURSOR_PARTS {
+                return Err(invalid_cursor());
+            }
+
+            let seconds = parts[0].parse::<i64>().map_err(|_| invalid_cursor())?;
+            let nanos = parts[1].parse::<u32>().map_err(|_| invalid_cursor())?;
+            let activity_id = parts[2].parse::<u64>().map_err(|_| invalid_cursor())?;
+            let start_date =
+                chrono::DateTime::from_timestamp(seconds, nanos).ok_or_else(invalid_cursor)?;
+
+            Ok(ActivityQueryCursor {
+                start_date,
+                activity_id,
+            })
+        })
+        .transpose()
+}
+
+fn encode_cursor(cursor: ActivityQueryCursor) -> String {
+    let payload = format!(
+        "{}:{}:{}",
+        cursor.start_date.timestamp(),
+        cursor.start_date.timestamp_subsec_nanos(),
+        cursor.activity_id
+    );
+    URL_SAFE_NO_PAD.encode(payload)
+}
+
 #[derive(Serialize)]
 #[cfg_attr(feature = "binding-generation", derive(TS))]
 #[cfg_attr(
@@ -177,7 +220,11 @@ pub struct ActivitiesResponse {
     pub activities: Vec<ActivitySummary>,
     pub page: u32,
     pub per_page: u32,
+    /// Total number of activities matching the query.
+    /// For cursor-based pagination, this is 0 if `next_cursor` is present,
+    /// as the exact total is not known.
     pub total: u32,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -205,12 +252,14 @@ async fn get_activities(
         athlete_id = user.athlete_id,
         preserve = ?params.preserve,
         after = ?params.after,
+        cursor = ?params.cursor,
         page = params.page,
         "Fetching activities"
     );
 
     let limit = params.per_page.min(MAX_PER_PAGE);
     let after_timestamp = parse_after_timestamp(params.after.as_deref())?;
+    let cursor = parse_cursor(params.cursor.as_deref())?;
 
     if params.page < 1 {
         return Err(crate::error::AppError::BadRequest(
@@ -218,11 +267,23 @@ async fn get_activities(
         ));
     }
 
-    let activities = if let Some(preserve_name) = params.preserve {
+    if params.preserve.is_none() && params.page != 1 {
+        return Err(crate::error::AppError::BadRequest(
+            "Page-based pagination is no longer supported for this query; use 'cursor'".to_string(),
+        ));
+    }
+
+    if params.preserve.is_some() && cursor.is_some() {
+        return Err(crate::error::AppError::BadRequest(
+            "'cursor' is not supported when filtering by preserve".to_string(),
+        ));
+    }
+
+    let (activities, total, next_cursor) = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
         let results: Vec<ActivityPreserve> = state
             .db
-            .get_activities_for_preserve(user.athlete_id, &preserve_name)
+            .get_activities_for_preserve(user.athlete_id, &preserve_name, after_timestamp)
             .await?;
 
         // Map to summaries
@@ -254,33 +315,33 @@ async fn get_activities(
             vec![]
         };
 
-        (paged_activities, total_count)
+        (paged_activities, total_count, None)
     } else {
-        // Query Firestore for user's activities
-        // Use checked multiplication to prevent u32 overflow (DoS risk)
-        let offset = (params.page - 1).checked_mul(limit).ok_or_else(|| {
-            crate::error::AppError::BadRequest("Page number causes overflow".to_string())
-        })?;
-
-        let results = state
+        // Cursor-based pagination for user activity listing.
+        // Fetch one extra item to determine if another page is available.
+        let fetch_limit = limit.saturating_add(1);
+        let mut results = state
             .db
-            .get_activities_for_user(user.athlete_id, after_timestamp, limit, offset)
+            .get_activities_for_user(user.athlete_id, after_timestamp, cursor, fetch_limit)
             .await?;
 
-        let page_count = results.len() as u32;
-        // For Firestore queries, getting exact total is expensive.
-        // If we got a full page, assume there might be more.
-        // We'll return (offset + page_count) + (1 if full page else 0) as a hint,
-        // or just return 0 to indicate "unknown" if that's allowed.
-        // For now, let's just return the current fetched count + offset as a lower bound
-        // or effectively disable "total" based logic for this path until we add aggregation.
-        // A common pattern is to return `offset + page_count` if `page_count < per_page`,
-        // else `offset + page_count + 1` (at least one more).
-        let estimated_total = offset
-            .saturating_add(page_count)
-            .saturating_add(if page_count == limit { 1 } else { 0 });
+        let has_more = results.len() > limit as usize;
+        if has_more {
+            results.truncate(limit as usize);
+        }
 
-        let summaries = results
+        let next_cursor = if has_more {
+            results.last().map(|a| {
+                encode_cursor(ActivityQueryCursor {
+                    start_date: a.start_date,
+                    activity_id: a.strava_activity_id,
+                })
+            })
+        } else {
+            None
+        };
+
+        let summaries: Vec<ActivitySummary> = results
             .into_iter()
             .map(|a| ActivitySummary {
                 id: a.strava_activity_id,
@@ -291,14 +352,22 @@ async fn get_activities(
             })
             .collect();
 
-        (summaries, estimated_total)
+        // Cursor pagination doesn't provide a cheap exact total.
+        // We return 0 if there are more results to indicate the total is unknown.
+        let total = if next_cursor.is_some() {
+            0
+        } else {
+            summaries.len() as u32
+        };
+        (summaries, total, next_cursor)
     };
 
     Ok(Json(ActivitiesResponse {
-        total: activities.1,
-        activities: activities.0,
+        total,
+        activities,
         page: params.page,
         per_page: limit,
+        next_cursor,
     }))
 }
 
@@ -435,43 +504,25 @@ async fn get_preserve_stats(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn test_pagination_overflow() {
-        let page = u32::MAX;
-        let limit = 100;
+    fn test_cursor_round_trip() {
+        let cursor = ActivityQueryCursor {
+            start_date: chrono::DateTime::from_timestamp(1_704_103_200, 123).unwrap(),
+            activity_id: 42,
+        };
 
-        // Simulate in-memory pagination calculation
-        // On 64-bit systems, this calculation won't overflow usize (u64), which is fine.
-        // It produces a huge offset which is safely handled by `if start < len` checks.
-        // On 32-bit systems, it would overflow and return None.
-        let start_res = (page as usize - 1).checked_mul(limit as usize);
-        if std::mem::size_of::<usize>() == 4 {
-            assert!(start_res.is_none(), "Should overflow on 32-bit systems");
-        } else {
-            assert!(start_res.is_some(), "Should fit in usize on 64-bit systems");
-        }
+        let encoded = encode_cursor(cursor);
+        let decoded = parse_cursor(Some(&encoded)).unwrap().unwrap();
 
-        // Simulate DB pagination calculation (u32 math)
-        // This MUST always overflow u32::MAX * 100
-        let offset_res = (page - 1).checked_mul(limit);
-        assert!(
-            offset_res.is_none(),
-            "Should always overflow u32 (DB query)"
-        );
+        assert_eq!(decoded.start_date, cursor.start_date);
+        assert_eq!(decoded.activity_id, cursor.activity_id);
     }
 
     #[test]
-    fn test_pagination_underflow() {
-        // Test behavior for page=0 if it wraps (release mode behavior simulation)
-        // In debug mode, 0-1 panics. In release, it wraps to u32::MAX.
-        // We verify that if it wraps, it triggers the overflow check.
-        let wrapped_page = 0u32.wrapping_sub(1); // u32::MAX
-        let limit = 100;
-
-        let offset_res = wrapped_page.checked_mul(limit);
-        assert!(
-            offset_res.is_none(),
-            "Should catch wrapped underflow as overflow"
-        );
+    fn test_cursor_rejects_invalid_input() {
+        let err = parse_cursor(Some("not-base64")).unwrap_err();
+        assert!(matches!(err, crate::error::AppError::BadRequest(_)));
     }
 }

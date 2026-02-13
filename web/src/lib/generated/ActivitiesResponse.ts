@@ -5,5 +5,11 @@ export type ActivitiesResponse = {
 	activities: Array<ActivitySummary>;
 	page: number;
 	per_page: number;
+	/**
+	 * Total number of activities matching the query.
+	 * For cursor-based pagination, this is 0 if `next_cursor` is present,
+	 * as the exact total is not known.
+	 */
 	total: number;
+	next_cursor: string | null;
 };
