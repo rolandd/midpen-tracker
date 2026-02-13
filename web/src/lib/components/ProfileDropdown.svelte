@@ -21,6 +21,8 @@
 	let dropdownRef = $state<HTMLDivElement>();
 	let triggerRef = $state<HTMLButtonElement>();
 
+	const menuId = 'user-profile-menu';
+
 	async function toggleDropdown() {
 		isOpen = !isOpen;
 		if (isOpen) {
@@ -85,6 +87,14 @@
 		}
 	}
 
+	function handleTriggerKeydown(event: KeyboardEvent) {
+		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+			event.preventDefault();
+			event.stopPropagation();
+			if (!isOpen) toggleDropdown();
+		}
+	}
+
 	$effect(() => {
 		if (isOpen) {
 			window.addEventListener('keydown', handleKeydown);
@@ -114,8 +124,11 @@
 	<button
 		class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
 		onclick={toggleDropdown}
+		onkeydown={handleTriggerKeydown}
 		bind:this={triggerRef}
 		aria-expanded={isOpen}
+		aria-haspopup="menu"
+		aria-controls={menuId}
 		aria-label="User menu"
 	>
 		{#if user?.profile_picture}
@@ -139,6 +152,7 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen && user}
 		<div
+			id={menuId}
 			class="absolute top-[calc(100%+0.5rem)] right-0 w-[220px] bg-[var(--color-surface)] rounded-xl shadow-lg ring-1 ring-[var(--color-border)] p-2 z-50 origin-top-right animate-in fade-in zoom-in-95 duration-200"
 			bind:this={dropdownRef}
 			role="menu"
