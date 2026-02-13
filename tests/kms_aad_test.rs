@@ -9,11 +9,11 @@ async fn test_kms_mock_aad_logic() {
     let kms = KmsService::new_mock();
     let plaintext = "secret_access_token";
     let athlete_id = 12345u64;
-    let aad = athlete_id.to_string();
+    let aad = athlete_id.to_be_bytes();
 
     // 1. Encrypt with AAD
     let ciphertext = kms
-        .encrypt(plaintext, Some(aad.as_bytes()))
+        .encrypt(plaintext, Some(&aad))
         .await
         .expect("Encryption failed");
 
@@ -22,15 +22,15 @@ async fn test_kms_mock_aad_logic() {
 
     // 2. Decrypt with Correct AAD
     let decrypted = kms
-        .decrypt(&ciphertext, Some(aad.as_bytes()))
+        .decrypt(&ciphertext, Some(&aad))
         .await
         .expect("Decryption with correct AAD failed");
     assert_eq!(decrypted, plaintext);
 
     // 3. Decrypt with Wrong AAD
-    let wrong_aad = "99999";
+    let wrong_aad = 99999u64.to_be_bytes();
     let err = kms
-        .decrypt(&ciphertext, Some(wrong_aad.as_bytes()))
+        .decrypt(&ciphertext, Some(&wrong_aad))
         .await
         .expect_err("Decryption with wrong AAD should fail");
     assert!(err.to_string().contains("Mock KMS AAD mismatch"));
@@ -49,7 +49,7 @@ async fn test_kms_fallback_logic() {
     let kms = KmsService::new_mock();
     let plaintext = "legacy_token";
     let athlete_id = 12345u64;
-    let aad = athlete_id.to_string();
+    let aad = athlete_id.to_be_bytes();
 
     // 1. Create a "Legacy" token (encrypted with No AAD)
     let legacy_ciphertext = kms
@@ -60,30 +60,30 @@ async fn test_kms_fallback_logic() {
     // 2. Try decrypting using `decrypt_or_fallback` with AAD
     // It should try AAD -> Fail -> Fallback -> Success
     let decrypted = kms
-        .decrypt_or_fallback(&legacy_ciphertext, aad.as_bytes())
+        .decrypt_or_fallback(&legacy_ciphertext, &aad)
         .await
         .expect("Fallback decryption failed");
     assert_eq!(decrypted, plaintext);
 
     // 3. Create a "New" token (encrypted WITH AAD)
     let new_ciphertext = kms
-        .encrypt(plaintext, Some(aad.as_bytes()))
+        .encrypt(plaintext, Some(&aad))
         .await
         .expect("New encryption failed");
 
     // 4. Try decrypting using `decrypt_or_fallback` with Correct AAD
     // It should try AAD -> Success
     let decrypted_new = kms
-        .decrypt_or_fallback(&new_ciphertext, aad.as_bytes())
+        .decrypt_or_fallback(&new_ciphertext, &aad)
         .await
         .expect("New token decryption failed");
     assert_eq!(decrypted_new, plaintext);
 
     // 5. Try decrypting using `decrypt_or_fallback` with WRONG AAD
     // It should try AAD (wrong) -> Fail -> Fallback (no AAD) -> Fail (because token has AAD)
-    let wrong_aad = "99999";
+    let wrong_aad = 99999u64.to_be_bytes();
     let err = kms
-        .decrypt_or_fallback(&new_ciphertext, wrong_aad.as_bytes())
+        .decrypt_or_fallback(&new_ciphertext, &wrong_aad)
         .await
         .expect_err("Decryption with wrong AAD should fail even with fallback");
 

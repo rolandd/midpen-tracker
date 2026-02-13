@@ -78,22 +78,26 @@ impl KmsService {
 
         use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
-        let client = self.client.as_ref().unwrap();
+        if let Some(client) = &self.client {
+            let req = EncryptRequest {
+                name: self.key_path.clone(),
+                plaintext: plaintext.as_bytes().to_vec(),
+                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
+                ..Default::default()
+            };
 
-        let req = EncryptRequest {
-            name: self.key_path.clone(),
-            plaintext: plaintext.as_bytes().to_vec(),
-            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-            ..Default::default()
-        };
+            let response = client
+                .encrypt(req, None)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS encrypt failed: {}", e)))?;
 
-        let response = client
-            .encrypt(req, None)
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS encrypt failed: {}", e)))?;
-
-        let ciphertext = response.ciphertext; // Vec<u8>
-        Ok(BASE64.encode(ciphertext))
+            let ciphertext = response.ciphertext; // Vec<u8>
+            Ok(BASE64.encode(ciphertext))
+        } else {
+            Err(AppError::Internal(anyhow::anyhow!(
+                "KMS client not connected"
+            )))
+        }
     }
 
     /// Decrypt ciphertext using KMS with optional Additional Authenticated Data (AAD).
@@ -137,27 +141,31 @@ impl KmsService {
 
         use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
-        let client = self.client.as_ref().unwrap();
+        if let Some(client) = &self.client {
+            let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
+            })?;
 
-        let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
-        })?;
+            let req = DecryptRequest {
+                name: self.key_path.clone(),
+                ciphertext,
+                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
+                ..Default::default()
+            };
 
-        let req = DecryptRequest {
-            name: self.key_path.clone(),
-            ciphertext,
-            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-            ..Default::default()
-        };
+            let response = client
+                .decrypt(req, None)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS decrypt failed: {}", e)))?;
 
-        let response = client
-            .decrypt(req, None)
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS decrypt failed: {}", e)))?;
-
-        // response.plaintext is Vec<u8>
-        String::from_utf8(response.plaintext)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
+            // response.plaintext is Vec<u8>
+            String::from_utf8(response.plaintext)
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
+        } else {
+            Err(AppError::Internal(anyhow::anyhow!(
+                "KMS client not connected"
+            )))
+        }
     }
 
     /// Decrypt with fallback for legacy tokens (no AAD).
@@ -171,9 +179,12 @@ impl KmsService {
         // Try with AAD
         match self.decrypt(ciphertext_b64, Some(aad)).await {
             Ok(plaintext) => Ok(plaintext),
-            Err(_) => {
+            Err(e) => {
                 // Failed - try fallback (no AAD)
-                tracing::warn!("Decryption with AAD failed, attempting legacy fallback (no AAD)");
+                tracing::warn!(
+                    error = %e,
+                    "Decryption with AAD failed, attempting legacy fallback (no AAD)"
+                );
                 self.decrypt(ciphertext_b64, None).await
             }
         }
@@ -187,11 +198,10 @@ pub async fn encrypt_tokens(
     refresh_token: &str,
     athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let aad = athlete_id.to_string();
-    let aad_bytes = aad.as_bytes();
+    let aad = athlete_id.to_be_bytes();
 
-    let encrypted_access = kms.encrypt(access_token, Some(aad_bytes)).await?;
-    let encrypted_refresh = kms.encrypt(refresh_token, Some(aad_bytes)).await?;
+    let encrypted_access = kms.encrypt(access_token, Some(&aad)).await?;
+    let encrypted_refresh = kms.encrypt(refresh_token, Some(&aad)).await?;
     Ok((encrypted_access, encrypted_refresh))
 }
 
@@ -202,12 +212,9 @@ pub async fn decrypt_tokens(
     encrypted_refresh: &str,
     athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let aad = athlete_id.to_string();
-    let aad_bytes = aad.as_bytes();
+    let aad = athlete_id.to_be_bytes();
 
-    let access_token = kms.decrypt_or_fallback(encrypted_access, aad_bytes).await?;
-    let refresh_token = kms
-        .decrypt_or_fallback(encrypted_refresh, aad_bytes)
-        .await?;
+    let access_token = kms.decrypt_or_fallback(encrypted_access, &aad).await?;
+    let refresh_token = kms.decrypt_or_fallback(encrypted_refresh, &aad).await?;
     Ok((access_token, refresh_token))
 }
