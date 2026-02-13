@@ -411,7 +411,10 @@ impl StravaService {
             .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
 
         // LAZY DECRYPTION: Only decrypt access token first
-        let access_token = self.kms.decrypt(&tokens.access_token_encrypted).await?;
+        let access_token = self
+            .kms
+            .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
+            .await?;
 
         let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
@@ -438,7 +441,10 @@ impl StravaService {
         // ─────────────────────────────────────────────────────────────
         tracing::info!(athlete_id, "Access token expired, refreshing");
 
-        let refresh_token = self.kms.decrypt(&tokens.refresh_token_encrypted).await?;
+        let refresh_token = self
+            .kms
+            .decrypt_or_fallback(&tokens.refresh_token_encrypted, &athlete_id.to_be_bytes())
+            .await?;
 
         // Handle cross-instance race: if another Cloud Run instance already
         // refreshed the token, Strava will reject our old refresh token.
@@ -462,6 +468,7 @@ impl StravaService {
             &self.kms,
             &new_tokens.access_token,
             &new_tokens.refresh_token,
+            athlete_id,
         )
         .await?;
 
@@ -501,7 +508,10 @@ impl StravaService {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
 
-        let access_token = self.kms.decrypt(&tokens.access_token_encrypted).await?;
+        let access_token = self
+            .kms
+            .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
+            .await?;
 
         let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
@@ -556,6 +566,7 @@ impl StravaService {
             &self.kms,
             &token_response.access_token,
             &token_response.refresh_token,
+            athlete_id,
         )
         .await?;
 
@@ -732,6 +743,7 @@ impl StravaService {
             &self.kms,
             &tokens.access_token_encrypted,
             &tokens.refresh_token_encrypted,
+            athlete_id,
         )
         .await
         {
