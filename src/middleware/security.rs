@@ -20,7 +20,7 @@ pub async fn add_security_headers(req: Request, next: Next) -> Response {
     headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
     headers.insert(
         "Strict-Transport-Security",
-        HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
     );
     headers.insert(
         "Content-Security-Policy",
@@ -59,7 +59,7 @@ mod tests {
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
         assert_eq!(
             headers.get("Strict-Transport-Security").unwrap(),
-            "max-age=31536000; includeSubDomains"
+            "max-age=31536000; includeSubDomains; preload"
         );
         assert_eq!(
             headers.get("Content-Security-Policy").unwrap(),
