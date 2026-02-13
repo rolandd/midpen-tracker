@@ -26,7 +26,6 @@ async fn test_delete_user_data_removes_all_records() {
     let db = test_db().await;
     let athlete_id = unique_athlete_id();
     let now = chrono::Utc::now().to_rfc3339();
-
     // 1. Create User
     let user = User {
         strava_athlete_id: athlete_id,
@@ -57,7 +56,9 @@ async fn test_delete_user_data_removes_all_records() {
         distance_meters: 5000.0,
         preserves_visited: vec!["Rancho San Antonio".to_string()],
         sport_type: "Run".to_string(),
-        start_date: now.clone(),
+        start_date: chrono::DateTime::parse_from_rfc3339(&now)
+            .unwrap()
+            .with_timezone(&chrono::Utc),
         source: "test".to_string(),
         annotation_added: false,
         processed_at: now.clone(),
@@ -72,7 +73,9 @@ async fn test_delete_user_data_removes_all_records() {
         preserve_name: "Rancho San Antonio".to_string(),
         activity_name: "Run".to_string(),
         sport_type: "Run".to_string(),
-        start_date: now.clone(),
+        start_date: chrono::DateTime::parse_from_rfc3339(&now)
+            .unwrap()
+            .with_timezone(&chrono::Utc),
     };
     db.batch_set_activity_preserves(&[preserve]).await.unwrap();
 
@@ -86,7 +89,7 @@ async fn test_delete_user_data_removes_all_records() {
     assert!(db.get_tokens(athlete_id).await.unwrap().is_some());
     assert!(db.get_activity(1001).await.unwrap().is_some());
     assert!(!db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
         .await
         .unwrap()
         .is_empty());
@@ -104,7 +107,7 @@ async fn test_delete_user_data_removes_all_records() {
     assert!(db.get_user(athlete_id).await.unwrap().is_none());
     assert!(db.get_activity(1001).await.unwrap().is_none());
     assert!(db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio")
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
         .await
         .unwrap()
         .is_empty());

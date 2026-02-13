@@ -45,7 +45,7 @@ urlencoding = "2"
 dotenvy = "0.15"
 
 # Date/time handling
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 time = "0.3"
 
 # GCP SDK

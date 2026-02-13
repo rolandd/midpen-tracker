@@ -1,7 +1,7 @@
 use midpen_tracker::models::Activity;
 
 mod common;
-use common::test_db;
+use common::{parse_time, test_db};
 
 const NUM_CONCURRENT_ACTIVITIES: u64 = 10;
 const ACTIVITY_DISTANCE: f64 = 100.0;
@@ -46,7 +46,7 @@ async fn test_concurrent_activity_processing_race_condition() {
                 athlete_id,
                 name: format!("Race Activity {}", i),
                 sport_type: "Run".to_string(),
-                start_date: "2024-01-01T10:00:00Z".to_string(),
+                start_date: parse_time("2024-01-01T10:00:00Z"),
                 distance_meters: ACTIVITY_DISTANCE,
                 preserves_visited: vec![],
                 source: "test".to_string(),
