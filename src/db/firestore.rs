@@ -33,6 +33,13 @@ pub struct FirestoreDb {
     client: Option<firestore::FirestoreDb>,
 }
 
+/// Cursor for paging activities in descending `(start_date, strava_activity_id)` order.
+#[derive(Debug, Clone, Copy)]
+pub struct ActivityQueryCursor {
+    pub start_date: chrono::DateTime<chrono::Utc>,
+    pub activity_id: u64,
+}
+
 impl FirestoreDb {
     /// Create a new Firestore client.
     ///
@@ -199,8 +206,8 @@ impl FirestoreDb {
         &self,
         athlete_id: u64,
         after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        cursor: Option<ActivityQueryCursor>,
         limit: u32,
-        offset: u32,
     ) -> Result<Vec<Activity>, AppError> {
         let query = self
             .get_client()?
@@ -208,22 +215,36 @@ impl FirestoreDb {
             .select()
             .from(collections::ACTIVITIES);
 
-        let query = if let Some(timestamp) = after_timestamp {
-            query.filter(move |q| {
-                q.for_all([
-                    q.field("athlete_id").eq(athlete_id),
+        let query = query.filter(move |q| {
+            q.for_all([
+                q.field("athlete_id").eq(athlete_id),
+                after_timestamp.and_then(|timestamp| {
                     q.field("start_date")
-                        .greater_than(firestore::FirestoreTimestamp(timestamp)),
-                ])
-            })
-        } else {
-            query.filter(move |q| q.field("athlete_id").eq(athlete_id))
-        };
+                        .greater_than(firestore::FirestoreTimestamp(timestamp))
+                }),
+                cursor.and_then(|cursor| {
+                    q.for_any([
+                        q.field("start_date")
+                            .less_than(firestore::FirestoreTimestamp(cursor.start_date)),
+                        q.for_all([
+                            q.field("start_date")
+                                .eq(firestore::FirestoreTimestamp(cursor.start_date)),
+                            q.field("strava_activity_id").less_than(cursor.activity_id),
+                        ]),
+                    ])
+                }),
+            ])
+        });
 
         query
-            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)])
+            .order_by([
+                ("start_date", firestore::FirestoreQueryDirection::Descending),
+                (
+                    "strava_activity_id",
+                    firestore::FirestoreQueryDirection::Descending,
+                ),
+            ])
             .limit(limit)
-            .offset(offset)
             .obj()
             .query()
             .await
@@ -291,15 +312,22 @@ impl FirestoreDb {
         &self,
         athlete_id: u64,
         preserve_name: &str,
+        after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<Vec<ActivityPreserve>, AppError> {
+        let preserve_name = preserve_name.to_string();
+
         self.get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITY_PRESERVES)
-            .filter(|q| {
+            .filter(move |q| {
                 q.for_all([
                     q.field("athlete_id").eq(athlete_id),
-                    q.field("preserve_name").eq(preserve_name),
+                    q.field("preserve_name").eq(preserve_name.as_str()),
+                    after_timestamp.and_then(|timestamp| {
+                        q.field("start_date")
+                            .greater_than(firestore::FirestoreTimestamp(timestamp))
+                    }),
                 ])
             })
             // Sort by date descending
