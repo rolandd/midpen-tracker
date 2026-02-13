@@ -2,29 +2,47 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { fetchMe, logout } from '$lib/api';
+	import { fetchMe, logout, ApiError } from '$lib/api';
 
-	onMount(() => {
-		// Poll every 2 seconds
-		const interval = setInterval(async () => {
+	$effect(() => {
+		const controller = new AbortController();
+		let timeoutId: ReturnType<typeof setTimeout>;
+
+		const poll = async () => {
 			try {
-				const user = await fetchMe();
+				const user = await fetchMe(controller.signal);
+				if (controller.signal.aborted) return;
+
 				if (!user.deletion_requested_at) {
 					// Deletion aborted/cleared -> back to dashboard
 					goto('/dashboard');
+					return;
 				}
 				// Still present and marked for deletion -> wait
-			} catch {
-				// Failed to fetch (401/404) -> deletion complete
-				clearInterval(interval);
-				await logout().catch(() => {}); // Ensure cookie is cleared, ignore errors
-				goto('/');
-			}
-		}, 2000);
+				if (!controller.signal.aborted) timeoutId = setTimeout(poll, 2000);
+			} catch (e: unknown) {
+				if (controller.signal.aborted) return;
 
-		return () => clearInterval(interval);
+				if (e instanceof ApiError && (e.status === 401 || e.status === 404)) {
+					// Session gone -> deletion complete
+					await logout(controller.signal).catch(() => {}); // Ensure cookie is cleared, ignore errors
+					if (controller.signal.aborted) return;
+					goto('/');
+				} else {
+					// Transient error -> retry
+					console.debug('Transient error during deletion poll, retrying...', e);
+					if (!controller.signal.aborted) timeoutId = setTimeout(poll, 5000);
+				}
+			}
+		};
+
+		poll();
+
+		return () => {
+			controller.abort();
+			clearTimeout(timeoutId);
+		};
 	});
 </script>
 

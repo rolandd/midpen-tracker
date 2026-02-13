@@ -2,7 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { UserResponse } from '../generated';
 	import { DeleteAccountModal } from '$lib/components';
@@ -94,11 +94,13 @@
 		}
 	});
 
-	onMount(() => {
-		document.addEventListener('click', handleClickOutside);
-		return () => {
-			document.removeEventListener('click', handleClickOutside);
-		};
+	$effect(() => {
+		if (isOpen) {
+			document.addEventListener('click', handleClickOutside);
+			return () => {
+				document.removeEventListener('click', handleClickOutside);
+			};
+		}
 	});
 
 	// Helper to get initials
