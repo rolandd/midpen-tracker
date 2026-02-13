@@ -122,9 +122,7 @@ impl KmsService {
                 // Verify AAD
                 let provided_aad = aad.unwrap_or(b"");
                 if stored_aad != provided_aad {
-                    return Err(AppError::Internal(anyhow::anyhow!(
-                        "Mock KMS AAD mismatch"
-                    )));
+                    return Err(AppError::Internal(anyhow::anyhow!("Mock KMS AAD mismatch")));
                 }
 
                 return String::from_utf8(plaintext).map_err(|_| {
@@ -207,9 +205,7 @@ pub async fn decrypt_tokens(
     let aad = athlete_id.to_string();
     let aad_bytes = aad.as_bytes();
 
-    let access_token = kms
-        .decrypt_or_fallback(encrypted_access, aad_bytes)
-        .await?;
+    let access_token = kms.decrypt_or_fallback(encrypted_access, aad_bytes).await?;
     let refresh_token = kms
         .decrypt_or_fallback(encrypted_refresh, aad_bytes)
         .await?;
