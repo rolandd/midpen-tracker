@@ -6,16 +6,6 @@ import { DEMO_MODE, mockUser, mockPreserveStats, getMockActivitiesForPreserve } 
 // API configuration
 export const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:8080';
 
-export class ApiError extends Error {
-	constructor(
-		message: string,
-		public status?: number
-	) {
-		super(message);
-		this.name = 'ApiError';
-	}
-}
-
 // API fetch wrapper with auth
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
 	const headers: HeadersInit = {
@@ -38,9 +28,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/')) {
 				// Optionally handle logout redirect here or let caller handle it
 			}
-			throw new ApiError('Session expired', 401);
+			throw new Error('Session expired');
 		}
-		throw new ApiError(`API error: ${response.status}`, response.status);
+		throw new Error(`API error: ${response.status}`);
 	}
 
 	return response.json();
@@ -69,16 +59,13 @@ import type {
 
 // API methods
 
-export async function fetchMe(signal?: AbortSignal): Promise<UserResponse> {
+export async function fetchMe(): Promise<UserResponse> {
 	if (DEMO_MODE) return mockUser;
 
-	return apiFetch<UserResponse>('/api/me', { signal });
+	return apiFetch<UserResponse>('/api/me');
 }
 
-export async function fetchPreserveStats(
-	showUnvisited = false,
-	signal?: AbortSignal
-): Promise<PreserveStatsResponse> {
+export async function fetchPreserveStats(showUnvisited = false): Promise<PreserveStatsResponse> {
 	if (DEMO_MODE) {
 		const stats = { ...mockPreserveStats };
 
@@ -89,29 +76,25 @@ export async function fetchPreserveStats(
 		return stats;
 	}
 
-	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=${showUnvisited}`, {
-		signal
-	});
+	return apiFetch<PreserveStatsResponse>(`/api/stats/preserves?show_unvisited=${showUnvisited}`);
 }
 
-export async function logout(signal?: AbortSignal): Promise<void> {
+export async function logout(): Promise<void> {
 	await fetch(`${API_BASE_URL}/auth/logout`, {
 		method: 'POST',
-		credentials: 'include',
-		signal
+		credentials: 'include'
 	});
 }
 
 export async function fetchActivities(
 	preserve: string,
-	page = 1,
-	signal?: AbortSignal
+
+	page = 1
 ): Promise<ActivitiesResponse> {
 	if (DEMO_MODE) return getMockActivitiesForPreserve(preserve, page);
 
 	return apiFetch<ActivitiesResponse>(
-		`/api/activities?preserve=${encodeURIComponent(preserve)}&page=${page}`,
-		{ signal }
+		`/api/activities?preserve=${encodeURIComponent(preserve)}&page=${page}`
 	);
 }
 
@@ -119,8 +102,8 @@ export async function deleteAccount(): Promise<DeleteAccountResponse> {
 	return apiFetch<DeleteAccountResponse>('/api/account', { method: 'DELETE' });
 }
 
-export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
+export async function fetchHealth(): Promise<HealthResponse> {
 	if (DEMO_MODE) return { status: 'ok', build_id: 'demo' };
 
-	return apiFetch<HealthResponse>('/health', { signal });
+	return apiFetch<HealthResponse>('/health');
 }

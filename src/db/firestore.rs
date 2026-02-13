@@ -52,6 +52,21 @@ impl FirestoreDb {
         })
     }
 
+    /// Check if a database error is likely transient and worth retrying.
+    fn is_transient_error(e: &AppError) -> bool {
+        match e {
+            AppError::Database(msg) => {
+                let msg_lower = msg.to_lowercase();
+                msg_lower.contains("aborted")
+                    || msg_lower.contains("unavailable")
+                    || msg_lower.contains("contention")
+                    || msg_lower.contains("concurrent")
+                    || msg_lower.contains("internal")
+            }
+            _ => false,
+        }
+    }
+
     /// Create a Firestore client for the emulator with unauthenticated access.
     async fn create_emulator_client(project_id: &str) -> Result<Self, AppError> {
         tracing::info!("Using unauthenticated connection for Firestore Emulator");
@@ -485,14 +500,9 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
 
         // 1. Read current user stats within the transaction
-        //    We must use a client with consistency selector bound to the transaction ID
-        //    to ensure this read participates in the transaction for snapshot isolation
-        //    and conflict detection.
-        let tx_client = self.get_client()?.clone_with_consistency_selector(
-            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
-        );
-
-        let current_stats: Option<crate::models::UserStats> = tx_client
+        //    This registers the document for conflict detection
+        let current_stats: Option<crate::models::UserStats> = self
+            .get_client()?
             .fluent()
             .select()
             .by_id_in(collections::USER_STATS)
@@ -636,9 +646,8 @@ impl FirestoreDb {
             let mut transaction = match operation(client_tx, transaction).await {
                 Ok(tx) => tx,
                 Err(e) => {
-                    // If the operation logic failed (e.g., read failed), we might retry depending on the error.
-                    // For now, we treat read errors as potential transient issues if they are database errors.
-                    if let AppError::Database(_) = e {
+                    // Check if error is transient/retryable
+                    if Self::is_transient_error(&e) {
                         if attempts < MAX_TRANSACTION_RETRIES {
                             tracing::warn!(
                                 error = %e,

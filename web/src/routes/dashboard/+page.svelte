@@ -2,6 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
 		fetchPreserveStats,
@@ -24,7 +25,6 @@
 	let selectedYear = $state<string | null>(null); // null = "All Time"
 	let totalPreserves = $state(0);
 	let pendingActivities = $state(0);
-	let hasPending = $derived(pendingActivities > 0);
 	let showUnvisited = $state(false);
 	let expandedPreserve = $state<string | null>(null);
 	let isLoggingOut = $state(false);
@@ -64,57 +64,35 @@
 		}
 	});
 
-	$effect(() => {
-		const controller = new AbortController();
-		loadStats(controller.signal);
-		return () => controller.abort();
+	onMount(() => {
+		loadStats();
+
+		// Auto-refresh while backfill is in progress
+		const interval = setInterval(() => {
+			if (pendingActivities > 0) {
+				loadStats();
+			}
+		}, 10000);
+
+		return () => clearInterval(interval);
 	});
 
-	$effect(() => {
-		if (hasPending) {
-			const controller = new AbortController();
-			let timeoutId: ReturnType<typeof setTimeout>;
-
-			const poll = async () => {
-				await loadStats(controller.signal);
-
-				if (!controller.signal.aborted && hasPending) {
-					timeoutId = setTimeout(poll, 10000);
-				}
-			};
-
-			// Schedule the first poll after a delay to avoid a
-			// double-fetch on initial load.
-			timeoutId = setTimeout(poll, 10000);
-
-			return () => {
-				controller.abort();
-				clearTimeout(timeoutId);
-			};
-		}
-	});
-
-	async function loadStats(signal?: AbortSignal) {
+	async function loadStats() {
 		loading = allTimePreserves.length === 0;
 		error = null;
 
 		try {
 			// Always fetch all preserves (visited and unvisited)
-			const data = await fetchPreserveStats(true, signal);
-			if (signal?.aborted) return;
-
-			allTimePreserves = [...data.preserves].sort((a, b) => b.count - a.count);
+			const data = await fetchPreserveStats(true);
+			allTimePreserves = data.preserves.sort((a, b) => b.count - a.count);
 			preservesByYear = data.preserves_by_year;
 			availableYears = data.available_years;
 			totalPreserves = data.total_preserves;
 			pendingActivities = data.pending_activities;
 		} catch (e) {
-			if (signal?.aborted) return;
 			error = e instanceof Error ? e.message : 'Failed to load data';
 		} finally {
-			if (!signal?.aborted) {
-				loading = false;
-			}
+			loading = false;
 		}
 	}
 
@@ -181,7 +159,7 @@
 			</div>
 		</div>
 
-		{#if hasPending}
+		{#if pendingActivities > 0}
 			<div class="processing-banner card">
 				<div class="processing-icon">⏳</div>
 				<div class="processing-text">

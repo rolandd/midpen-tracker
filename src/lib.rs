@@ -17,8 +17,7 @@ pub mod services;
 use config::Config;
 use db::FirestoreDb;
 use services::strava::StravaService;
-use services::{GoogleOidcVerifier, PreserveService, TasksService};
-use std::sync::Arc;
+use services::{PreserveService, TasksService};
 
 /// Shared application state.
 pub struct AppState {
@@ -26,6 +25,5 @@ pub struct AppState {
     pub db: FirestoreDb,
     pub preserve_service: PreserveService,
     pub tasks_service: TasksService,
-    pub google_oidc_verifier: Arc<GoogleOidcVerifier>,
     pub strava_service: StravaService,
 }
