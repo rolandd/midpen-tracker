@@ -9,7 +9,7 @@
 use midpen_tracker::{
     config::Config,
     db::FirestoreDb,
-    services::{KmsService, PreserveService, StravaService, TasksService},
+    services::{GoogleOidcVerifier, KmsService, PreserveService, StravaService, TasksService},
     AppState,
 };
 use std::sync::Arc;
@@ -46,6 +46,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Cloud Tasks service initialized"
     );
 
+    let google_oidc_verifier =
+        Arc::new(GoogleOidcVerifier::new(&config).expect("Failed to initialize OIDC verifier"));
+
     // Initialize KMS service
     let kms = KmsService::new(
         &config.gcp_project_id,
@@ -78,6 +81,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db,
         preserve_service,
         tasks_service,
+        google_oidc_verifier,
         strava_service,
     });
 
