@@ -38,10 +38,26 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
 	const response = await context.next();
 
-	// Only process HTML responses
+	// Create new Response with mutable headers (avoids errors on cached/immutable responses)
+	// We do this early so we can apply security headers to ALL responses
+	const newHeaders = new Headers(response.headers);
+
+	// Add Security Headers (Global)
+	newHeaders.set('X-Content-Type-Options', 'nosniff');
+	newHeaders.set('X-Frame-Options', 'DENY');
+	newHeaders.set('Referrer-Policy', 'no-referrer');
+	newHeaders.set('Permissions-Policy', PERMISSIONS_POLICY);
+	newHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+
+	// Only process HTML responses for CSP injection
 	const contentType = response.headers.get('content-type') || '';
 	if (!contentType.includes('text/html')) {
-		return response;
+		// Return response with added security headers
+		return new Response(response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: newHeaders
+		});
 	}
 
 	// Generate a cryptographically random nonce per CSP spec:
@@ -64,6 +80,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 		"frame-ancestors 'none'"
 	].join('; ');
 
+	// Set CSP header on the mutable headers object
+	newHeaders.set('Content-Security-Policy', csp);
+
 	// Use HTMLRewriter for streaming transformation (no buffering)
 	const rewriter = new HTMLRewriter().on('script', {
 		element(el) {
@@ -72,22 +91,13 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 	});
 
 	// Transform the response
-	const transformedResponse = rewriter.transform(response);
+	const transformedResponse = rewriter.transform(
+		new Response(response.body, {
+			status: response.status,
+			statusText: response.statusText,
+			headers: newHeaders
+		})
+	);
 
-	// Create new Response with mutable headers (avoids errors on cached/immutable responses)
-	const newHeaders = new Headers(transformedResponse.headers);
-	newHeaders.set('Content-Security-Policy', csp);
-
-	// Add Security Headers
-	newHeaders.set('X-Content-Type-Options', 'nosniff');
-	newHeaders.set('X-Frame-Options', 'DENY');
-	newHeaders.set('Referrer-Policy', 'no-referrer');
-	newHeaders.set('Permissions-Policy', PERMISSIONS_POLICY);
-	newHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-
-	return new Response(transformedResponse.body, {
-		status: transformedResponse.status,
-		statusText: transformedResponse.statusText,
-		headers: newHeaders
-	});
+	return transformedResponse;
 };
