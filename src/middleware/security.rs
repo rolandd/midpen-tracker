@@ -68,9 +68,6 @@ mod tests {
         assert_eq!(headers.get("Referrer-Policy").unwrap(), "no-referrer");
 
         let expected_policy = include_str!("../../permissions-policy.txt").trim();
-        assert_eq!(
-            headers.get("Permissions-Policy").unwrap(),
-            expected_policy
-        );
+        assert_eq!(headers.get("Permissions-Policy").unwrap(), expected_policy);
     }
 }
