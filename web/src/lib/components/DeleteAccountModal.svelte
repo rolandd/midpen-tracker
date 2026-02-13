@@ -2,7 +2,6 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import Button from './Button.svelte';
 
@@ -16,7 +15,7 @@
 	let error = $state<string | null>(null);
 	let previousActiveElement = $state<HTMLElement | null>(null);
 
-	onMount(() => {
+	$effect(() => {
 		previousActiveElement = document.activeElement as HTMLElement;
 		return () => {
 			previousActiveElement?.focus();
