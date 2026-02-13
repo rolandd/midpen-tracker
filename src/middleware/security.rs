@@ -5,6 +5,9 @@
 
 use axum::{extract::Request, http::HeaderValue, middleware::Next, response::Response};
 
+/// Permissions Policy loaded from centralized file at compile time.
+const PERMISSIONS_POLICY: &str = include_str!("../../permissions-policy.txt");
+
 /// Add security headers to all responses.
 pub async fn add_security_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
@@ -26,7 +29,7 @@ pub async fn add_security_headers(req: Request, next: Next) -> Response {
     headers.insert("Referrer-Policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         "Permissions-Policy",
-        HeaderValue::from_static("accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"),
+        HeaderValue::from_static(PERMISSIONS_POLICY.trim()),
     );
 
     response
@@ -63,9 +66,11 @@ mod tests {
             "default-src 'none'; frame-ancestors 'none'"
         );
         assert_eq!(headers.get("Referrer-Policy").unwrap(), "no-referrer");
+
+        let expected_policy = include_str!("../../permissions-policy.txt").trim();
         assert_eq!(
             headers.get("Permissions-Policy").unwrap(),
-            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+            expected_policy
         );
     }
 }

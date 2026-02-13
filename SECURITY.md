@@ -6,15 +6,13 @@ The application (both backend API and frontend) enforces a strict **Permissions 
 
 We adhere to the **Principle of Least Privilege**, disabling all features that are not explicitly required by the application.
 
-### Current Policy
+### Implementation (Source of Truth)
 
-The following policy string is the **Source of Truth** and must be used consistently in:
-1. `src/middleware/security.rs` (Backend Rust Axum middleware)
-2. `web/functions/_middleware.ts` (Frontend Cloudflare Pages middleware)
+The raw Permissions Policy string is defined in a single file: `permissions-policy.txt`.
 
-```text
-accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
-```
+This file is consumed by the build process to enforce consistency:
+1. **Backend (Rust):** Loaded at compile time via `include_str!("../../permissions-policy.txt")`.
+2. **Frontend (SvelteKit):** Injected at build time via `scripts/generate-security-config.js` into `web/functions/security-config.ts`.
 
 ### Rationale
 
@@ -31,7 +29,7 @@ accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), micr
 
 ### Updates
 
-When adding new features that require browser permissions:
-1. Update this document first.
-2. Update both backend and frontend implementations.
-3. Verify consistency.
+To update the policy:
+1. Edit `permissions-policy.txt`.
+2. Update this document (`SECURITY.md`) to reflect the rationale.
+3. Rebuild both backend and frontend to apply changes.

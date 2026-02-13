@@ -3,6 +3,8 @@
 
 /// <reference types="@cloudflare/workers-types" />
 
+import { PERMISSIONS_POLICY } from './security-config';
+
 /**
  * Cloudflare Pages middleware that injects CSP nonces into HTML responses.
  *
@@ -80,10 +82,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 	newHeaders.set('X-Content-Type-Options', 'nosniff');
 	newHeaders.set('X-Frame-Options', 'DENY');
 	newHeaders.set('Referrer-Policy', 'no-referrer');
-	newHeaders.set(
-		'Permissions-Policy',
-		'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()'
-	);
+	newHeaders.set('Permissions-Policy', PERMISSIONS_POLICY);
 	newHeaders.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 
 	return new Response(transformedResponse.body, {
