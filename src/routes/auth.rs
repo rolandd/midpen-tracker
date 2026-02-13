@@ -392,35 +392,61 @@ async fn trigger_backfill(
             "Queueing new activities for backfill"
         );
 
-        // Update UserStats pending count (increment, don't overwrite)
-        let mut stats_to_update = stats.clone();
-        stats_to_update.pending_activities += new_count;
-        stats_to_update.updated_at = chrono::Utc::now().to_rfc3339();
-
-        if let Err(e) = state.db.set_user_stats(athlete_id, &stats_to_update).await {
-            tracing::warn!(error = %e, "Failed to update pending activities count");
+        // Update UserStats pending count atomically
+        // Using transaction to prevent race conditions with background tasks
+        if let Err(e) = state
+            .db
+            .update_pending_activities(athlete_id, new_count as i32)
+            .await
+        {
+            tracing::warn!(
+                error = %e,
+                "Failed to update pending activities count (atomic)"
+            );
         }
 
         // Queue only the new activities
-        if let Err(e) = state
+        match state
             .tasks_service
             .queue_backfill(service_url, athlete_id, new_activity_ids)
             .await
         {
-            // Rollback pending count
-            let mut rollback_stats = state
-                .db
-                .get_user_stats(athlete_id)
-                .await?
-                .unwrap_or_else(UserStats::default);
-            if rollback_stats.pending_activities >= new_count {
-                rollback_stats.pending_activities -= new_count;
-                rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
-                    tracing::error!(error = %db_err, "Failed to rollback pending count in auth handler");
+            Ok(result) => {
+                if result.failed > 0 {
+                    tracing::warn!(
+                        athlete_id,
+                        failed = result.failed,
+                        failed_ids = ?result.failed_ids,
+                        "Some activities failed to queue during backfill"
+                    );
+
+                    // Atomically rollback pending count for failed tasks
+                    if let Err(db_err) = state
+                        .db
+                        .update_pending_activities(athlete_id, -(result.failed as i32))
+                        .await
+                    {
+                        tracing::error!(
+                            error = %db_err,
+                            "Failed to rollback pending count for failed tasks (atomic)"
+                        );
+                    }
                 }
             }
-            return Err(e);
+            Err(e) => {
+                // Atomically rollback pending count (all failed)
+                if let Err(db_err) = state
+                    .db
+                    .update_pending_activities(athlete_id, -(new_count as i32))
+                    .await
+                {
+                    tracing::error!(
+                        error = %db_err,
+                        "Failed to rollback pending count in auth handler (atomic)"
+                    );
+                }
+                return Err(e);
+            }
         }
     }
 

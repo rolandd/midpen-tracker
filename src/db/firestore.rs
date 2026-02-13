@@ -14,9 +14,12 @@ use crate::error::AppError;
 use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
 use firestore::FirestoreConsistencySelector;
+use futures_util::future::BoxFuture;
 use futures_util::{stream, StreamExt};
+use tokio::time::{sleep, Duration};
 
 const MAX_CONCURRENT_DB_OPS: usize = 50;
+const MAX_TRANSACTION_RETRIES: u32 = 5;
 // Firestore limits batch/transaction writes to 500 operations.
 // We use a safe limit of 400 to allow headroom.
 const BATCH_SIZE: usize = 400;
@@ -380,6 +383,65 @@ impl FirestoreDb {
         Ok(())
     }
 
+    /// Atomically update the pending activities count for a user.
+    ///
+    /// Uses a Firestore transaction to prevent race conditions during concurrent backfills.
+    /// `delta`: Positive to increment, negative to decrement.
+    ///
+    /// Retries up to `MAX_TRANSACTION_RETRIES` times on commit failure (e.g. contention).
+    pub async fn update_pending_activities(
+        &self,
+        athlete_id: u64,
+        delta: i32,
+    ) -> Result<(), AppError> {
+        self.execute_transaction(move |client_tx, mut transaction| {
+            Box::pin(async move {
+                // 1. Read current stats (with transaction lock)
+                let current_stats: Option<crate::models::UserStats> = client_tx
+                    .fluent()
+                    .select()
+                    .by_id_in(collections::USER_STATS)
+                    .obj()
+                    .one(&athlete_id.to_string())
+                    .await
+                    .map_err(|e| {
+                        AppError::Database(format!("Failed to read stats in transaction: {}", e))
+                    })?;
+
+                let mut stats = current_stats.unwrap_or_default();
+
+                // 2. Apply delta safely
+                if delta > 0 {
+                    stats.pending_activities =
+                        stats.pending_activities.saturating_add(delta as u32);
+                } else {
+                    let decrement = delta.unsigned_abs();
+                    stats.pending_activities =
+                        stats.pending_activities.saturating_sub(decrement);
+                }
+                stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+                // 3. Write back
+                client_tx
+                    .fluent()
+                    .update()
+                    .in_col(collections::USER_STATS)
+                    .document_id(athlete_id.to_string())
+                    .object(&stats)
+                    .add_to_transaction(&mut transaction)
+                    .map_err(|e| {
+                        AppError::Database(format!(
+                            "Failed to add stats update to transaction: {}",
+                            e
+                        ))
+                    })?;
+
+                Ok(transaction)
+            })
+        })
+        .await
+    }
+
     // ─── Atomic Activity Processing ─────────────────────────────────
 
     /// Atomically process an activity: store the activity, preserve joins, and update stats.
@@ -519,6 +581,99 @@ impl FirestoreDb {
     }
 
     // ─── Helper Methods ────────────────────────────────────────────
+
+    /// Execute a closure within a Firestore transaction with automatic retries for transient failures.
+    ///
+    /// The closure receives a mutable transaction reference and the client.
+    /// It should perform all transactional reads and buffer writes to the transaction.
+    ///
+    /// This method handles:
+    /// - Creating the transaction.
+    /// - Cloning the client with consistency selector for atomic reads.
+    /// - Committing the transaction.
+    /// - Retrying on commit failures (e.g. contention) with exponential backoff.
+    async fn execute_transaction<F>(&self, operation: F) -> Result<(), AppError>
+    where
+        F: for<'b> Fn(
+            firestore::FirestoreDb,
+            firestore::FirestoreTransaction<'b>,
+        ) -> BoxFuture<'b, Result<firestore::FirestoreTransaction<'b>, AppError>>,
+    {
+        let client = self.get_client()?;
+        let mut attempts = 0;
+
+        loop {
+            attempts += 1;
+
+            // Start a new transaction for each attempt
+            let transaction = match client.begin_transaction().await {
+                Ok(tx) => tx,
+                Err(e) => {
+                    // If we can't even start a transaction, it might be a connection issue.
+                    // We'll retry a few times but this is less likely to be contention.
+                    if attempts >= MAX_TRANSACTION_RETRIES {
+                        return Err(AppError::Database(format!(
+                            "Failed to begin transaction after {} attempts: {}",
+                            attempts, e
+                        )));
+                    }
+                    tracing::warn!(
+                        error = %e,
+                        attempt = attempts,
+                        "Failed to begin transaction, retrying..."
+                    );
+                    sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                    continue;
+                }
+            };
+
+            // Clone client with transaction consistency to ensure reads are part of transaction
+            let client_tx = client.clone_with_consistency_selector(
+                FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+            );
+
+            // Execute the operation
+            let mut transaction = match operation(client_tx, transaction).await {
+                Ok(tx) => tx,
+                Err(e) => {
+                    // If the operation logic failed (e.g., read failed), we might retry depending on the error.
+                    // For now, we treat read errors as potential transient issues if they are database errors.
+                    if let AppError::Database(_) = e {
+                        if attempts < MAX_TRANSACTION_RETRIES {
+                            tracing::warn!(
+                                error = %e,
+                                attempt = attempts,
+                                "Transient error in transaction logic, retrying..."
+                            );
+                            sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                            continue;
+                        }
+                    }
+                    return Err(e);
+                }
+            };
+
+            // Commit
+            match transaction.commit().await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    if attempts >= MAX_TRANSACTION_RETRIES {
+                        return Err(AppError::Database(format!(
+                            "Transaction commit failed after {} attempts: {}",
+                            attempts, e
+                        )));
+                    }
+                    tracing::warn!(
+                        error = %e,
+                        attempt = attempts,
+                        "Transaction commit failed (likely contention), retrying..."
+                    );
+                    // Exponential backoff: 100ms, 200ms, 400ms, 800ms...
+                    sleep(Duration::from_millis(100 * 2_u64.pow(attempts - 1))).await;
+                }
+            }
+        }
+    }
 
     /// Helper to batch delete documents using transactions.
     async fn batch_delete<T, F>(
