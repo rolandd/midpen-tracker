@@ -3,13 +3,12 @@
 
 <script lang="ts">
 	import '../app.css';
-	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { uiState } from '$lib/state.svelte';
 	import { AboutModal } from '$lib/components';
 	import { PUBLIC_BASE_URL } from '$env/static/public';
-	import { fetchHealth, fetchMe } from '$lib/api';
+	import { fetchHealth, fetchMe, ApiError } from '$lib/api';
 
 	let { children } = $props();
 
@@ -21,36 +20,46 @@
 		}
 	});
 
-	onMount(() => {
-		// For non-landing pages, remove auth-pending immediately (no FOUC concern).
-		// The landing page (/) handles this itself after auth check in +page.svelte.
-		if ($page.url.pathname !== '/') {
-			document.documentElement.classList.remove('auth-pending');
-		}
+	$effect(() => {
+		const controller = new AbortController();
 
-		fetchHealth()
+		fetchHealth(controller.signal)
 			.then((h) => {
 				uiState.backendBuildId = h.build_id;
 			})
-			.catch((e) => console.debug('Failed to fetch backend health:', e));
+			.catch((e: unknown) => {
+				if (controller.signal.aborted) return;
+				console.debug('Failed to fetch backend health:', e);
+			});
 
 		// Fetch user globally once
-		fetchMe()
+		fetchMe(controller.signal)
 			.then((u) => {
 				uiState.user = u;
 				if (u.deletion_requested_at) {
 					goto('/account-deletion-in-progress');
 				}
 			})
-			.catch((e) => {
-				// 401/404 means not logged in, which is fine.
-				// We just leave uiState.user as null.
-				console.debug('User not authenticated', e);
-				uiState.user = null;
+			.catch((e: unknown) => {
+				if (controller.signal.aborted) return;
+
+				if (e instanceof ApiError && (e.status === 401 || e.status === 404)) {
+					// 401/404 means not logged in, which is fine.
+					// We just leave uiState.user as null.
+					console.debug('User not authenticated');
+					uiState.user = null;
+				} else {
+					// Transient error (500, network error, etc)
+					// Don't clear user state, maybe we're still logged in
+					console.error('Transient error fetching user:', e);
+				}
 			})
 			.finally(() => {
+				if (controller.signal.aborted) return;
 				uiState.isUserLoading = false;
 			});
+
+		return () => controller.abort();
 	});
 </script>
 

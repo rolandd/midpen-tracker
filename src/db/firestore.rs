@@ -485,9 +485,14 @@ impl FirestoreDb {
             .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
 
         // 1. Read current user stats within the transaction
-        //    This registers the document for conflict detection
-        let current_stats: Option<crate::models::UserStats> = self
-            .get_client()?
+        //    We must use a client with consistency selector bound to the transaction ID
+        //    to ensure this read participates in the transaction for snapshot isolation
+        //    and conflict detection.
+        let tx_client = self.get_client()?.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
+        let current_stats: Option<crate::models::UserStats> = tx_client
             .fluent()
             .select()
             .by_id_in(collections::USER_STATS)

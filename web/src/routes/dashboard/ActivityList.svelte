@@ -14,7 +14,12 @@
 	let page = $state(1);
 	let total = $state(0);
 
+	let currentController = $state<AbortController | null>(null);
+
 	$effect(() => {
+		const controller = new AbortController();
+		currentController = controller;
+
 		const cached = activityCache.get(preserveName);
 		if (cached) {
 			activities = cached.activities;
@@ -27,16 +32,22 @@
 			activities = [];
 			page = 1;
 			total = 0;
-			loadActivities(1);
+			loadActivities(1, controller.signal);
 		}
+
+		return () => {
+			controller.abort();
+		};
 	});
 
-	async function loadActivities(pageNum: number) {
+	async function loadActivities(pageNum: number, signal?: AbortSignal) {
 		loading = true;
 		error = null;
 
 		try {
-			const data = await fetchActivities(preserveName, pageNum);
+			const data = await fetchActivities(preserveName, pageNum, signal);
+			if (signal?.aborted) return;
+
 			if (pageNum === 1) {
 				activities = data.activities;
 				activityCache.set(preserveName, data.activities, data.total, 1);
@@ -46,15 +57,18 @@
 			}
 			total = data.total;
 		} catch (e) {
+			if (signal?.aborted) return;
 			error = e instanceof Error ? e.message : 'Failed to load activities';
 		} finally {
-			loading = false;
+			if (!signal?.aborted) {
+				loading = false;
+			}
 		}
 	}
 
 	function handleLoadMore() {
 		page++;
-		loadActivities(page);
+		loadActivities(page, currentController?.signal);
 	}
 
 	function getEmoji(sportType: string): string {
