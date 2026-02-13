@@ -5,6 +5,9 @@
 
 use axum::{extract::Request, http::HeaderValue, middleware::Next, response::Response};
 
+/// Permissions Policy loaded from centralized file at compile time.
+const PERMISSIONS_POLICY: &str = include_str!("../../permissions-policy.txt");
+
 /// Add security headers to all responses.
 pub async fn add_security_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
@@ -17,7 +20,7 @@ pub async fn add_security_headers(req: Request, next: Next) -> Response {
     headers.insert("X-Frame-Options", HeaderValue::from_static("DENY"));
     headers.insert(
         "Strict-Transport-Security",
-        HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
     );
     headers.insert(
         "Content-Security-Policy",
@@ -26,7 +29,7 @@ pub async fn add_security_headers(req: Request, next: Next) -> Response {
     headers.insert("Referrer-Policy", HeaderValue::from_static("no-referrer"));
     headers.insert(
         "Permissions-Policy",
-        HeaderValue::from_static("accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"),
+        HeaderValue::from_static(PERMISSIONS_POLICY.trim()),
     );
 
     response
@@ -56,16 +59,15 @@ mod tests {
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
         assert_eq!(
             headers.get("Strict-Transport-Security").unwrap(),
-            "max-age=31536000; includeSubDomains"
+            "max-age=31536000; includeSubDomains; preload"
         );
         assert_eq!(
             headers.get("Content-Security-Policy").unwrap(),
             "default-src 'none'; frame-ancestors 'none'"
         );
         assert_eq!(headers.get("Referrer-Policy").unwrap(), "no-referrer");
-        assert_eq!(
-            headers.get("Permissions-Policy").unwrap(),
-            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
-        );
+
+        let expected_policy = include_str!("../../permissions-policy.txt").trim();
+        assert_eq!(headers.get("Permissions-Policy").unwrap(), expected_policy);
     }
 }
