@@ -28,6 +28,7 @@
 	let showUnvisited = $state(false);
 	let expandedPreserve = $state<string | null>(null);
 	let isLoggingOut = $state(false);
+	let hasLoadedInitialStats = false;
 
 	// Computed: get preserves filtered by selected year
 	let preserves = $derived.by(() => {
@@ -66,7 +67,7 @@
 
 	$effect(() => {
 		const controller = new AbortController();
-		loadStats(controller.signal);
+		loadStats(controller.signal, true);
 		return () => controller.abort();
 	});
 
@@ -76,7 +77,7 @@
 			let timeoutId: ReturnType<typeof setTimeout>;
 
 			const poll = async () => {
-				await loadStats(controller.signal);
+				await loadStats(controller.signal, false);
 
 				if (!controller.signal.aborted && hasPending) {
 					timeoutId = setTimeout(poll, 10000);
@@ -94,8 +95,10 @@
 		}
 	});
 
-	async function loadStats(signal?: AbortSignal) {
-		loading = allTimePreserves.length === 0;
+	async function loadStats(signal?: AbortSignal, showLoading = !hasLoadedInitialStats) {
+		if (showLoading) {
+			loading = true;
+		}
 		error = null;
 
 		try {
@@ -108,6 +111,7 @@
 			availableYears = data.available_years;
 			totalPreserves = data.total_preserves;
 			pendingActivities = data.pending_activities;
+			hasLoadedInitialStats = true;
 		} catch (e) {
 			if (signal?.aborted) return;
 			error = e instanceof Error ? e.message : 'Failed to load data';
