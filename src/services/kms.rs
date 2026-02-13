@@ -62,19 +62,28 @@ impl KmsService {
         }
     }
 
-    /// Encrypt plaintext data using KMS.
+    /// Encrypt plaintext data using KMS with optional Additional Authenticated Data (AAD).
     /// Returns base64-encoded ciphertext.
-    pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
+    pub async fn encrypt(&self, plaintext: &str, aad: Option<&[u8]>) -> Result<String, AppError> {
+        // Mock Implementation
+        if self.client.is_none() {
+            let aad_part = aad.unwrap_or(b"");
+            // Simple reversible encoding: MOCK_V1:B64(AAD):B64(PT)
+            return Ok(format!(
+                "MOCK_V1:{}:{}",
+                BASE64.encode(aad_part),
+                BASE64.encode(plaintext)
+            ));
+        }
+
         use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
-        let client = self
-            .client
-            .as_ref()
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("KMS client not connected")))?;
+        let client = self.client.as_ref().unwrap();
 
         let req = EncryptRequest {
             name: self.key_path.clone(),
             plaintext: plaintext.as_bytes().to_vec(),
+            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
             ..Default::default()
         };
 
@@ -87,15 +96,50 @@ impl KmsService {
         Ok(BASE64.encode(ciphertext))
     }
 
-    /// Decrypt ciphertext using KMS.
+    /// Decrypt ciphertext using KMS with optional Additional Authenticated Data (AAD).
     /// Expects base64-encoded ciphertext.
-    pub async fn decrypt(&self, ciphertext_b64: &str) -> Result<String, AppError> {
+    pub async fn decrypt(
+        &self,
+        ciphertext_b64: &str,
+        aad: Option<&[u8]>,
+    ) -> Result<String, AppError> {
+        // Mock Implementation
+        if self.client.is_none() {
+            if let Some(rest) = ciphertext_b64.strip_prefix("MOCK_V1:") {
+                let parts: Vec<&str> = rest.split(':').collect();
+                if parts.len() != 2 {
+                    return Err(AppError::Internal(anyhow::anyhow!(
+                        "Invalid mock ciphertext format"
+                    )));
+                }
+                let stored_aad = BASE64.decode(parts[0]).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock AAD encoding"))
+                })?;
+                let plaintext = BASE64.decode(parts[1]).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock plaintext encoding"))
+                })?;
+
+                // Verify AAD
+                let provided_aad = aad.unwrap_or(b"");
+                if stored_aad != provided_aad {
+                    return Err(AppError::Internal(anyhow::anyhow!(
+                        "Mock KMS AAD mismatch"
+                    )));
+                }
+
+                return String::from_utf8(plaintext).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock plaintext UTF-8"))
+                });
+            } else {
+                return Err(AppError::Internal(anyhow::anyhow!(
+                    "Unknown mock ciphertext version"
+                )));
+            }
+        }
+
         use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
-        let client = self
-            .client
-            .as_ref()
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("KMS client not connected")))?;
+        let client = self.client.as_ref().unwrap();
 
         let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
             AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
@@ -104,6 +148,7 @@ impl KmsService {
         let req = DecryptRequest {
             name: self.key_path.clone(),
             ciphertext,
+            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
             ..Default::default()
         };
 
@@ -116,6 +161,25 @@ impl KmsService {
         String::from_utf8(response.plaintext)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
     }
+
+    /// Decrypt with fallback for legacy tokens (no AAD).
+    /// Tries decrypting with provided AAD first. If that fails, tries with empty AAD.
+    /// This allows migrating from non-AAD encrypted tokens to AAD-encrypted ones seamlessly.
+    pub async fn decrypt_or_fallback(
+        &self,
+        ciphertext_b64: &str,
+        aad: &[u8],
+    ) -> Result<String, AppError> {
+        // Try with AAD
+        match self.decrypt(ciphertext_b64, Some(aad)).await {
+            Ok(plaintext) => Ok(plaintext),
+            Err(_) => {
+                // Failed - try fallback (no AAD)
+                tracing::warn!("Decryption with AAD failed, attempting legacy fallback (no AAD)");
+                self.decrypt(ciphertext_b64, None).await
+            }
+        }
+    }
 }
 
 /// Helper to encrypt OAuth tokens before storing.
@@ -123,9 +187,13 @@ pub async fn encrypt_tokens(
     kms: &KmsService,
     access_token: &str,
     refresh_token: &str,
+    athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let encrypted_access = kms.encrypt(access_token).await?;
-    let encrypted_refresh = kms.encrypt(refresh_token).await?;
+    let aad = athlete_id.to_string();
+    let aad_bytes = aad.as_bytes();
+
+    let encrypted_access = kms.encrypt(access_token, Some(aad_bytes)).await?;
+    let encrypted_refresh = kms.encrypt(refresh_token, Some(aad_bytes)).await?;
     Ok((encrypted_access, encrypted_refresh))
 }
 
@@ -134,8 +202,16 @@ pub async fn decrypt_tokens(
     kms: &KmsService,
     encrypted_access: &str,
     encrypted_refresh: &str,
+    athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let access_token = kms.decrypt(encrypted_access).await?;
-    let refresh_token = kms.decrypt(encrypted_refresh).await?;
+    let aad = athlete_id.to_string();
+    let aad_bytes = aad.as_bytes();
+
+    let access_token = kms
+        .decrypt_or_fallback(encrypted_access, aad_bytes)
+        .await?;
+    let refresh_token = kms
+        .decrypt_or_fallback(encrypted_refresh, aad_bytes)
+        .await?;
     Ok((access_token, refresh_token))
 }
