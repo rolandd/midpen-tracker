@@ -2,6 +2,7 @@
 <!-- Copyright 2026 Roland Dreier <roland@rolandd.dev> -->
 
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import Button from './Button.svelte';
 
@@ -13,6 +14,14 @@
 	let { onConfirm, onCancel }: Props = $props();
 	let isDeleting = $state(false);
 	let error = $state<string | null>(null);
+	let previousActiveElement = $state<HTMLElement | null>(null);
+
+	onMount(() => {
+		previousActiveElement = document.activeElement as HTMLElement;
+		return () => {
+			previousActiveElement?.focus();
+		};
+	});
 
 	async function handleConfirm() {
 		isDeleting = true;
