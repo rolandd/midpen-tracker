@@ -23,14 +23,17 @@
 
 	const menuId = 'user-profile-menu';
 
-	async function toggleDropdown() {
+	async function toggleDropdown(focusLast = false) {
 		isOpen = !isOpen;
 		if (isOpen) {
 			await tick();
-			const firstItem = dropdownRef?.querySelector<HTMLElement>(
+			const items = dropdownRef?.querySelectorAll<HTMLElement>(
 				'[role="menuitem"]:not([disabled])'
 			);
-			firstItem?.focus();
+			if (items && items.length > 0) {
+				const itemToFocus = focusLast ? items[items.length - 1] : items[0];
+				itemToFocus?.focus();
+			}
 		}
 	}
 
@@ -91,7 +94,9 @@
 		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
 			event.preventDefault();
 			event.stopPropagation();
-			if (!isOpen) toggleDropdown();
+			if (!isOpen) {
+				toggleDropdown(event.key === 'ArrowUp');
+			}
 		}
 	}
 
@@ -123,7 +128,7 @@
 	<!-- Trigger Button -->
 	<button
 		class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
-		onclick={toggleDropdown}
+		onclick={() => toggleDropdown()}
 		onkeydown={handleTriggerKeydown}
 		bind:this={triggerRef}
 		aria-expanded={isOpen}
