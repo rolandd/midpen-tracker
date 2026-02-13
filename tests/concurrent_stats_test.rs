@@ -3,6 +3,9 @@ use midpen_tracker::models::Activity;
 mod common;
 use common::test_db;
 
+const NUM_CONCURRENT_ACTIVITIES: u64 = 10;
+const ACTIVITY_DISTANCE: f64 = 100.0;
+
 #[tokio::test]
 async fn test_concurrent_activity_processing_race_condition() {
     // This test attempts to reproduce the race condition where stats are read outside the transaction.
@@ -32,12 +35,9 @@ async fn test_concurrent_activity_processing_race_condition() {
         .await
         .expect("Failed to create test user");
 
-    // We will spawn N concurrent tasks, each adding an activity with distance 100.0
-    // Total distance should be N * 100.0
-    let n = 10;
     let mut handles = vec![];
 
-    for i in 0..n {
+    for i in 0..NUM_CONCURRENT_ACTIVITIES {
         let db_clone = db.clone();
         handles.push(tokio::spawn(async move {
             let activity_id = 1000 + i;
@@ -47,16 +47,13 @@ async fn test_concurrent_activity_processing_race_condition() {
                 name: format!("Race Activity {}", i),
                 sport_type: "Run".to_string(),
                 start_date: "2024-01-01T10:00:00Z".to_string(),
-                distance_meters: 100.0,
+                distance_meters: ACTIVITY_DISTANCE,
                 preserves_visited: vec![],
                 source: "test".to_string(),
                 annotation_added: false,
                 processed_at: chrono::Utc::now().to_rfc3339(),
                 device_name: None,
             };
-
-            // Random small delay to increase chance of overlap
-            // tokio::time::sleep(tokio::time::Duration::from_millis(rand::random::<u64>() % 10)).await;
 
             db_clone.process_activity_atomic(&activity, &[]).await
         }));
@@ -77,16 +74,13 @@ async fn test_concurrent_activity_processing_race_condition() {
         .expect("Failed to fetch user stats")
         .expect("User stats document not found");
 
-    println!("Total activities: {}", stats.total_activities);
-    println!("Total distance: {}", stats.total_distance_meters);
-
     assert_eq!(
-        stats.total_activities, n as u32,
+        stats.total_activities, NUM_CONCURRENT_ACTIVITIES as u32,
         "Total activities count mismatch due to race condition"
     );
     assert_eq!(
         stats.total_distance_meters,
-        (n as f64) * 100.0,
+        (NUM_CONCURRENT_ACTIVITIES as f64) * ACTIVITY_DISTANCE,
         "Total distance mismatch due to race condition"
     );
 }
