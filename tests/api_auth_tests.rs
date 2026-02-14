@@ -18,7 +18,7 @@ mod common;
 
 #[tokio::test]
 async fn test_protected_route_without_token() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -37,7 +37,7 @@ async fn test_protected_route_without_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_invalid_token() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -57,7 +57,7 @@ async fn test_protected_route_with_invalid_token() {
 
 #[tokio::test]
 async fn test_protected_route_with_valid_token() {
-    let (app, state) = common::create_test_app().await;
+    let (app, state) = common::create_test_app();
     let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
 
     let response = app
@@ -84,7 +84,7 @@ async fn test_protected_route_with_valid_token() {
 
 #[tokio::test]
 async fn test_cors_preflight() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
@@ -113,7 +113,7 @@ async fn test_cors_preflight() {
 
 #[tokio::test]
 async fn test_public_route_no_auth_required() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(

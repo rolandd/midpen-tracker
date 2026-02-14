@@ -14,7 +14,7 @@ mod common;
 
 #[tokio::test]
 async fn test_process_activity_no_header_forbidden() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "activity_id": 12345,
@@ -39,7 +39,7 @@ async fn test_process_activity_no_header_forbidden() {
 
 #[tokio::test]
 async fn test_process_activity_missing_auth_forbidden() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "activity_id": 12345,
@@ -65,7 +65,7 @@ async fn test_process_activity_missing_auth_forbidden() {
 
 #[tokio::test]
 async fn test_process_activity_with_header_allowed() {
-    let (app, state) = common::create_test_app().await;
+    let (app, state) = common::create_test_app();
     let token = common::create_test_tasks_oidc_jwt(&state.config);
 
     let payload = json!({
@@ -97,7 +97,7 @@ async fn test_process_activity_with_header_allowed() {
 
 #[tokio::test]
 async fn test_process_activity_wrong_queue_name_forbidden() {
-    let (app, state) = common::create_test_app().await;
+    let (app, state) = common::create_test_app();
     let token = common::create_test_tasks_oidc_jwt(&state.config);
 
     let payload = json!({
@@ -125,7 +125,7 @@ async fn test_process_activity_wrong_queue_name_forbidden() {
 
 #[tokio::test]
 async fn test_continue_backfill_no_header_forbidden() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let payload = json!({
         "athlete_id": 67890,

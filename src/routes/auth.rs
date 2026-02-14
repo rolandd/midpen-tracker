@@ -24,6 +24,8 @@ use crate::AppState;
 
 /// Cookie name for the client-side login hint (used to prevent FOUC).
 const HINT_COOKIE_NAME: &str = "midpen_logged_in";
+const TOKEN_COOKIE_NAME: &str = "midpen_token";
+const NONCE_COOKIE_NAME: &str = "midpen_oauth_nonce";
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -105,12 +107,9 @@ async fn auth_start(
 
     // Create HttpOnly cookie for the nonce
     // Path limited to callback to reduce leakage
-    let mut cookie = Cookie::new("midpen_oauth_nonce", nonce_hex);
-    cookie.set_http_only(true);
-    let is_production = state.config.frontend_url.contains("https");
-    cookie.set_secure(is_production);
-    cookie.set_path("/auth/strava/callback");
-    cookie.set_same_site(SameSite::Lax);
+    let mut cookie = Cookie::new(NONCE_COOKIE_NAME, nonce_hex);
+    let is_secure = is_secure_cookie(&state.config.frontend_url);
+    apply_nonce_cookie_attrs(&mut cookie, is_secure);
     cookie.set_max_age(time::Duration::minutes(15)); // Matches state expiry
 
     // Use configured API URL for callback to prevent Host Header Injection
@@ -155,13 +154,16 @@ async fn auth_callback(
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse> {
     // Get nonce from cookie
-    let nonce_cookie = jar.get("midpen_oauth_nonce").map(|c| c.value().to_string());
+    let nonce_cookie = jar.get(NONCE_COOKIE_NAME).map(|c| c.value().to_string());
 
     // Cleanup nonce cookie immediately
-    let mut cleanup_cookie = Cookie::new("midpen_oauth_nonce", "");
-    cleanup_cookie.set_path("/auth/strava/callback");
+    let mut cleanup_cookie = Cookie::new(NONCE_COOKIE_NAME, "");
+    apply_nonce_cookie_attrs(
+        &mut cleanup_cookie,
+        is_secure_cookie(&state.config.frontend_url),
+    );
     cleanup_cookie.set_max_age(time::Duration::seconds(0));
-    let jar = jar.add(cleanup_cookie);
+    let jar = jar.remove(cleanup_cookie);
 
     // Decode and verify frontend URL from state parameter
     let frontend_url = verify_and_decode_state(
@@ -214,30 +216,17 @@ async fn auth_callback(
 
     // Redirect to frontend with token
     // Create HttpOnly cookie
-    let mut cookie = Cookie::new("midpen_token", jwt);
-    cookie.set_http_only(true);
-    let is_production = state.config.frontend_url.contains("https");
-    cookie.set_secure(is_production);
-    cookie.set_path("/");
-    cookie.set_same_site(SameSite::Lax);
+    let mut cookie = Cookie::new(TOKEN_COOKIE_NAME, jwt);
+    let is_secure = is_secure_cookie(&state.config.frontend_url);
+    apply_token_cookie_attrs(&mut cookie, is_secure);
     // Set max age to 30 days (same as JWT exp)
     cookie.set_max_age(time::Duration::days(30));
 
     // Create hint cookie (not HttpOnly) for client-side detection
     // This cookie needs a domain that covers both API and frontend subdomains
     let mut hint_cookie = Cookie::new(HINT_COOKIE_NAME, "1");
-    hint_cookie.set_http_only(false); // JS can read this
-    hint_cookie.set_secure(is_production);
-    hint_cookie.set_path("/");
-    hint_cookie.set_same_site(SameSite::Lax);
+    apply_hint_cookie_attrs(&mut hint_cookie, is_secure, &frontend_url);
     hint_cookie.set_max_age(time::Duration::days(30));
-
-    // Set domain for cross-subdomain access (e.g., .rolandd.dev)
-    // This allows the frontend (midpen-tracker.rolandd.dev) to read cookies
-    // set by the API (midpen-tracker-api.rolandd.dev)
-    if let Some(domain) = extract_cookie_domain(&frontend_url) {
-        hint_cookie.set_domain(domain);
-    }
 
     // Redirect to dashboard (no token in URL)
     let redirect_url = format!("{}/dashboard", frontend_url);
@@ -309,6 +298,38 @@ fn extract_cookie_domain(url: &str) -> Option<String> {
     }
 }
 
+fn is_secure_cookie(frontend_url: &str) -> bool {
+    frontend_url.starts_with("https://")
+}
+
+fn apply_token_cookie_attrs(cookie: &mut Cookie<'static>, secure: bool) {
+    cookie.set_http_only(true);
+    cookie.set_secure(secure);
+    cookie.set_path("/");
+    cookie.set_same_site(SameSite::Lax);
+}
+
+fn apply_hint_cookie_attrs(cookie: &mut Cookie<'static>, secure: bool, frontend_url: &str) {
+    cookie.set_http_only(false);
+    cookie.set_secure(secure);
+    cookie.set_path("/");
+    cookie.set_same_site(SameSite::Lax);
+
+    // Set domain for cross-subdomain access (e.g., .rolandd.dev)
+    // This allows the frontend (midpen-tracker.rolandd.dev) to read cookies
+    // set by the API (midpen-tracker-api.rolandd.dev)
+    if let Some(domain) = extract_cookie_domain(frontend_url) {
+        cookie.set_domain(domain);
+    }
+}
+
+fn apply_nonce_cookie_attrs(cookie: &mut Cookie<'static>, secure: bool) {
+    cookie.set_http_only(true);
+    cookie.set_secure(secure);
+    cookie.set_path("/auth/strava/callback");
+    cookie.set_same_site(SameSite::Lax);
+}
+
 /// Trigger backfill for activities since 2025-01-01.
 /// Only fetches first page at login, then queues a continue-backfill task
 /// for subsequent pages to spread Strava API calls over time.
@@ -371,61 +392,35 @@ async fn trigger_backfill(
             "Queueing new activities for backfill"
         );
 
-        // Update UserStats pending count atomically
-        // Using transaction to prevent race conditions with background tasks
-        if let Err(e) = state
-            .db
-            .update_pending_activities(athlete_id, new_count as i32)
-            .await
-        {
-            tracing::warn!(
-                error = %e,
-                "Failed to update pending activities count (atomic)"
-            );
+        // Update UserStats pending count (increment, don't overwrite)
+        let mut stats_to_update = stats.clone();
+        stats_to_update.pending_activities += new_count;
+        stats_to_update.updated_at = chrono::Utc::now().to_rfc3339();
+
+        if let Err(e) = state.db.set_user_stats(athlete_id, &stats_to_update).await {
+            tracing::warn!(error = %e, "Failed to update pending activities count");
         }
 
         // Queue only the new activities
-        match state
+        if let Err(e) = state
             .tasks_service
             .queue_backfill(service_url, athlete_id, new_activity_ids)
             .await
         {
-            Ok(result) => {
-                if result.failed > 0 {
-                    tracing::warn!(
-                        athlete_id,
-                        failed = result.failed,
-                        failed_ids = ?result.failed_ids,
-                        "Some activities failed to queue during backfill"
-                    );
-
-                    // Atomically rollback pending count for failed tasks
-                    if let Err(db_err) = state
-                        .db
-                        .update_pending_activities(athlete_id, -(result.failed as i32))
-                        .await
-                    {
-                        tracing::error!(
-                            error = %db_err,
-                            "Failed to rollback pending count for failed tasks (atomic)"
-                        );
-                    }
+            // Rollback pending count
+            let mut rollback_stats = state
+                .db
+                .get_user_stats(athlete_id)
+                .await?
+                .unwrap_or_else(UserStats::default);
+            if rollback_stats.pending_activities >= new_count {
+                rollback_stats.pending_activities -= new_count;
+                rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
+                if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
+                    tracing::error!(error = %db_err, "Failed to rollback pending count in auth handler");
                 }
             }
-            Err(e) => {
-                // Atomically rollback pending count (all failed)
-                if let Err(db_err) = state
-                    .db
-                    .update_pending_activities(athlete_id, -(new_count as i32))
-                    .await
-                {
-                    tracing::error!(
-                        error = %db_err,
-                        "Failed to rollback pending count in auth handler (atomic)"
-                    );
-                }
-                return Err(e);
-            }
+            return Err(e);
         }
     }
 
@@ -533,39 +528,22 @@ async fn logout(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,
 ) -> (CookieJar, axum::http::StatusCode) {
-    let is_production = state.config.frontend_url.contains("https");
+    let is_secure = is_secure_cookie(&state.config.frontend_url);
 
     // Cookie removal must match the same attributes as when it was set
     // (path, secure, httponly, samesite) for browser to recognize it
-    let cookie = Cookie::build("midpen_token")
-        .path("/")
-        .http_only(true)
-        .secure(is_production) // Match environment
-        .same_site(SameSite::Lax)
-        .max_age(time::Duration::seconds(0))
-        .build();
+    let mut cookie = Cookie::new(TOKEN_COOKIE_NAME, "");
+    apply_token_cookie_attrs(&mut cookie, is_secure);
+    cookie.set_max_age(time::Duration::seconds(0));
 
-    let mut hint_cookie = Cookie::build(HINT_COOKIE_NAME)
-        .path("/")
-        .http_only(false)
-        .secure(is_production)
-        .same_site(SameSite::Lax)
-        .max_age(time::Duration::seconds(0))
-        .build();
-
-    // Set domain if needed (must match what was set in auth_callback)
-    if let Some(domain) = extract_cookie_domain(&state.config.frontend_url) {
-        hint_cookie.set_domain(domain);
-    }
+    let mut hint_cookie = Cookie::new(HINT_COOKIE_NAME, "");
+    apply_hint_cookie_attrs(&mut hint_cookie, is_secure, &state.config.frontend_url);
+    hint_cookie.set_max_age(time::Duration::seconds(0));
 
     // Also clear the nonce cookie just in case
-    let mut nonce_cookie = Cookie::build("midpen_oauth_nonce")
-        .path("/auth/strava/callback")
-        .http_only(true)
-        .same_site(SameSite::Lax)
-        .max_age(time::Duration::seconds(0))
-        .build();
-    nonce_cookie.set_secure(is_production);
+    let mut nonce_cookie = Cookie::new(NONCE_COOKIE_NAME, "");
+    apply_nonce_cookie_attrs(&mut nonce_cookie, is_secure);
+    nonce_cookie.set_max_age(time::Duration::seconds(0));
 
     (
         jar.remove(cookie).remove(hint_cookie).remove(nonce_cookie),

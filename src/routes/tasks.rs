@@ -33,28 +33,8 @@ pub fn routes() -> Router<Arc<AppState>> {
 /// Process a single activity (called by Cloud Tasks).
 async fn process_activity(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<ProcessActivityPayload>,
 ) -> StatusCode {
-    // Security Check: Ensure request comes from Cloud Tasks
-    // Cloud Run strips this header from external requests, so its presence guarantees internal origin.
-    // We also verify the queue name to ensure it matches our expected queue.
-    let queue_name_header = headers.get("x-cloudtasks-queuename");
-    let is_valid_queue = queue_name_header
-        .and_then(|h| h.to_str().ok())
-        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
-        .unwrap_or(false);
-
-    if !is_valid_queue {
-        tracing::warn!(
-            activity_id = payload.activity_id,
-            athlete_id = payload.athlete_id,
-            header = ?queue_name_header,
-            "Security Alert: Blocked unauthorized access to process_activity"
-        );
-        return StatusCode::FORBIDDEN;
-    }
-
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,
@@ -122,25 +102,8 @@ async fn process_activity(
 /// This spreads Strava API calls over time via Cloud Tasks rate limiting.
 async fn continue_backfill(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<ContinueBackfillPayload>,
 ) -> StatusCode {
-    // Security Check: Ensure request comes from Cloud Tasks
-    let queue_name_header = headers.get("x-cloudtasks-queuename");
-    let is_valid_queue = queue_name_header
-        .and_then(|h| h.to_str().ok())
-        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
-        .unwrap_or(false);
-
-    if !is_valid_queue {
-        tracing::warn!(
-            athlete_id = payload.athlete_id,
-            header = ?queue_name_header,
-            "Security Alert: Blocked unauthorized access to continue_backfill"
-        );
-        return StatusCode::FORBIDDEN;
-    }
-
     tracing::info!(
         athlete_id = payload.athlete_id,
         page = payload.next_page,
@@ -221,50 +184,30 @@ async fn continue_backfill(
         );
     }
 
-    match state
+    if let Err(e) = state
         .tasks_service
         .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
         .await
     {
-        Ok(result) => {
-            if result.failed > 0 {
-                tracing::warn!(
-                    athlete_id = payload.athlete_id,
-                    failed = result.failed,
-                    failed_ids = ?result.failed_ids,
-                    "Some activities failed to queue during backfill (tasks.rs)"
-                );
+        tracing::error!(error = %e, "Failed to queue activities for backfill");
 
-                // Atomically rollback partial pending count
-                if let Err(db_err) = state
-                    .db
-                    .update_pending_activities(payload.athlete_id, -(result.failed as i32))
-                    .await
-                {
-                    tracing::error!(
-                        error = %db_err,
-                        "Failed to rollback partial pending count (atomic)"
-                    );
-                }
+        // Rollback pending count to avoid "phantom" backlog
+        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
+            Ok(s) => s.unwrap_or_else(UserStats::default),
+            Err(err) => {
+                tracing::error!(error = %err, "Failed to fetch stats for rollback");
+                UserStats::default()
+            }
+        };
+        if stats.pending_activities >= count as u32 {
+            stats.pending_activities -= count as u32;
+            stats.updated_at = chrono::Utc::now().to_rfc3339();
+            if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
+                tracing::error!(error = %db_err, "Failed to rollback pending count");
             }
         }
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to queue activities for backfill");
 
-            // Rollback pending count to avoid "phantom" backlog (atomic)
-            if let Err(db_err) = state
-                .db
-                .update_pending_activities(payload.athlete_id, -(count as i32))
-                .await
-            {
-                tracing::error!(
-                    error = %db_err,
-                    "Failed to rollback pending count (atomic)"
-                );
-            }
-
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
+        return StatusCode::INTERNAL_SERVER_ERROR;
     }
 
     // If we got a full page, there might be more - queue next page
@@ -334,8 +277,19 @@ async fn decrement_pending(
     state: &Arc<AppState>,
     athlete_id: u64,
 ) -> Result<(), crate::error::AppError> {
-    // Use atomic update to prevent race conditions
-    state.db.update_pending_activities(athlete_id, -1).await
+    let mut stats = state
+        .db
+        .get_user_stats(athlete_id)
+        .await?
+        .unwrap_or_else(UserStats::default);
+
+    if stats.pending_activities > 0 {
+        stats.pending_activities -= 1;
+        stats.updated_at = chrono::Utc::now().to_rfc3339();
+        state.db.set_user_stats(athlete_id, &stats).await?;
+    }
+
+    Ok(())
 }
 
 /// Increment the pending activities count when queuing new activities.
@@ -344,11 +298,17 @@ async fn increment_pending(
     athlete_id: u64,
     count: u32,
 ) -> Result<(), crate::error::AppError> {
-    // Use atomic update to prevent race conditions
-    state
+    let mut stats = state
         .db
-        .update_pending_activities(athlete_id, count as i32)
-        .await
+        .get_user_stats(athlete_id)
+        .await?
+        .unwrap_or_else(UserStats::default);
+
+    stats.pending_activities += count;
+    stats.updated_at = chrono::Utc::now().to_rfc3339();
+    state.db.set_user_stats(athlete_id, &stats).await?;
+
+    Ok(())
 }
 
 /// Delete a user and all their data (GDPR compliance).
@@ -361,25 +321,8 @@ async fn increment_pending(
 /// 4. Call Strava deauthorize using in-memory tokens
 async fn delete_user(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<DeleteUserPayload>,
 ) -> StatusCode {
-    // Security Check: Ensure request comes from Cloud Tasks
-    let queue_name_header = headers.get("x-cloudtasks-queuename");
-    let is_valid_queue = queue_name_header
-        .and_then(|h| h.to_str().ok())
-        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
-        .unwrap_or(false);
-
-    if !is_valid_queue {
-        tracing::warn!(
-            athlete_id = payload.athlete_id,
-            header = ?queue_name_header,
-            "Security Alert: Blocked unauthorized access to delete_user"
-        );
-        return StatusCode::FORBIDDEN;
-    }
-
     tracing::info!(
         athlete_id = payload.athlete_id,
         source = %payload.source,
@@ -524,26 +467,8 @@ async fn delete_user(
 /// Called by Cloud Tasks from webhook activity deletion.
 async fn delete_activity(
     State(state): State<Arc<AppState>>,
-    headers: axum::http::HeaderMap,
     Json(payload): Json<DeleteActivityPayload>,
 ) -> StatusCode {
-    // Security Check: Ensure request comes from Cloud Tasks
-    let queue_name_header = headers.get("x-cloudtasks-queuename");
-    let is_valid_queue = queue_name_header
-        .and_then(|h| h.to_str().ok())
-        .map(|name| name == crate::config::ACTIVITY_QUEUE_NAME)
-        .unwrap_or(false);
-
-    if !is_valid_queue {
-        tracing::warn!(
-            activity_id = payload.activity_id,
-            athlete_id = payload.athlete_id,
-            header = ?queue_name_header,
-            "Security Alert: Blocked unauthorized access to delete_activity"
-        );
-        return StatusCode::FORBIDDEN;
-    }
-
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,

@@ -164,13 +164,13 @@ pub fn test_db_offline() -> FirestoreDb {
 /// Create a test app with offline mock dependencies.
 /// Returns the router and the shared state.
 #[allow(dead_code)]
-pub async fn create_test_app() -> (axum::Router, Arc<AppState>) {
-    create_test_app_with_frontend_url("http://localhost:5173").await
+pub fn create_test_app() -> (axum::Router, Arc<AppState>) {
+    create_test_app_with_frontend_url("http://localhost:5173")
 }
 
 /// Create a test app with a custom frontend URL.
 #[allow(dead_code)]
-pub async fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, Arc<AppState>) {
+pub fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, Arc<AppState>) {
     let config = Config::test_default();
     let config = Config {
         frontend_url: frontend_url.to_string(),
@@ -178,7 +178,7 @@ pub async fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Rou
     };
     let db = test_db_offline();
     let preserve_service = PreserveService::default();
-    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region).await;
+    let tasks_service = TasksService::new(&config.gcp_project_id, &config.gcp_region);
     let oidc_decoding_key = DecodingKey::from_rsa_pem(TEST_TASKS_OIDC_PUBLIC_KEY_PEM.as_bytes())
         .expect("test OIDC public key must be valid");
     let google_oidc_verifier = Arc::new(

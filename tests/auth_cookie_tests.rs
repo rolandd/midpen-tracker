@@ -34,7 +34,7 @@ fn find_cookie(headers: &[String], name: &str) -> String {
 
 #[tokio::test]
 async fn test_logout_cookie_removal_localhost_attributes() {
-    let (app, _) = common::create_test_app_with_frontend_url("http://localhost:5173").await;
+    let (app, _) = common::create_test_app_with_frontend_url("http://localhost:5173");
 
     let response = app
         .oneshot(
@@ -82,7 +82,7 @@ async fn test_logout_cookie_removal_localhost_attributes() {
 
 #[tokio::test]
 async fn test_logout_cookie_removal_production_domain_attributes() {
-    let (app, _) = common::create_test_app_with_frontend_url("https://midpen-tracker.rolandd.dev").await;
+    let (app, _) = common::create_test_app_with_frontend_url("https://midpen-tracker.rolandd.dev");
 
     let response = app
         .oneshot(

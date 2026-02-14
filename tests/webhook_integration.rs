@@ -14,7 +14,7 @@ mod common;
 
 #[tokio::test]
 async fn test_webhook_verification() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let challenge = "test_challenge_123";
     let verify_token = "test_verify_token"; // Matches Config::default()
@@ -45,7 +45,7 @@ async fn test_webhook_verification() {
 
 #[tokio::test]
 async fn test_webhook_verification_wrong_token() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let challenge = "test_challenge_123";
     let wrong_token = "wrong_token";
@@ -76,7 +76,7 @@ async fn test_webhook_verification_wrong_token() {
 
 #[tokio::test]
 async fn test_webhook_event_create_activity() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -105,7 +105,7 @@ async fn test_webhook_event_create_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_update_activity() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "update",
@@ -135,7 +135,7 @@ async fn test_webhook_event_update_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_delete_activity() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "delete",
@@ -164,7 +164,7 @@ async fn test_webhook_event_delete_activity() {
 
 #[tokio::test]
 async fn test_webhook_event_athlete_deauthorize() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "update",
@@ -194,7 +194,7 @@ async fn test_webhook_event_athlete_deauthorize() {
 
 #[tokio::test]
 async fn test_webhook_event_unknown_type() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "unknown_aspect",
@@ -223,7 +223,7 @@ async fn test_webhook_event_unknown_type() {
 
 #[tokio::test]
 async fn test_webhook_event_wrong_subscription_id() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -252,7 +252,7 @@ async fn test_webhook_event_wrong_subscription_id() {
 
 #[tokio::test]
 async fn test_webhook_event_wrong_uuid() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let event = json!({
         "aspect_type": "create",
@@ -281,7 +281,7 @@ async fn test_webhook_event_wrong_uuid() {
 
 #[tokio::test]
 async fn test_health_endpoint() {
-    let (app, _) = common::create_test_app().await;
+    let (app, _) = common::create_test_app();
 
     let response = app
         .oneshot(
