@@ -14,6 +14,7 @@ use axum::{
     routing::{delete, get},
     Extension, Json, Router,
 };
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
@@ -191,6 +192,23 @@ async fn get_activities(
         page = params.page,
         "Fetching activities"
     );
+
+    // Validate inputs
+    if let Some(preserve) = &params.preserve {
+        if preserve.len() > 100 {
+            return Err(crate::error::AppError::BadRequest(
+                "Preserve name too long".to_string(),
+            ));
+        }
+    }
+
+    if let Some(after) = &params.after {
+        if DateTime::parse_from_rfc3339(after).is_err() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid date format".to_string(),
+            ));
+        }
+    }
 
     let limit = params.per_page.min(MAX_PER_PAGE);
 
