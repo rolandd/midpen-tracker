@@ -9,6 +9,7 @@ use crate::models::preserve::PreserveSummary;
 use crate::models::ActivityPreserve;
 use crate::services::tasks::DeleteUserPayload;
 use crate::AppState;
+use chrono::DateTime;
 use axum::{
     extract::{Query, State},
     routing::{delete, get},
@@ -191,6 +192,23 @@ async fn get_activities(
         page = params.page,
         "Fetching activities"
     );
+
+    // Validate inputs
+    if let Some(preserve) = &params.preserve {
+        if preserve.len() > 100 {
+            return Err(crate::error::AppError::BadRequest(
+                "Preserve name too long".to_string(),
+            ));
+        }
+    }
+
+    if let Some(after) = &params.after {
+        if DateTime::parse_from_rfc3339(after).is_err() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid date format".to_string(),
+            ));
+        }
+    }
 
     let limit = params.per_page.min(MAX_PER_PAGE);
 
