@@ -263,7 +263,24 @@
 							>
 								<div class="preserve-header">
 									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="preserve-meta">
+										<span class="preserve-count">{preserve.count}</span>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+											stroke="currentColor"
+											class="chevron-icon"
+											aria-hidden="true"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="m19.5 8.25-7.5 7.5-7.5-7.5"
+											/>
+										</svg>
+									</div>
 								</div>
 							</button>
 
@@ -581,12 +598,30 @@
 		font-weight: 500;
 	}
 
+	.preserve-meta {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
 	.preserve-count {
 		background: var(--color-bg);
 		padding: 0.25rem 0.75rem;
 		border-radius: 999px;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.chevron-icon {
+		width: 1.25rem;
+		height: 1.25rem;
+		color: var(--color-text-muted);
+		transition: transform 0.2s ease;
+	}
+
+	/* Rotate chevron when parent button has aria-expanded="true" */
+	.preserve-header-btn[aria-expanded='true'] .chevron-icon {
+		transform: rotate(180deg);
 	}
 
 	/* Activity styles moved to ActivityList.svelte */
