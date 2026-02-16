@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-03-05 - Reusable Focus Trap Action
+**Learning:** Encapsulating complex accessibility behaviors like focus trapping into a reusable Svelte action keeps components declarative and ensures consistent behavior across the application.
+**Action:** When encountering repeated DOM manipulation patterns for accessibility (like focus management or click-outside), extract them into actions in `web/src/lib/actions/`.
