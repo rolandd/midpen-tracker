@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2026-08-27 - Unvalidated API Query Parameters
+**Vulnerability:** API endpoints accepted unbounded `String` inputs for query parameters (e.g., `preserve` name), allowing potential Denial of Service (DoS) via memory exhaustion or logic errors (e.g., invalid date format).
+**Learning:** Axum's `Query<T>` extractor deserializes `Option<String>` without inherent validation. Serde handles types but not constraints like length or format.
+**Prevention:** Implement explicit validation logic in handlers or custom deserializers to enforce constraints (e.g., max length, date format) on all user-supplied strings before use.
