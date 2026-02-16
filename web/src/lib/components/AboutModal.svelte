@@ -4,6 +4,7 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
 	import { uiState } from '$lib/state.svelte';
+	import { focusTrap } from '$lib/actions/focusTrap';
 
 	import Content from '$lib/assets/about.md';
 	import { SocialLink } from '$lib/components';
@@ -39,6 +40,7 @@
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
+		use:focusTrap
 	>
 		<button class="close-btn" onclick={close} aria-label="Close">×</button>
 
