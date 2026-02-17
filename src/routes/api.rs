@@ -200,6 +200,23 @@ async fn get_activities(
         ));
     }
 
+    // Input validation
+    if let Some(ref preserve) = params.preserve {
+        if preserve.len() > 100 {
+            return Err(crate::error::AppError::BadRequest(
+                "Preserve name too long (max 100 chars)".to_string(),
+            ));
+        }
+    }
+
+    if let Some(ref after) = params.after {
+        if chrono::DateTime::parse_from_rfc3339(after).is_err() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid 'after' date format (must be ISO 8601)".to_string(),
+            ));
+        }
+    }
+
     let activities = if let Some(preserve_name) = params.preserve {
         // Query by preserve using the join collection
         let results: Vec<ActivityPreserve> = state
