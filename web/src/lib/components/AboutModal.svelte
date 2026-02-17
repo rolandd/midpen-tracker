@@ -12,40 +12,75 @@
 		uiState.isAboutOpen = false;
 	}
 
+	let modalRef = $state<HTMLElement>();
+	let closeBtnRef = $state<HTMLButtonElement>();
+	let previousActiveElement = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		previousActiveElement = document.activeElement as HTMLElement;
+		closeBtnRef?.focus();
+		return () => {
+			previousActiveElement?.focus();
+		};
+	});
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
 			close();
+			return;
+		}
+
+		if (e.key === 'Tab' && modalRef) {
+			const focusable = modalRef.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+			);
+
+			if (!focusable || focusable.length === 0) return;
+
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+
+			if (e.shiftKey) {
+				if (document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else {
+				if (document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
 		}
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="backdrop"
 	transition:fade={{ duration: 200 }}
-	onclick={close}
-	onkeydown={(e) => {
-		if (e.key === 'Escape') close();
+	onclick={(e) => {
+		if (e.target === e.currentTarget) close();
 	}}
-	role="button"
-	tabindex="0"
 >
 	<div
 		class="modal"
+		bind:this={modalRef}
 		transition:fly={{ y: 20, duration: 300 }}
-		onclick={(e) => e.stopPropagation()}
-		onkeydown={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-modal="true"
+		aria-labelledby="about-title"
 		tabindex="-1"
 	>
-		<button class="close-btn" onclick={close} aria-label="Close">×</button>
+		<button bind:this={closeBtnRef} class="close-btn" onclick={close} aria-label="Close">×</button>
 
 		<header>
 			<div class="logo">🌲</div>
 			<div class="header-text">
-				<h2>Midpen Tracker</h2>
+				<h2 id="about-title">Midpen Tracker</h2>
 				<span class="badge">Unofficial Project</span>
 			</div>
 		</header>
