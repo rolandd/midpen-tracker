@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2026-08-15 - Missing Input Validation in API Query Parameters
+**Vulnerability:** The `get_activities` API endpoint accepted unbounded string lengths for `preserve` and invalid date formats for `after`, risking resource exhaustion (DoS) or database query errors.
+**Learning:** `Option<String>` query parameters in web frameworks often bypass implicit validation. Explicit validation logic is required for every user-controlled input.
+**Prevention:** Enforce strict length limits (e.g., 100 chars) and format validation (e.g., ISO 8601) on all API query parameters, returning 400 Bad Request on failure.
