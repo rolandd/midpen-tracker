@@ -21,14 +21,24 @@
 	let dropdownRef = $state<HTMLDivElement>();
 	let triggerRef = $state<HTMLButtonElement>();
 
-	async function toggleDropdown() {
-		isOpen = !isOpen;
+	async function openDropdown(focusLast = false) {
+		if (isOpen) return;
+		isOpen = true;
+		await tick();
+		const items = Array.from(
+			dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') || []
+		);
+		if (items.length > 0) {
+			const index = focusLast ? items.length - 1 : 0;
+			items[index].focus();
+		}
+	}
+
+	function toggleDropdown() {
 		if (isOpen) {
-			await tick();
-			const firstItem = dropdownRef?.querySelector<HTMLElement>(
-				'[role="menuitem"]:not([disabled])'
-			);
-			firstItem?.focus();
+			closeDropdown();
+		} else {
+			openDropdown(false);
 		}
 	}
 
@@ -45,6 +55,42 @@
 			!triggerRef.contains(event.target as Node)
 		) {
 			closeDropdown();
+		}
+	}
+
+	function handleFocusOut(event: FocusEvent) {
+		if (isOpen) {
+			const newFocus = event.relatedTarget as Node | null;
+			// If focus moves outside both dropdown and trigger, close it
+			if (newFocus && !dropdownRef?.contains(newFocus) && !triggerRef?.contains(newFocus)) {
+				closeDropdown();
+			}
+		}
+	}
+
+	function handleTriggerKeydown(event: KeyboardEvent) {
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (!isOpen) {
+				openDropdown(false);
+			} else {
+				// Move focus to first item if menu is already open but focus is on trigger
+				const firstItem = dropdownRef?.querySelector<HTMLElement>(
+					'[role="menuitem"]:not([disabled])'
+				);
+				firstItem?.focus();
+			}
+		} else if (event.key === 'ArrowUp') {
+			event.preventDefault();
+			if (!isOpen) {
+				openDropdown(true);
+			} else {
+				// Move focus to last item
+				const items = Array.from(
+					dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') || []
+				);
+				items[items.length - 1]?.focus();
+			}
 		}
 	}
 
@@ -109,11 +155,12 @@
 	}
 </script>
 
-<div class="relative flex items-center">
+<div class="relative flex items-center" onfocusout={handleFocusOut}>
 	<!-- Trigger Button -->
 	<button
 		class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
 		onclick={toggleDropdown}
+		onkeydown={handleTriggerKeydown}
 		bind:this={triggerRef}
 		aria-expanded={isOpen}
 		aria-label="User menu"
