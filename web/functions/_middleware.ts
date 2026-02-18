@@ -77,6 +77,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data: https:",
 		`connect-src ${connectSrc}`,
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
 		"frame-ancestors 'none'"
 	].join('; ');
 
