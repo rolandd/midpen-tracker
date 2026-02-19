@@ -66,14 +66,21 @@ impl KmsService {
 
     /// Encrypt plaintext data using KMS.
     /// Returns base64-encoded ciphertext.
-    pub async fn encrypt(&self, plaintext: &str) -> Result<String, AppError> {
+    ///
+    /// Accepts optional Additional Authenticated Data (AAD) for context binding.
+    pub async fn encrypt(&self, plaintext: &str, aad: Option<&[u8]>) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
         // Mock mode (Debug builds only)
         #[cfg(debug_assertions)]
         {
             if self.client.is_none() {
-                return Ok(BASE64.encode(plaintext));
+                let data = if let Some(a) = aad {
+                    format!("AAD:{}:{}", hex::encode(a), plaintext)
+                } else {
+                    format!("NOAAD:{}", plaintext)
+                };
+                return Ok(BASE64.encode(data));
             }
         }
 
@@ -88,6 +95,7 @@ impl KmsService {
         let req = EncryptRequest {
             name: self.key_path.clone(),
             plaintext: plaintext.as_bytes().to_vec(),
+            additional_authenticated_data: aad.unwrap_or_default().to_vec(),
             ..Default::default()
         };
 
@@ -102,7 +110,13 @@ impl KmsService {
 
     /// Decrypt ciphertext using KMS.
     /// Expects base64-encoded ciphertext.
-    pub async fn decrypt(&self, ciphertext_b64: &str) -> Result<String, AppError> {
+    ///
+    /// Accepts optional Additional Authenticated Data (AAD) for context verification.
+    pub async fn decrypt(
+        &self,
+        ciphertext_b64: &str,
+        aad: Option<&[u8]>,
+    ) -> Result<String, AppError> {
         use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
         // Mock mode (Debug builds only)
@@ -112,9 +126,53 @@ impl KmsService {
                 let bytes = BASE64.decode(ciphertext_b64).map_err(|e| {
                     AppError::Internal(anyhow::anyhow!("Base64 output decode failed (mock): {}", e))
                 })?;
-                return String::from_utf8(bytes).map_err(|e| {
+                let decoded = String::from_utf8(bytes).map_err(|e| {
                     AppError::Internal(anyhow::anyhow!("UTF-8 decode failed (mock): {}", e))
-                });
+                })?;
+
+                // Check for prefixes
+                if let Some(rest) = decoded.strip_prefix("NOAAD:") {
+                    // Encrypted without AAD
+                    if aad.is_some() {
+                        return Err(AppError::Internal(anyhow::anyhow!(
+                            "Integrity check failed (mock): Expected AAD, found none"
+                        )));
+                    }
+                    return Ok(rest.to_string());
+                } else if let Some(rest) = decoded.strip_prefix("AAD:") {
+                    // Encrypted with AAD: format "AAD:{hex_aad}:{plaintext}"
+                    let parts: Vec<&str> = rest.splitn(2, ':').collect();
+                    if parts.len() != 2 {
+                        return Err(AppError::Internal(anyhow::anyhow!(
+                            "Malformed mock ciphertext"
+                        )));
+                    }
+                    let stored_aad_hex = parts[0];
+                    let plaintext = parts[1];
+
+                    if let Some(expected_aad) = aad {
+                        if hex::encode(expected_aad) != stored_aad_hex {
+                            return Err(AppError::Internal(anyhow::anyhow!(
+                                "Integrity check failed (mock): AAD mismatch"
+                            )));
+                        }
+                    } else {
+                        // Expected no AAD, but found some
+                        return Err(AppError::Internal(anyhow::anyhow!(
+                            "Integrity check failed (mock): Found AAD, expected none"
+                        )));
+                    }
+                    return Ok(plaintext.to_string());
+                } else {
+                    // Legacy legacy (raw plaintext or other format from before mock update)
+                    // Treat as NOAAD if no prefix found
+                    if aad.is_some() {
+                        return Err(AppError::Internal(anyhow::anyhow!(
+                            "Integrity check failed (mock): Expected AAD, found legacy"
+                        )));
+                    }
+                    return Ok(decoded);
+                }
             }
         }
 
@@ -131,6 +189,7 @@ impl KmsService {
         let req = DecryptRequest {
             name: self.key_path.clone(),
             ciphertext,
+            additional_authenticated_data: aad.unwrap_or_default().to_vec(),
             ..Default::default()
         };
 
@@ -143,26 +202,66 @@ impl KmsService {
         String::from_utf8(response.plaintext)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
     }
+
+    /// Attempt decryption with AAD, falling back to no-AAD (legacy) if it fails.
+    /// This enables seamless migration for existing data.
+    pub async fn decrypt_with_fallback(
+        &self,
+        ciphertext: &str,
+        aad: Option<&[u8]>,
+    ) -> Result<String, AppError> {
+        // Try with AAD first
+        match self.decrypt(ciphertext, aad).await {
+            Ok(pt) => Ok(pt),
+            Err(_) => {
+                // If failed, try without AAD (Legacy fallback)
+                // Note: We only fallback if we ASKED for AAD verification.
+                // If we didn't ask (aad is None), then decrypt() already tried without AAD.
+                if aad.is_some() {
+                    tracing::warn!("Decryption with AAD failed, attempting legacy fallback");
+                    self.decrypt(ciphertext, None).await
+                } else {
+                    Err(AppError::Internal(anyhow::anyhow!(
+                        "Decryption failed (no AAD provided)"
+                    )))
+                }
+            }
+        }
+    }
 }
 
 /// Helper to encrypt OAuth tokens before storing.
+/// Uses athlete_id as Additional Authenticated Data (AAD) for context binding.
 pub async fn encrypt_tokens(
     kms: &KmsService,
     access_token: &str,
     refresh_token: &str,
+    athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let encrypted_access = kms.encrypt(access_token).await?;
-    let encrypted_refresh = kms.encrypt(refresh_token).await?;
+    let aad = format!("athlete_id:{}", athlete_id);
+    let aad_bytes = aad.as_bytes();
+
+    let encrypted_access = kms.encrypt(access_token, Some(aad_bytes)).await?;
+    let encrypted_refresh = kms.encrypt(refresh_token, Some(aad_bytes)).await?;
     Ok((encrypted_access, encrypted_refresh))
 }
 
 /// Helper to decrypt OAuth tokens after retrieval.
+/// Uses athlete_id as AAD, with fallback to legacy (no AAD) for migration.
 pub async fn decrypt_tokens(
     kms: &KmsService,
     encrypted_access: &str,
     encrypted_refresh: &str,
+    athlete_id: u64,
 ) -> Result<(String, String), AppError> {
-    let access_token = kms.decrypt(encrypted_access).await?;
-    let refresh_token = kms.decrypt(encrypted_refresh).await?;
+    let aad = format!("athlete_id:{}", athlete_id);
+    let aad_bytes = aad.as_bytes();
+
+    let access_token = kms
+        .decrypt_with_fallback(encrypted_access, Some(aad_bytes))
+        .await?;
+    let refresh_token = kms
+        .decrypt_with_fallback(encrypted_refresh, Some(aad_bytes))
+        .await?;
     Ok((access_token, refresh_token))
 }
