@@ -21,14 +21,35 @@
 	let dropdownRef = $state<HTMLDivElement>();
 	let triggerRef = $state<HTMLButtonElement>();
 
-	async function toggleDropdown() {
-		isOpen = !isOpen;
-		if (isOpen) {
+	function focusItem(focusLast: boolean) {
+		const items = dropdownRef?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])');
+		if (items && items.length > 0) {
+			const index = focusLast ? items.length - 1 : 0;
+			items[index].focus();
+		}
+	}
+
+	async function openDropdown(focusLast: boolean = false) {
+		if (!isOpen) {
+			isOpen = true;
 			await tick();
-			const firstItem = dropdownRef?.querySelector<HTMLElement>(
-				'[role="menuitem"]:not([disabled])'
-			);
-			firstItem?.focus();
+		}
+		focusItem(focusLast);
+	}
+
+	function toggleDropdown() {
+		if (isOpen) {
+			closeDropdown();
+		} else {
+			openDropdown(false);
+		}
+	}
+
+	function handleTriggerKeydown(event: KeyboardEvent) {
+		if (!isOpen && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+			event.preventDefault();
+			event.stopPropagation();
+			openDropdown(event.key === 'ArrowUp');
 		}
 	}
 
@@ -114,8 +135,11 @@
 	<button
 		class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
 		onclick={toggleDropdown}
+		onkeydown={handleTriggerKeydown}
 		bind:this={triggerRef}
 		aria-expanded={isOpen}
+		aria-haspopup="menu"
+		aria-controls="user-menu"
 		aria-label="User menu"
 	>
 		{#if user?.profile_picture}
@@ -139,6 +163,7 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen && user}
 		<div
+			id="user-menu"
 			class="absolute top-[calc(100%+0.5rem)] right-0 w-[220px] bg-[var(--color-surface)] rounded-xl shadow-lg ring-1 ring-[var(--color-border)] p-2 z-50 origin-top-right animate-in fade-in zoom-in-95 duration-200"
 			bind:this={dropdownRef}
 			role="menu"
