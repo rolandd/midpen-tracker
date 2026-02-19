@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-06-03 - Menu Button Keyboard Interactions
+**Learning:** Standard menu buttons (like ProfileDropdown) often miss keyboard support for opening the menu via Arrow keys (`ArrowDown`/`ArrowUp`) on the trigger itself, relying only on `Enter`/`Space` (native button click).
+**Action:** Implement `onkeydown` on menu triggers to support opening the menu with Arrow keys, and ensure focus moves immediately to the first/last menu item upon opening.
