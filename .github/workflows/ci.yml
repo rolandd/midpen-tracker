@@ -18,30 +18,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+          run_install: false
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: "npm"
-          cache-dependency-path: web/package-lock.json
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Check SvelteKit
-        run: npm run check
+        run: pnpm check
         env:
           PUBLIC_BASE_URL: "https://example.com"
           PUBLIC_API_URL: "https://api.example.com"
 
       - name: Lint
-        run: npm run lint
+        run: pnpm lint
 
       - name: Check Formatting
-        run: npm run check-format
+        run: pnpm check-format
 
       - name: Build
-        run: npm run build
+        run: pnpm build
         env:
           PUBLIC_BASE_URL: "https://example.com"
           PUBLIC_API_URL: "https://api.example.com"
