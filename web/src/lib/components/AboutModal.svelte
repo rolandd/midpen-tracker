@@ -8,13 +8,52 @@
 	import Content from '$lib/assets/about.md';
 	import { SocialLink } from '$lib/components';
 
+	let modalRef = $state<HTMLElement>();
+	let closeBtnRef = $state<HTMLButtonElement>();
+	let previousActiveElement = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		previousActiveElement = document.activeElement as HTMLElement;
+		closeBtnRef?.focus();
+		return () => {
+			previousActiveElement?.focus();
+		};
+	});
+
 	function close() {
 		uiState.isAboutOpen = false;
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
+			e.preventDefault();
 			close();
+			return;
+		}
+
+		if (e.key === 'Tab' && modalRef) {
+			const focusable = Array.from(
+				modalRef.querySelectorAll<HTMLElement>(
+					'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+				)
+			).filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true');
+
+			if (focusable.length === 0) return;
+
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+
+			if (e.shiftKey) {
+				if (document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else {
+				if (document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
 		}
 	}
 </script>
@@ -24,28 +63,28 @@
 <div
 	class="backdrop"
 	transition:fade={{ duration: 200 }}
-	onclick={close}
-	onkeydown={(e) => {
-		if (e.key === 'Escape') close();
+	onclick={(e) => {
+		if (e.target === e.currentTarget) close();
 	}}
-	role="button"
-	tabindex="0"
+	role="presentation"
 >
 	<div
+		bind:this={modalRef}
 		class="modal"
 		transition:fly={{ y: 20, duration: 300 }}
-		onclick={(e) => e.stopPropagation()}
-		onkeydown={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-modal="true"
+		aria-labelledby="about-modal-title"
 		tabindex="-1"
 	>
-		<button class="close-btn" onclick={close} aria-label="Close">×</button>
+		<button bind:this={closeBtnRef} class="close-btn" onclick={close} aria-label="Close">
+			×
+		</button>
 
 		<header>
 			<div class="logo">🌲</div>
 			<div class="header-text">
-				<h2>Midpen Tracker</h2>
+				<h2 id="about-modal-title">Midpen Tracker</h2>
 				<span class="badge">Unofficial Project</span>
 			</div>
 		</header>
