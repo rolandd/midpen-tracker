@@ -77,7 +77,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' data: https:",
 		`connect-src ${connectSrc}`,
-		"frame-ancestors 'none'"
+		"frame-ancestors 'none'",
+		"object-src 'none'",
+		"base-uri 'self'",
+		"form-action 'self'",
+		"upgrade-insecure-requests"
 	].join('; ');
 
 	// Set CSP header on the mutable headers object
