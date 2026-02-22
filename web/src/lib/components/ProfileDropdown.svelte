@@ -48,9 +48,21 @@
 		}
 	}
 
-	function handleKeydown(event: KeyboardEvent) {
-		if (!isOpen) return;
+	function handleTriggerKeydown(event: KeyboardEvent) {
+		if (event.key === 'ArrowDown') {
+			event.preventDefault();
+			if (!isOpen) {
+				toggleDropdown();
+			}
+		} else if (event.key === 'Escape') {
+			if (isOpen) {
+				event.preventDefault();
+				closeDropdown();
+			}
+		}
+	}
 
+	function handleMenuKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			event.preventDefault();
 			closeDropdown();
@@ -87,15 +99,6 @@
 
 	$effect(() => {
 		if (isOpen) {
-			window.addEventListener('keydown', handleKeydown);
-			return () => {
-				window.removeEventListener('keydown', handleKeydown);
-			};
-		}
-	});
-
-	$effect(() => {
-		if (isOpen) {
 			document.addEventListener('click', handleClickOutside);
 			return () => {
 				document.removeEventListener('click', handleClickOutside);
@@ -114,8 +117,11 @@
 	<button
 		class="bg-transparent border border-[var(--color-border)] p-0 w-9 h-9 cursor-pointer rounded-[var(--radius-sm)] transition-all hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 flex items-center justify-center overflow-hidden"
 		onclick={toggleDropdown}
+		onkeydown={handleTriggerKeydown}
 		bind:this={triggerRef}
 		aria-expanded={isOpen}
+		aria-haspopup="menu"
+		aria-controls="user-menu"
 		aria-label="User menu"
 	>
 		{#if user?.profile_picture}
@@ -139,9 +145,12 @@
 	<!-- Dropdown Menu -->
 	{#if isOpen && user}
 		<div
+			id="user-menu"
 			class="absolute top-[calc(100%+0.5rem)] right-0 w-[220px] bg-[var(--color-surface)] rounded-xl shadow-lg ring-1 ring-[var(--color-border)] p-2 z-50 origin-top-right animate-in fade-in zoom-in-95 duration-200"
 			bind:this={dropdownRef}
 			role="menu"
+			tabindex="-1"
+			onkeydown={handleMenuKeydown}
 		>
 			<div class="px-3 pt-3 pb-2 border-b border-[var(--color-border)] mb-1">
 				<span class="block font-semibold text-[var(--color-text)] text-[0.95rem]">
