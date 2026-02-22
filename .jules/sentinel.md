@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2026-02-04 - Weak JWT Key Configuration
+**Vulnerability:** The application allowed short/weak `JWT_SIGNING_KEY` values (e.g., < 32 bytes) in configuration, which compromises the security of HS256 signatures.
+**Learning:** Even if `from_env` reads the key, it doesn't mean it's strong. Input validation should extend to configuration values, not just user input.
+**Prevention:** Added an explicit length check (>= 32 bytes) in `Config::from_env` and `Config::load_with_secrets` to enforce cryptographic strength.

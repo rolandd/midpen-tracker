@@ -57,6 +57,10 @@ impl Config {
             .map_err(|_| ConfigError::Missing("JWT_SIGNING_KEY"))?
             .into_bytes();
 
+        if jwt_signing_key.len() < 32 {
+            return Err(ConfigError::WeakKey("JWT_SIGNING_KEY"));
+        }
+
         let oauth_state_key = derive_oauth_key(&jwt_signing_key);
 
         Ok(Self {
@@ -95,7 +99,7 @@ impl Config {
     ///
     /// This should NEVER be used in production.
     pub fn test_default() -> Self {
-        let jwt_signing_key = b"test_jwt_key_32_bytes_minimum!!".to_vec();
+        let jwt_signing_key = b"test_jwt_key_32_bytes_minimum!!!".to_vec();
         let oauth_state_key = derive_oauth_key(&jwt_signing_key);
 
         Self {
@@ -136,6 +140,11 @@ impl Config {
         tracing::info!("Secrets loaded and cached");
 
         let jwt_signing_key = jwt_key.into_bytes();
+
+        if jwt_signing_key.len() < 32 {
+            return Err(ConfigError::WeakKey("JWT_SIGNING_KEY"));
+        }
+
         let oauth_state_key = derive_oauth_key(&jwt_signing_key);
 
         Ok(Self {
@@ -196,6 +205,9 @@ pub enum ConfigError {
 
     #[error("Secret Manager error: {0}")]
     SecretManager(String),
+
+    #[error("Weak key error: {0} (must be at least 32 bytes)")]
+    WeakKey(&'static str),
 }
 
 #[cfg(test)]
@@ -207,11 +219,19 @@ mod tests {
         // Set required env vars for test
         env::set_var("STRAVA_CLIENT_ID", "test_id");
         env::set_var("STRAVA_CLIENT_SECRET", "test_secret");
-        env::set_var("JWT_SIGNING_KEY", "test_jwt_key_32_bytes_minimum!!");
         env::set_var("WEBHOOK_VERIFY_TOKEN", "test_verify");
         env::set_var("STRAVA_SUBSCRIPTION_ID", "12345");
         env::set_var("WEBHOOK_PATH_UUID", "test-uuid-1234");
 
+        // 1. Test Weak Key
+        env::set_var("JWT_SIGNING_KEY", "weak");
+        match Config::from_env() {
+            Err(ConfigError::WeakKey(key)) => assert_eq!(key, "JWT_SIGNING_KEY"),
+            res => panic!("Expected WeakKey error, got {:?}", res),
+        }
+
+        // 2. Test Valid Key (32 bytes)
+        env::set_var("JWT_SIGNING_KEY", "test_jwt_key_32_bytes_minimum!!!");
         let config = Config::from_env().expect("Config should load");
 
         assert_eq!(config.strava_client_id, "test_id");
