@@ -31,6 +31,9 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
 
+    #[error("Firestore error: {0}")]
+    Firestore(#[from] firestore::errors::FirestoreError),
+
     #[error("Internal server error: {0}")]
     Internal(#[from] anyhow::Error),
 }
@@ -44,6 +47,20 @@ impl AppError {
         match self {
             AppError::StravaApi(msg) => {
                 msg.contains("Token expired") || msg.contains("invalid") || msg.contains("Invalid")
+            }
+            _ => false,
+        }
+    }
+
+    /// Check if this error indicates a database transaction conflict (ABORTED).
+    pub fn is_db_aborted(&self) -> bool {
+        match self {
+            AppError::Firestore(firestore::errors::FirestoreError::DatabaseError(ref e)) => {
+                e.public.code == "Aborted"
+            }
+            AppError::Database(msg) => {
+                // Check for common Firestore/gRPC aborted error strings
+                msg.contains("Aborted") || msg.contains("contention") || msg.contains("ABORTED")
             }
             _ => false,
         }
@@ -72,6 +89,10 @@ impl IntoResponse for AppError {
             }
             AppError::Database(msg) => {
                 tracing::error!(error = %msg, "Database error");
+                (StatusCode::INTERNAL_SERVER_ERROR, "database_error", None)
+            }
+            AppError::Firestore(err) => {
+                tracing::error!(error = ?err, "Firestore error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "database_error", None)
             }
             AppError::Internal(err) => {

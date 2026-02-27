@@ -19,6 +19,8 @@ use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
 use ts_rs::TS;
 
+const STUCK_PENDING_COUNT_TIMEOUT_MINUTES: i64 = 15;
+
 /// API routes (require authentication via JWT).
 /// The auth middleware is applied in routes/mod.rs for these routes.
 pub fn routes() -> Router<Arc<AppState>> {
@@ -340,6 +342,39 @@ async fn get_preserve_stats(
         .await?
         .unwrap_or_default();
 
+    // Self-Healing: If activities are still "pending" after 15 minutes of inactivity,
+    // assume the tasks were lost or dropped and reset the count to 0.
+    // This fixes "stuck" counters for users without requiring a re-login.
+    let mut pending_activities = stats.pending_activities;
+    if pending_activities > 0 {
+        if let Ok(updated_at) = chrono::DateTime::parse_from_rfc3339(&stats.updated_at) {
+            let now = chrono::Utc::now();
+            let elapsed = now.signed_duration_since(updated_at.with_timezone(&chrono::Utc));
+
+            if elapsed.num_minutes() >= STUCK_PENDING_COUNT_TIMEOUT_MINUTES {
+                tracing::info!(
+                    athlete_id = user.athlete_id,
+                    pending = pending_activities,
+                    last_update = %stats.updated_at,
+                    elapsed_mins = elapsed.num_minutes(),
+                    "Self-healing: Resetting stuck pending count after inactivity"
+                );
+
+                // Reset in background to avoid delaying the response
+                let state_clone = state.clone();
+                let athlete_id = user.athlete_id;
+                tokio::spawn(async move {
+                    if let Err(e) = state_clone.db.reset_pending_count(athlete_id).await {
+                        tracing::warn!(error = %e, "Failed to reset stuck pending count in background");
+                    }
+                });
+
+                // Return 0 to the user immediately for better UX
+                pending_activities = 0;
+            }
+        }
+    }
+
     // Get available years (sorted descending - most recent first)
     let mut available_years: Vec<String> = stats.preserves_by_year.keys().cloned().collect();
     available_years.sort_by(|a, b| b.cmp(a));
@@ -377,7 +412,7 @@ async fn get_preserve_stats(
         preserves_by_year: stats.preserves_by_year,
         total_preserves_visited: visited_count,
         total_preserves,
-        pending_activities: stats.pending_activities,
+        pending_activities,
         available_years,
     }))
 }

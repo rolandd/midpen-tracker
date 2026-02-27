@@ -15,11 +15,17 @@ use crate::models::user::UserTokens;
 use crate::models::{Activity, ActivityPreserve, User};
 use firestore::FirestoreConsistencySelector;
 use futures_util::{stream, StreamExt};
+use std::time::Duration;
 
 const MAX_CONCURRENT_DB_OPS: usize = 50;
 // Firestore limits batch/transaction writes to 500 operations.
 // We use a safe limit of 400 to allow headroom.
 const BATCH_SIZE: usize = 400;
+
+/// Maximum number of times to retry a transaction on contention/aborted error.
+const MAX_TX_RETRIES: u32 = 5;
+/// Initial backoff delay for transaction retries.
+const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(100);
 
 /// Firestore database client.
 #[derive(Clone)]
@@ -380,6 +386,112 @@ impl FirestoreDb {
         Ok(())
     }
 
+    // ─── Atomic Pending Count Operations ────────────────────────────
+
+    /// Helper to execute a transaction that updates user stats.
+    async fn with_stats_transaction<F>(
+        &self,
+        athlete_id: u64,
+        tx_name: &str,
+        mut f: F,
+    ) -> Result<(), AppError>
+    where
+        F: FnMut(&mut crate::models::UserStats),
+    {
+        let mut attempts = 0;
+        loop {
+            let result = self
+                .execute_stats_transaction(athlete_id, tx_name, &mut f)
+                .await;
+
+            match result {
+                Ok(()) => return Ok(()),
+                Err(e) if e.is_db_aborted() && attempts < MAX_TX_RETRIES => {
+                    attempts += 1;
+                    let delay = INITIAL_RETRY_DELAY * 2_u32.pow(attempts - 1);
+                    tracing::warn!(
+                        athlete_id,
+                        tx_name,
+                        attempt = attempts,
+                        error = %e,
+                        "Transaction aborted due to contention, retrying in {}ms",
+                        delay.as_millis()
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Internal helper to execute a single stats transaction attempt.
+    async fn execute_stats_transaction<F>(
+        &self,
+        athlete_id: u64,
+        _tx_name: &str,
+        f: &mut F,
+    ) -> Result<(), AppError>
+    where
+        F: FnMut(&mut crate::models::UserStats),
+    {
+        let mut transaction = self.get_client()?.begin_transaction().await?;
+
+        let tx_client = self.get_client()?.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
+        let current_stats: Option<crate::models::UserStats> = tx_client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await?;
+
+        let mut stats = current_stats.unwrap_or_default();
+
+        f(&mut stats);
+        stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+        self.get_client()?
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)?;
+
+        transaction.commit().await?;
+
+        Ok(())
+    }
+
+    /// Atomically adjust the pending activities count by `delta`.
+    ///
+    /// Uses a Firestore transaction to prevent read-modify-write races when
+    /// multiple Cloud Tasks callbacks or backfill operations run concurrently.
+    /// The count is clamped to 0 (never goes negative).
+    pub async fn update_pending_count(&self, athlete_id: u64, delta: i64) -> Result<(), AppError> {
+        self.with_stats_transaction(athlete_id, "pending count", |stats| {
+            // Apply delta, clamping to 0
+            let new_count = (stats.pending_activities as i64).saturating_add(delta);
+            stats.pending_activities = new_count.clamp(0, u32::MAX as i64) as u32;
+        })
+        .await
+    }
+
+    /// Atomically reset the pending activities count to 0.
+    ///
+    /// Uses a Firestore transaction to prevent races with concurrent
+    /// increment/decrement operations. This is used at the end of a backfill
+    /// scan as a self-healing measure.
+    pub async fn reset_pending_count(&self, athlete_id: u64) -> Result<(), AppError> {
+        self.with_stats_transaction(athlete_id, "reset pending count", |stats| {
+            stats.pending_activities = 0;
+        })
+        .await
+    }
+
     // ─── Atomic Activity Processing ─────────────────────────────────
 
     /// Atomically process an activity: store the activity, preserve joins, and update stats.
@@ -391,6 +503,38 @@ impl FirestoreDb {
     /// Returns `true` if the activity was newly processed, `false` if it was already processed
     /// (idempotent duplicate).
     pub async fn process_activity_atomic(
+        &self,
+        activity: &Activity,
+        preserve_records: &[ActivityPreserve],
+    ) -> Result<bool, AppError> {
+        let mut attempts = 0;
+        loop {
+            let result = self
+                .execute_activity_atomic_attempt(activity, preserve_records)
+                .await;
+
+            match result {
+                Ok(was_new) => return Ok(was_new),
+                Err(e) if e.is_db_aborted() && attempts < MAX_TX_RETRIES => {
+                    attempts += 1;
+                    let delay = INITIAL_RETRY_DELAY * 2_u32.pow(attempts - 1);
+                    tracing::warn!(
+                        athlete_id = activity.athlete_id,
+                        activity_id = activity.strava_activity_id,
+                        attempt = attempts,
+                        error = %e,
+                        "Activity transaction aborted due to contention, retrying in {}ms",
+                        delay.as_millis()
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Internal helper to execute a single atomic activity processing attempt.
+    async fn execute_activity_atomic_attempt(
         &self,
         activity: &Activity,
         preserve_records: &[ActivityPreserve],
@@ -416,11 +560,7 @@ impl FirestoreDb {
         let now_clone = now.clone();
 
         // Begin a transaction
-        let mut transaction = self
-            .get_client()?
-            .begin_transaction()
-            .await
-            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+        let mut transaction = self.get_client()?.begin_transaction().await?;
 
         // 1. Read current user stats within the transaction
         //    We must use a client with consistency selector bound to the transaction ID
@@ -436,27 +576,36 @@ impl FirestoreDb {
             .by_id_in(collections::USER_STATS)
             .obj()
             .one(&athlete_id.to_string())
-            .await
-            .map_err(|e| {
-                AppError::Database(format!("Failed to read stats in transaction: {}", e))
-            })?;
+            .await?;
 
         let mut stats = current_stats.unwrap_or_default();
 
-        // 2. Check idempotency - if already processed, skip all writes
-        if stats.processed_activity_ids.contains(&activity_id) {
+        // 2. Decrement pending count (this task is finished processing)
+        stats.pending_activities = stats.pending_activities.saturating_sub(1);
+
+        // 3. Update stats and check idempotency
+        let was_new = stats.update_from_activity(&activity, &now_clone);
+
+        if !was_new {
             tracing::debug!(
                 athlete_id,
                 activity_id,
-                "Activity already processed (idempotent skip)"
+                "Activity already processed (idempotent skip), updating counter"
             );
-            // Rollback the transaction since we don't need to write
-            let _ = transaction.rollback().await;
+
+            // Still need to save the stats to update the pending_activities counter
+            self.get_client()?
+                .fluent()
+                .update()
+                .in_col(collections::USER_STATS)
+                .document_id(athlete_id.to_string())
+                .object(&stats)
+                .add_to_transaction(&mut transaction)?;
+
+            transaction.commit().await?;
+
             return Ok(false);
         }
-
-        // 3. Update stats in memory
-        stats.update_from_activity(&activity, &now_clone);
 
         // 4. Add activity write to transaction
         self.get_client()?
@@ -465,10 +614,7 @@ impl FirestoreDb {
             .in_col(collections::ACTIVITIES)
             .document_id(activity.strava_activity_id.to_string())
             .object(&activity)
-            .add_to_transaction(&mut transaction)
-            .map_err(|e| {
-                AppError::Database(format!("Failed to add activity to transaction: {}", e))
-            })?;
+            .add_to_transaction(&mut transaction)?;
 
         // 5. Add preserve join records to transaction
         for record in &preserve_records {
@@ -481,13 +627,7 @@ impl FirestoreDb {
                 .in_col(collections::ACTIVITY_PRESERVES)
                 .document_id(&doc_id)
                 .object(record)
-                .add_to_transaction(&mut transaction)
-                .map_err(|e| {
-                    AppError::Database(format!(
-                        "Failed to add preserve record to transaction: {}",
-                        e
-                    ))
-                })?;
+                .add_to_transaction(&mut transaction)?;
         }
 
         // 6. Add stats write to transaction
@@ -497,16 +637,10 @@ impl FirestoreDb {
             .in_col(collections::USER_STATS)
             .document_id(athlete_id.to_string())
             .object(&stats)
-            .add_to_transaction(&mut transaction)
-            .map_err(|e| {
-                AppError::Database(format!("Failed to add stats to transaction: {}", e))
-            })?;
+            .add_to_transaction(&mut transaction)?;
 
         // 7. Commit the transaction atomically
-        transaction
-            .commit()
-            .await
-            .map_err(|e| AppError::Database(format!("Transaction commit failed: {}", e)))?;
+        transaction.commit().await?;
 
         tracing::info!(
             athlete_id,

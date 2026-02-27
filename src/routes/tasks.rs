@@ -4,13 +4,14 @@
 //! Task handler routes for Cloud Tasks callbacks.
 //!
 //! These endpoints are called by Cloud Tasks, not directly by users.
-//! They should be protected by OIDC token verification in production.
+//! They are protected by OIDC token verification via middleware.
 
 use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
 use crate::services::tasks::{
-    ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload,
+    BackfillResult, ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload,
+    ProcessActivityPayload,
 };
 use crate::AppState;
 use axum::{
@@ -61,11 +62,6 @@ async fn process_activity(
                 "Activity processed successfully"
             );
 
-            // Decrement pending count on success
-            if let Err(e) = decrement_pending(&state, payload.athlete_id).await {
-                tracing::warn!(error = %e, "Failed to decrement pending count");
-            }
-
             StatusCode::OK
         }
         Err(AppError::NotFound(msg)) if msg.contains("Tokens") || msg.contains("User") => {
@@ -75,6 +71,8 @@ async fn process_activity(
                 error = %msg,
                 "User/Tokens not found during processing - stopping retry (user likely deleted)"
             );
+            // Decrement pending count since this task is finished (terminally failed)
+            let _ = state.db.update_pending_count(payload.athlete_id, -1).await;
             StatusCode::OK
         }
         Err(e) if e.is_strava_token_error() => {
@@ -84,6 +82,8 @@ async fn process_activity(
                 error = %e,
                 "Token revoked - stopping retry (user likely deauthorized)"
             );
+            // Decrement pending count since this task is finished (terminally failed)
+            let _ = state.db.update_pending_count(payload.athlete_id, -1).await;
             StatusCode::OK // Stop retrying - will never succeed
         }
         Err(e) => {
@@ -171,43 +171,41 @@ async fn continue_backfill(
     let total_fetched = activities.len();
     let count = new_activity_ids.len();
 
-    if count > 0 {
-        // Update pending count (add newly queued activities)
-        if let Err(e) = increment_pending(&state, payload.athlete_id, count as u32).await {
-            tracing::warn!(error = %e, "Failed to increment pending count");
-        }
-    } else {
+    if count == 0 {
         tracing::info!(
             athlete_id = payload.athlete_id,
             page = payload.next_page,
             "All fetched activities on this page already processed"
         );
-    }
+    } else {
+        // Queue activities first, then update pending count based on actual success
+        let backfill_result = state
+            .tasks_service
+            .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
+            .await;
 
-    if let Err(e) = state
-        .tasks_service
-        .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
-        .await
-    {
-        tracing::error!(error = %e, "Failed to queue activities for backfill");
-
-        // Rollback pending count to avoid "phantom" backlog
-        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-            Ok(s) => s.unwrap_or_else(UserStats::default),
-            Err(err) => {
-                tracing::error!(error = %err, "Failed to fetch stats for rollback");
-                UserStats::default()
-            }
-        };
-        if stats.pending_activities >= count as u32 {
-            stats.pending_activities -= count as u32;
-            stats.updated_at = chrono::Utc::now().to_rfc3339();
-            if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-                tracing::error!(error = %db_err, "Failed to rollback pending count");
-            }
+        // Handle results based on what actually happened.
+        // If this fails, we return an error to trigger a retry of the whole page.
+        // Idempotent task queuing ensures we don't create duplicate tasks.
+        if let Err(e) = handle_backfill_result(&state, payload.athlete_id, &backfill_result).await {
+            tracing::error!(error = %e, "Failed to update pending count for backfill page");
+            return StatusCode::INTERNAL_SERVER_ERROR;
         }
 
-        return StatusCode::INTERNAL_SERVER_ERROR;
+        // If any activities failed, return error to trigger Cloud Tasks retry.
+        // Already-queued activities will be processed idempotently on retry,
+        // and the self-healing reset at end of scan corrects any pending count drift.
+        if backfill_result.failed > 0 {
+            tracing::error!(
+                athlete_id = payload.athlete_id,
+                requested = backfill_result.requested,
+                queued = backfill_result.queued,
+                failed = backfill_result.failed,
+                failed_ids = ?&backfill_result.failed_ids.iter().take(20).collect::<Vec<_>>(),
+                "Some activities failed to queue for backfill, triggering retry (failed_ids may be truncated)"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR;
+        }
     }
 
     // If we got a full page, there might be more - queue next page
@@ -238,28 +236,6 @@ async fn continue_backfill(
             tracing::error!(error = %e, "Failed to queue next backfill page");
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
-    } else {
-        // Backfill scan complete (fetched less than full page)
-        // Self-Healing: Hard reset pending count to 0 to ensure consistency.
-        // This fixes cases where the count gets stuck due to lost tasks or errors.
-        tracing::info!(
-            athlete_id = payload.athlete_id,
-            "Backfill scan completed, resetting pending count"
-        );
-
-        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-            Ok(s) => s.unwrap_or_else(UserStats::default),
-            Err(err) => {
-                tracing::warn!(error = %err, "Failed to fetch stats for reset");
-                UserStats::default()
-            }
-        };
-        stats.pending_activities = 0;
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-
-        if let Err(e) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-            tracing::warn!(error = %e, "Failed to reset pending count");
-        }
     }
 
     tracing::info!(
@@ -272,41 +248,45 @@ async fn continue_backfill(
     StatusCode::OK
 }
 
-/// Decrement the pending activities count after successfully processing one.
-async fn decrement_pending(
-    state: &Arc<AppState>,
-    athlete_id: u64,
-) -> Result<(), crate::error::AppError> {
-    let mut stats = state
-        .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
-
-    if stats.pending_activities > 0 {
-        stats.pending_activities -= 1;
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-        state.db.set_user_stats(athlete_id, &stats).await?;
-    }
-
-    Ok(())
-}
-
 /// Increment the pending activities count when queuing new activities.
+///
+/// Uses a Firestore transaction to prevent lost updates from concurrent
+/// backfill or webhook operations.
 async fn increment_pending(
     state: &Arc<AppState>,
     athlete_id: u64,
     count: u32,
 ) -> Result<(), crate::error::AppError> {
-    let mut stats = state
+    state
         .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
+        .update_pending_count(athlete_id, count as i64)
+        .await
+}
 
-    stats.pending_activities += count;
-    stats.updated_at = chrono::Utc::now().to_rfc3339();
-    state.db.set_user_stats(athlete_id, &stats).await?;
+/// Handle the result of a backfill queue operation.
+///
+/// Updates pending count only for activities that were actually queued,
+/// ensuring accuracy even in partial failure scenarios.
+pub(crate) async fn handle_backfill_result(
+    state: &Arc<AppState>,
+    athlete_id: u64,
+    result: &BackfillResult,
+) -> Result<(), crate::error::AppError> {
+    // Only increment pending count by what was actually newly queued.
+    // Idempotent (AlreadyExists) successes should not be counted again.
+    if result.newly_queued > 0 {
+        increment_pending(state, athlete_id, result.newly_queued).await?;
+    }
+
+    // Log details about failures for debugging
+    if result.failed > 0 {
+        tracing::warn!(
+            athlete_id,
+            failed_count = result.failed,
+            failed_ids = ?&result.failed_ids.iter().take(20).collect::<Vec<_>>(),
+            "Some activities failed to queue for backfill (failed_ids may be truncated)"
+        );
+    }
 
     Ok(())
 }
