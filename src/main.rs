@@ -57,13 +57,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await
     .expect("Failed to initialize KMS service");
-
     tracing::info!("KMS service initialized");
 
-    // Initialize shared token cache
-    // This is shared across all StravaService instances within this Cloud Run instance
+    // Initialize shared token cache and refresh locks
+    // These are shared across all StravaService instances within this Cloud Run instance
     let token_cache = std::sync::Arc::new(dashmap::DashMap::new());
-
+    let refresh_locks = std::sync::Arc::new(dashmap::DashMap::new());
     tracing::info!("Token cache initialized");
 
     // Initialize Strava service
@@ -73,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db.clone(),
         kms,
         token_cache,
+        refresh_locks,
     );
 
     // Build shared state
