@@ -74,10 +74,7 @@ mod tests {
 
         let expected_policy = include_str!("../../permissions-policy.txt").trim();
         assert_eq!(headers.get("Permissions-Policy").unwrap(), expected_policy);
-        assert_eq!(
-            headers.get("Cache-Control").unwrap(),
-            "no-store, max-age=0"
-        );
+        assert_eq!(headers.get("Cache-Control").unwrap(), "no-store, max-age=0");
         assert_eq!(headers.get("Pragma").unwrap(), "no-cache");
     }
 }
