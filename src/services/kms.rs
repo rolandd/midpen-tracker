@@ -8,7 +8,6 @@
 
 use crate::error::AppError;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use google_cloud_googleapis::cloud::kms::v1::{DecryptRequest, EncryptRequest};
 
 /// KMS encryption service.
 #[derive(Clone)]
@@ -56,8 +55,6 @@ impl KmsService {
     }
 
     /// Create a mock KMS service for testing (offline mode).
-    /// Only available in debug/test builds.
-    #[cfg(debug_assertions)]
     pub fn new_mock() -> Self {
         Self {
             key_path: "projects/mock/locations/mock/keyRings/mock/cryptoKeys/mock".to_string(),
@@ -68,42 +65,39 @@ impl KmsService {
     /// Encrypt plaintext data using KMS with optional Additional Authenticated Data (AAD).
     /// Returns base64-encoded ciphertext.
     pub async fn encrypt(&self, plaintext: &str, aad: Option<&[u8]>) -> Result<String, AppError> {
-        // Mock mode (Debug builds only)
-        #[cfg(debug_assertions)]
-        {
-            if self.client.is_none() {
-                let aad_part = aad.unwrap_or(b"");
-                // Simple reversible encoding: MOCK_V1:B64(AAD):B64(PT)
-                return Ok(format!(
-                    "MOCK_V1:{}:{}",
-                    BASE64.encode(aad_part),
-                    BASE64.encode(plaintext)
-                ));
-            }
+        // Mock Implementation
+        if self.client.is_none() {
+            let aad_part = aad.unwrap_or(b"");
+            // Simple reversible encoding: MOCK_V1:B64(AAD):B64(PT)
+            return Ok(format!(
+                "MOCK_V1:{}:{}",
+                BASE64.encode(aad_part),
+                BASE64.encode(plaintext)
+            ));
         }
 
-        // Production/Real mode
-        // In release builds, this check ensures we return an error if the
-        // client is missing, preventing insecure operations.
-        let client = self
-            .client
-            .as_ref()
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("KMS client not connected")))?;
+        use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
 
-        let req = EncryptRequest {
-            name: self.key_path.clone(),
-            plaintext: plaintext.as_bytes().to_vec(),
-            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-            ..Default::default()
-        };
+        if let Some(client) = &self.client {
+            let req = EncryptRequest {
+                name: self.key_path.clone(),
+                plaintext: plaintext.as_bytes().to_vec(),
+                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
+                ..Default::default()
+            };
 
-        let response = client
-            .encrypt(req, None)
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS encrypt failed: {}", e)))?;
+            let response = client
+                .encrypt(req, None)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS encrypt failed: {}", e)))?;
 
-        let ciphertext = response.ciphertext; // Vec<u8>
-        Ok(BASE64.encode(ciphertext))
+            let ciphertext = response.ciphertext; // Vec<u8>
+            Ok(BASE64.encode(ciphertext))
+        } else {
+            Err(AppError::Internal(anyhow::anyhow!(
+                "KMS client not connected"
+            )))
+        }
     }
 
     /// Decrypt ciphertext using KMS with optional Additional Authenticated Data (AAD).
@@ -114,69 +108,64 @@ impl KmsService {
         aad: Option<&[u8]>,
     ) -> Result<String, AppError> {
         // Mock Implementation
-        // Mock mode (Debug builds only)
-        #[cfg(debug_assertions)]
-        {
-            if self.client.is_none() {
-                if let Some(rest) = ciphertext_b64.strip_prefix("MOCK_V1:") {
-                    let parts: Vec<&str> = rest.split(':').collect();
-                    if parts.len() != 2 {
-                        return Err(AppError::Internal(anyhow::anyhow!(
-                            "Invalid mock ciphertext format"
-                        )));
-                    }
-                    let stored_aad = BASE64.decode(parts[0]).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!("Invalid mock AAD encoding: {}", e))
-                    })?;
-                    let plaintext = BASE64.decode(parts[1]).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!(
-                            "Invalid mock plaintext encoding: {}",
-                            e
-                        ))
-                    })?;
-
-                    // Verify AAD
-                    let provided_aad = aad.unwrap_or(b"");
-                    if stored_aad != provided_aad {
-                        return Err(AppError::Internal(anyhow::anyhow!("Mock KMS AAD mismatch")));
-                    }
-
-                    return String::from_utf8(plaintext).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!("Invalid mock plaintext UTF-8: {}", e))
-                    });
-                } else {
+        if self.client.is_none() {
+            if let Some(rest) = ciphertext_b64.strip_prefix("MOCK_V1:") {
+                let parts: Vec<&str> = rest.split(':').collect();
+                if parts.len() != 2 {
                     return Err(AppError::Internal(anyhow::anyhow!(
-                        "Unknown mock ciphertext version"
+                        "Invalid mock ciphertext format"
                     )));
                 }
+                let stored_aad = BASE64.decode(parts[0]).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock AAD encoding"))
+                })?;
+                let plaintext = BASE64.decode(parts[1]).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock plaintext encoding"))
+                })?;
+
+                // Verify AAD
+                let provided_aad = aad.unwrap_or(b"");
+                if stored_aad != provided_aad {
+                    return Err(AppError::Internal(anyhow::anyhow!("Mock KMS AAD mismatch")));
+                }
+
+                return String::from_utf8(plaintext).map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid mock plaintext UTF-8"))
+                });
+            } else {
+                return Err(AppError::Internal(anyhow::anyhow!(
+                    "Unknown mock ciphertext version"
+                )));
             }
         }
 
-        // Production/Real mode
-        let client = self
-            .client
-            .as_ref()
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("KMS client not connected")))?;
+        use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
 
-        let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
-        })?;
+        if let Some(client) = &self.client {
+            let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
+            })?;
 
-        let req = DecryptRequest {
-            name: self.key_path.clone(),
-            ciphertext,
-            additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-            ..Default::default()
-        };
+            let req = DecryptRequest {
+                name: self.key_path.clone(),
+                ciphertext,
+                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
+                ..Default::default()
+            };
 
-        let response = client
-            .decrypt(req, None)
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS decrypt failed: {}", e)))?;
+            let response = client
+                .decrypt(req, None)
+                .await
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS decrypt failed: {}", e)))?;
 
-        // response.plaintext is Vec<u8>
-        String::from_utf8(response.plaintext)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
+            // response.plaintext is Vec<u8>
+            String::from_utf8(response.plaintext)
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
+        } else {
+            Err(AppError::Internal(anyhow::anyhow!(
+                "KMS client not connected"
+            )))
+        }
     }
 
     /// Decrypt with fallback for legacy tokens (no AAD).
