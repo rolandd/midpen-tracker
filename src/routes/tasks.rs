@@ -10,7 +10,8 @@ use crate::error::AppError;
 use crate::models::UserStats;
 use crate::services::activity::ActivityProcessor;
 use crate::services::tasks::{
-    ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload,
+    BackfillResult, ContinueBackfillPayload, DeleteActivityPayload, DeleteUserPayload,
+    ProcessActivityPayload,
 };
 use crate::AppState;
 use axum::{
@@ -171,43 +172,31 @@ async fn continue_backfill(
     let total_fetched = activities.len();
     let count = new_activity_ids.len();
 
-    if count > 0 {
-        // Update pending count (add newly queued activities)
-        if let Err(e) = increment_pending(&state, payload.athlete_id, count as u32).await {
-            tracing::warn!(error = %e, "Failed to increment pending count");
-        }
-    } else {
+    if count == 0 {
         tracing::info!(
             athlete_id = payload.athlete_id,
             page = payload.next_page,
             "All fetched activities on this page already processed"
         );
-    }
+    } else {
+        // Queue activities first, then update pending count based on actual success
+        let backfill_result = state
+            .tasks_service
+            .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
+            .await;
 
-    if let Err(e) = state
-        .tasks_service
-        .queue_backfill(&state.config.api_url, payload.athlete_id, new_activity_ids)
-        .await
-    {
-        tracing::error!(error = %e, "Failed to queue activities for backfill");
+        // Handle results based on what actually happened
+        handle_backfill_result(&state, payload.athlete_id, &backfill_result).await;
 
-        // Rollback pending count to avoid "phantom" backlog
-        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-            Ok(s) => s.unwrap_or_else(UserStats::default),
-            Err(err) => {
-                tracing::error!(error = %err, "Failed to fetch stats for rollback");
-                UserStats::default()
-            }
-        };
-        if stats.pending_activities >= count as u32 {
-            stats.pending_activities -= count as u32;
-            stats.updated_at = chrono::Utc::now().to_rfc3339();
-            if let Err(db_err) = state.db.set_user_stats(payload.athlete_id, &stats).await {
-                tracing::error!(error = %db_err, "Failed to rollback pending count");
-            }
+        // If everything failed, return error
+        if backfill_result.is_complete_failure() {
+            tracing::error!(
+                athlete_id = payload.athlete_id,
+                failed = backfill_result.failed,
+                "All activities failed to queue for backfill"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR;
         }
-
-        return StatusCode::INTERNAL_SERVER_ERROR;
     }
 
     // If we got a full page, there might be more - queue next page
@@ -242,22 +231,13 @@ async fn continue_backfill(
         // Backfill scan complete (fetched less than full page)
         // Self-Healing: Hard reset pending count to 0 to ensure consistency.
         // This fixes cases where the count gets stuck due to lost tasks or errors.
+        // Uses a transaction to prevent races with concurrent decrement operations.
         tracing::info!(
             athlete_id = payload.athlete_id,
             "Backfill scan completed, resetting pending count"
         );
 
-        let mut stats = match state.db.get_user_stats(payload.athlete_id).await {
-            Ok(s) => s.unwrap_or_else(UserStats::default),
-            Err(err) => {
-                tracing::warn!(error = %err, "Failed to fetch stats for reset");
-                UserStats::default()
-            }
-        };
-        stats.pending_activities = 0;
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-
-        if let Err(e) = state.db.set_user_stats(payload.athlete_id, &stats).await {
+        if let Err(e) = state.db.reset_pending_count(payload.athlete_id).await {
             tracing::warn!(error = %e, "Failed to reset pending count");
         }
     }
@@ -273,42 +253,52 @@ async fn continue_backfill(
 }
 
 /// Decrement the pending activities count after successfully processing one.
+///
+/// Uses a Firestore transaction to prevent lost updates from concurrent
+/// Cloud Tasks callbacks.
 async fn decrement_pending(
     state: &Arc<AppState>,
     athlete_id: u64,
 ) -> Result<(), crate::error::AppError> {
-    let mut stats = state
-        .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
-
-    if stats.pending_activities > 0 {
-        stats.pending_activities -= 1;
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
-        state.db.set_user_stats(athlete_id, &stats).await?;
-    }
-
-    Ok(())
+    state.db.update_pending_count(athlete_id, -1).await
 }
 
 /// Increment the pending activities count when queuing new activities.
+///
+/// Uses a Firestore transaction to prevent lost updates from concurrent
+/// backfill or webhook operations.
 async fn increment_pending(
     state: &Arc<AppState>,
     athlete_id: u64,
     count: u32,
 ) -> Result<(), crate::error::AppError> {
-    let mut stats = state
+    state
         .db
-        .get_user_stats(athlete_id)
-        .await?
-        .unwrap_or_else(UserStats::default);
+        .update_pending_count(athlete_id, count as i64)
+        .await
+}
 
-    stats.pending_activities += count;
-    stats.updated_at = chrono::Utc::now().to_rfc3339();
-    state.db.set_user_stats(athlete_id, &stats).await?;
+/// Handle the result of a backfill queue operation.
+///
+/// Updates pending count only for activities that were actually queued,
+/// ensuring accuracy even in partial failure scenarios.
+async fn handle_backfill_result(state: &Arc<AppState>, athlete_id: u64, result: &BackfillResult) {
+    // Only increment pending count by what was actually queued
+    if result.queued > 0 {
+        if let Err(e) = increment_pending(state, athlete_id, result.queued).await {
+            tracing::warn!(error = %e, "Failed to increment pending count");
+        }
+    }
 
-    Ok(())
+    // Log details about failures for debugging
+    if result.failed > 0 {
+        tracing::warn!(
+            athlete_id,
+            failed_count = result.failed,
+            failed_ids = ?result.failed_ids,
+            "Some activities failed to queue for backfill"
+        );
+    }
 }
 
 /// Delete a user and all their data (GDPR compliance).

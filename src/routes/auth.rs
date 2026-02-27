@@ -392,35 +392,40 @@ async fn trigger_backfill(
             "Queueing new activities for backfill"
         );
 
-        // Update UserStats pending count (increment, don't overwrite)
-        let mut stats_to_update = stats.clone();
-        stats_to_update.pending_activities += new_count;
-        stats_to_update.updated_at = chrono::Utc::now().to_rfc3339();
-
-        if let Err(e) = state.db.set_user_stats(athlete_id, &stats_to_update).await {
-            tracing::warn!(error = %e, "Failed to update pending activities count");
-        }
-
-        // Queue only the new activities
-        if let Err(e) = state
+        // Queue activities first, then update pending count based on actual success
+        let backfill_result = state
             .tasks_service
             .queue_backfill(service_url, athlete_id, new_activity_ids)
-            .await
-        {
-            // Rollback pending count
-            let mut rollback_stats = state
+            .await;
+
+        // Only increment pending count by what was actually queued.
+        // Uses a Firestore transaction to prevent lost updates from concurrent operations.
+        if backfill_result.queued > 0 {
+            if let Err(e) = state
                 .db
-                .get_user_stats(athlete_id)
-                .await?
-                .unwrap_or_else(UserStats::default);
-            if rollback_stats.pending_activities >= new_count {
-                rollback_stats.pending_activities -= new_count;
-                rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
-                    tracing::error!(error = %db_err, "Failed to rollback pending count in auth handler");
-                }
+                .update_pending_count(athlete_id, backfill_result.queued as i64)
+                .await
+            {
+                tracing::warn!(error = %e, "Failed to update pending activities count");
             }
-            return Err(e);
+        }
+
+        // Log details about failures for debugging
+        if backfill_result.failed > 0 {
+            tracing::warn!(
+                athlete_id,
+                failed_count = backfill_result.failed,
+                failed_ids = ?backfill_result.failed_ids,
+                "Some activities failed to queue for backfill"
+            );
+        }
+
+        // Return error only if all activities failed
+        if backfill_result.is_complete_failure() {
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "All {} activities failed to queue for backfill",
+                backfill_result.failed
+            )));
         }
     }
 

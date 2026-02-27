@@ -380,6 +380,122 @@ impl FirestoreDb {
         Ok(())
     }
 
+    // ─── Atomic Pending Count Operations ────────────────────────────
+
+    /// Atomically adjust the pending activities count by `delta`.
+    ///
+    /// Uses a Firestore transaction to prevent read-modify-write races when
+    /// multiple Cloud Tasks callbacks or backfill operations run concurrently.
+    /// The count is clamped to 0 (never goes negative).
+    pub async fn update_pending_count(&self, athlete_id: u64, delta: i64) -> Result<(), AppError> {
+        let mut transaction = self
+            .get_client()?
+            .begin_transaction()
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+
+        let tx_client = self.get_client()?.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
+        let current_stats: Option<crate::models::UserStats> = tx_client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await
+            .map_err(|e| {
+                AppError::Database(format!(
+                    "Failed to read stats in pending count transaction: {}",
+                    e
+                ))
+            })?;
+
+        let mut stats = current_stats.unwrap_or_default();
+
+        // Apply delta, clamping to 0
+        let new_count = (stats.pending_activities as i64).saturating_add(delta);
+        stats.pending_activities = new_count.max(0) as u32;
+        stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+        self.get_client()?
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)
+            .map_err(|e| {
+                AppError::Database(format!(
+                    "Failed to add stats to pending count transaction: {}",
+                    e
+                ))
+            })?;
+
+        transaction
+            .commit()
+            .await
+            .map_err(|e| AppError::Database(format!("Pending count transaction failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Atomically reset the pending activities count to 0.
+    ///
+    /// Uses a Firestore transaction to prevent races with concurrent
+    /// increment/decrement operations. This is used at the end of a backfill
+    /// scan as a self-healing measure.
+    pub async fn reset_pending_count(&self, athlete_id: u64) -> Result<(), AppError> {
+        let mut transaction = self
+            .get_client()?
+            .begin_transaction()
+            .await
+            .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+
+        let tx_client = self.get_client()?.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
+        let current_stats: Option<crate::models::UserStats> = tx_client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await
+            .map_err(|e| {
+                AppError::Database(format!(
+                    "Failed to read stats in reset pending transaction: {}",
+                    e
+                ))
+            })?;
+
+        let mut stats = current_stats.unwrap_or_default();
+        stats.pending_activities = 0;
+        stats.updated_at = chrono::Utc::now().to_rfc3339();
+
+        self.get_client()?
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)
+            .map_err(|e| {
+                AppError::Database(format!(
+                    "Failed to add stats to reset pending transaction: {}",
+                    e
+                ))
+            })?;
+
+        transaction.commit().await.map_err(|e| {
+            AppError::Database(format!("Reset pending count transaction failed: {}", e))
+        })?;
+
+        Ok(())
+    }
+
     // ─── Atomic Activity Processing ─────────────────────────────────
 
     /// Atomically process an activity: store the activity, preserve joins, and update stats.
