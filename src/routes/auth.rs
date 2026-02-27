@@ -384,6 +384,13 @@ async fn trigger_backfill(
             "All {} fetched activities already processed",
             total_fetched
         );
+
+        // Self-Healing: If the first page has no new activities, the user is likely
+        // caught up. Reset the pending count to 0 to fix any "stuck" counters
+        // from previous sessions or lost tasks.
+        if let Err(e) = state.db.reset_pending_count(athlete_id).await {
+            tracing::warn!(error = %e, "Failed to reset pending count during self-healing");
+        }
     } else {
         tracing::info!(
             athlete_id,
@@ -392,35 +399,26 @@ async fn trigger_backfill(
             "Queueing new activities for backfill"
         );
 
-        // Update UserStats pending count (increment, don't overwrite)
-        let mut stats_to_update = stats.clone();
-        stats_to_update.pending_activities += new_count;
-        stats_to_update.updated_at = chrono::Utc::now().to_rfc3339();
-
-        if let Err(e) = state.db.set_user_stats(athlete_id, &stats_to_update).await {
-            tracing::warn!(error = %e, "Failed to update pending activities count");
-        }
-
-        // Queue only the new activities
-        if let Err(e) = state
+        // Queue activities first, then update pending count based on actual success
+        let backfill_result = state
             .tasks_service
             .queue_backfill(service_url, athlete_id, new_activity_ids)
-            .await
-        {
-            // Rollback pending count
-            let mut rollback_stats = state
-                .db
-                .get_user_stats(athlete_id)
-                .await?
-                .unwrap_or_else(UserStats::default);
-            if rollback_stats.pending_activities >= new_count {
-                rollback_stats.pending_activities -= new_count;
-                rollback_stats.updated_at = chrono::Utc::now().to_rfc3339();
-                if let Err(db_err) = state.db.set_user_stats(athlete_id, &rollback_stats).await {
-                    tracing::error!(error = %db_err, "Failed to rollback pending count in auth handler");
-                }
-            }
-            return Err(e);
+            .await;
+
+        // Handle results based on what actually happened.
+        // If this fails, we return an error. The caller logs it and continues login
+        // so the user isn't blocked, but the error provides better visibility.
+        crate::routes::tasks::handle_backfill_result(state, athlete_id, &backfill_result).await?;
+
+        // Return error if any activities failed to queue.
+        // The caller already swallows this with a warning so login isn't blocked,
+        // but propagating the error lets the caller decide how to handle it.
+        if backfill_result.failed > 0 {
+            return Err(AppError::Internal(anyhow::anyhow!(
+                "{} of {} activities failed to queue for backfill",
+                backfill_result.failed,
+                backfill_result.requested
+            )));
         }
     }
 
