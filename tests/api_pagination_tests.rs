@@ -98,3 +98,23 @@ async fn test_cursor_rejects_invalid_format() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn test_per_page_zero_rejected() {
+    let (app, state) = common::create_test_app();
+    let token = common::create_test_jwt(12345, &state.config.jwt_signing_key);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/activities?preserve=Rancho%20San%20Antonio&page=1&per_page=0")
+                .header(header::AUTHORIZATION, format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}

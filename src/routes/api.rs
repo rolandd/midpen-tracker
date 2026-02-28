@@ -17,6 +17,7 @@ use axum::{
     Extension, Json, Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use chrono::TimeZone;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
@@ -189,8 +190,10 @@ fn parse_cursor(cursor: Option<&str>) -> Result<Option<ActivityQueryCursor>> {
             let seconds = parts[0].parse::<i64>().map_err(|_| invalid_cursor())?;
             let nanos = parts[1].parse::<u32>().map_err(|_| invalid_cursor())?;
             let activity_id = parts[2].parse::<u64>().map_err(|_| invalid_cursor())?;
-            let start_date =
-                chrono::DateTime::from_timestamp(seconds, nanos).ok_or_else(invalid_cursor)?;
+            let start_date = chrono::Utc
+                .timestamp_opt(seconds, nanos)
+                .single()
+                .ok_or_else(invalid_cursor)?;
 
             Ok(ActivityQueryCursor {
                 start_date,
@@ -257,15 +260,21 @@ async fn get_activities(
         "Fetching activities"
     );
 
-    let limit = params.per_page.min(MAX_PER_PAGE);
-    let after_timestamp = parse_after_timestamp(params.after.as_deref())?;
-    let cursor = parse_cursor(params.cursor.as_deref())?;
-
     if params.page < 1 {
         return Err(crate::error::AppError::BadRequest(
             "Page must be greater than 0".to_string(),
         ));
     }
+
+    if params.per_page < 1 {
+        return Err(crate::error::AppError::BadRequest(
+            "per_page must be greater than 0".to_string(),
+        ));
+    }
+
+    let limit = params.per_page.min(MAX_PER_PAGE);
+    let after_timestamp = parse_after_timestamp(params.after.as_deref())?;
+    let cursor = parse_cursor(params.cursor.as_deref())?;
 
     if params.preserve.is_none() && params.page != 1 {
         return Err(crate::error::AppError::BadRequest(
@@ -280,14 +289,27 @@ async fn get_activities(
     }
 
     let (activities, total, next_cursor) = if let Some(preserve_name) = params.preserve {
-        // Query by preserve using the join collection
+        // Pagination: Calculate offset
+        let offset = (params.page.saturating_sub(1))
+            .checked_mul(limit)
+            .ok_or_else(|| {
+                crate::error::AppError::BadRequest("Page number causes overflow".to_string())
+            })?;
+
+        // Query by preserve using the join collection with DB-side pagination
         let results: Vec<ActivityPreserve> = state
             .db
-            .get_activities_for_preserve(user.athlete_id, &preserve_name, after_timestamp)
+            .get_activities_for_preserve(
+                user.athlete_id,
+                &preserve_name,
+                after_timestamp,
+                Some(limit),
+                Some(offset),
+            )
             .await?;
 
         // Map to summaries
-        let summaries: Vec<ActivitySummary> = results
+        let paged_activities: Vec<ActivitySummary> = results
             .into_iter()
             .map(|r| ActivitySummary {
                 id: r.activity_id,
@@ -298,21 +320,20 @@ async fn get_activities(
             })
             .collect();
 
-        let total_count = summaries.len() as u32;
-
-        // Pagination (simple in-memory for now since these lists are small per preserve)
-        // Use checked multiplication to prevent overflow and cast to usize safely
-        let start = (params.page as usize - 1)
-            .checked_mul(limit as usize)
-            .ok_or_else(|| {
-                crate::error::AppError::BadRequest("Page number causes overflow".to_string())
-            })?;
-
-        let paged_activities = if start < summaries.len() {
-            let end = start.saturating_add(limit as usize).min(summaries.len());
-            summaries[start..end].to_vec()
+        // Get total count for this preserve.
+        // We use pre-computed aggregates if no date filter is present (common case).
+        let total_count = if after_timestamp.is_none() {
+            state
+                .db
+                .get_user_stats(user.athlete_id)
+                .await?
+                .and_then(|s| s.preserves.get(&preserve_name).copied())
+                .unwrap_or(0)
         } else {
-            vec![]
+            // For date-filtered queries, we don't have a pre-computed total count.
+            // For simplicity and to avoid fetching all records into memory,
+            // we return 0 to indicate unknown total (similar to cursor pagination).
+            0
         };
 
         (paged_activities, total_count, None)
@@ -354,10 +375,10 @@ async fn get_activities(
 
         // Cursor pagination doesn't provide a cheap exact total.
         // We return 0 if there are more results to indicate the total is unknown.
-        let total = if next_cursor.is_some() {
-            0
-        } else {
+        let total = if cursor.is_none() && next_cursor.is_none() {
             summaries.len() as u32
+        } else {
+            0
         };
         (summaries, total, next_cursor)
     };
@@ -509,7 +530,10 @@ mod tests {
     #[test]
     fn test_cursor_round_trip() {
         let cursor = ActivityQueryCursor {
-            start_date: chrono::DateTime::from_timestamp(1_704_103_200, 123).unwrap(),
+            start_date: chrono::Utc
+                .timestamp_opt(1_704_103_200, 123)
+                .single()
+                .unwrap(),
             activity_id: 42,
         };
 

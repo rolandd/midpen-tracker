@@ -8,6 +8,7 @@
 //!
 //! The emulator provides a clean state for each test run.
 
+use chrono::TimeZone;
 use midpen_tracker::models::user::{User, UserTokens};
 use midpen_tracker::models::{Activity, ActivityPreserve};
 
@@ -431,7 +432,7 @@ async fn test_activity_with_multiple_preserves() {
 
     // Query preserve-specific activities
     let rancho_activities = db
-        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None)
+        .get_activities_for_preserve(athlete_id, "Rancho San Antonio", None, None, None)
         .await
         .unwrap();
     assert_eq!(rancho_activities.len(), 1);
@@ -441,7 +442,7 @@ async fn test_activity_with_multiple_preserves() {
     );
 
     let monte_bello_activities = db
-        .get_activities_for_preserve(athlete_id, "Monte Bello", None)
+        .get_activities_for_preserve(athlete_id, "Monte Bello", None, None, None)
         .await
         .unwrap();
     assert_eq!(monte_bello_activities.len(), 1);
@@ -451,6 +452,8 @@ async fn test_activity_with_multiple_preserves() {
             athlete_id,
             "Rancho San Antonio",
             Some(parse_time("2025-01-16T00:00:00Z")),
+            None,
+            None,
         )
         .await
         .unwrap();
@@ -549,7 +552,10 @@ async fn test_activity_pagination() {
 
     for i in 1..=total_activities {
         let timestamp = 1704103200 + (i * 60); // Base + i minutes
-        let dt = chrono::DateTime::from_timestamp(timestamp as i64, 0).unwrap();
+        let dt = chrono::Utc
+            .timestamp_opt(timestamp as i64, 0)
+            .single()
+            .unwrap();
         let processed_at = dt.to_rfc3339();
 
         let activity = Activity {
@@ -628,7 +634,7 @@ async fn test_activity_pagination() {
     let filtered = db
         .get_activities_for_user(
             athlete_id,
-            chrono::DateTime::from_timestamp(split_time as i64, 0),
+            chrono::Utc.timestamp_opt(split_time as i64, 0).single(),
             None,
             20,
         )

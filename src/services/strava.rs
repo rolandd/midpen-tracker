@@ -269,7 +269,7 @@ pub struct StravaActivitySummary {
 use crate::db::FirestoreDb;
 use crate::models::{User, UserTokens};
 use crate::services::KmsService;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use dashmap::DashMap;
 use serde::Serialize;
 use std::sync::Arc;
@@ -461,7 +461,16 @@ impl StravaService {
         )
         .await?;
 
-        let new_expires_at = DateTime::from_timestamp(new_tokens.expires_at, 0).unwrap_or_default();
+        let new_expires_at = Utc
+            .timestamp_opt(new_tokens.expires_at, 0)
+            .single()
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    expires_at = new_tokens.expires_at,
+                    "Invalid expires_at timestamp from Strava during token refresh; defaulting to epoch"
+                );
+                Default::default()
+            });
 
         let updated_tokens = UserTokens {
             access_token_encrypted: new_enc_access,
@@ -549,10 +558,17 @@ impl StravaService {
         }
 
         // Encrypt and store tokens
-        let expires_at =
-            chrono::DateTime::<chrono::Utc>::from_timestamp(token_response.expires_at, 0)
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_else(|| now.clone());
+        let expires_at = Utc
+            .timestamp_opt(token_response.expires_at, 0)
+            .single()
+            .map(|dt| dt.to_rfc3339())
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    expires_at = token_response.expires_at,
+                    "Invalid expires_at timestamp from Strava during OAuth; defaulting to now"
+                );
+                now.clone()
+            });
 
         let (enc_access, enc_refresh) = crate::services::kms::encrypt_tokens(
             &self.kms,
