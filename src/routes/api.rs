@@ -194,6 +194,24 @@ async fn get_activities(
         "Fetching activities"
     );
 
+    // Validate Input: preserve name length
+    if let Some(ref p) = params.preserve {
+        if p.len() > 100 {
+            return Err(crate::error::AppError::BadRequest(
+                "Preserve name too long (max 100 chars)".to_string(),
+            ));
+        }
+    }
+
+    // Validate Input: after date format (ISO 8601 / RFC3339)
+    if let Some(ref a) = params.after {
+        if chrono::DateTime::parse_from_rfc3339(a).is_err() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid date format (expected RFC3339)".to_string(),
+            ));
+        }
+    }
+
     let limit = params.per_page.min(MAX_PER_PAGE);
 
     if params.page < 1 {
