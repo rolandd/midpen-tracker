@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2026-06-03 - Input Validation for Database Queries
+**Vulnerability:** API query parameters (`preserve`, `after`) were passed directly to Firestore queries without validation. While not an injection risk (due to Firestore's query builder), it allowed potentially unbounded input strings and invalid date formats.
+**Learning:** Even when using safe query builders (NoSQL), input validation is crucial for defense-in-depth, preventing performance degradation (DoS via large inputs) and logic errors.
+**Prevention:** Always validate all user inputs at the API boundary (length, format, type) before passing them to internal services or databases.

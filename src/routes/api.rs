@@ -194,6 +194,8 @@ async fn get_activities(
         "Fetching activities"
     );
 
+    validate_query(&params)?;
+
     let limit = params.per_page.min(MAX_PER_PAGE);
 
     if params.page < 1 {
@@ -417,8 +419,74 @@ async fn get_preserve_stats(
     }))
 }
 
+/// Validate query parameters.
+fn validate_query(params: &ActivitiesQuery) -> Result<()> {
+    if let Some(ref p) = params.preserve {
+        if p.len() > 100 {
+            return Err(crate::error::AppError::BadRequest(
+                "Preserve name too long (max 100 chars)".to_string(),
+            ));
+        }
+    }
+
+    if let Some(ref a) = params.after {
+        if chrono::DateTime::parse_from_rfc3339(a).is_err() {
+            return Err(crate::error::AppError::BadRequest(
+                "Invalid 'after' date format (ISO 8601 required)".to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_query_valid() {
+        let params = ActivitiesQuery {
+            preserve: Some("Rancho San Antonio".to_string()),
+            after: Some("2024-01-01T00:00:00Z".to_string()),
+            page: 1,
+            per_page: 50,
+        };
+        assert!(validate_query(&params).is_ok());
+    }
+
+    #[test]
+    fn test_validate_query_preserve_too_long() {
+        let long_name = "a".repeat(101);
+        let params = ActivitiesQuery {
+            preserve: Some(long_name),
+            after: None,
+            page: 1,
+            per_page: 50,
+        };
+        match validate_query(&params) {
+            Err(crate::error::AppError::BadRequest(msg)) => {
+                assert_eq!(msg, "Preserve name too long (max 100 chars)");
+            }
+            _ => panic!("Expected BadRequest error"),
+        }
+    }
+
+    #[test]
+    fn test_validate_query_invalid_date() {
+        let params = ActivitiesQuery {
+            preserve: None,
+            after: Some("not-a-date".to_string()),
+            page: 1,
+            per_page: 50,
+        };
+        match validate_query(&params) {
+            Err(crate::error::AppError::BadRequest(msg)) => {
+                assert_eq!(msg, "Invalid 'after' date format (ISO 8601 required)");
+            }
+            _ => panic!("Expected BadRequest error"),
+        }
+    }
+
     #[test]
     fn test_pagination_overflow() {
         let page = u32::MAX;
