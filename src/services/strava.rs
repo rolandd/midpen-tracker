@@ -396,10 +396,7 @@ impl StravaService {
         // LAZY DECRYPTION: Only decrypt access token first
         let access_token = self
             .kms
-            .decrypt_or_fallback(
-                &tokens.access_token_encrypted,
-                athlete_id.to_string().as_bytes(),
-            )
+            .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
             .await?;
 
         let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
@@ -429,10 +426,7 @@ impl StravaService {
 
         let refresh_token = self
             .kms
-            .decrypt_or_fallback(
-                &tokens.refresh_token_encrypted,
-                athlete_id.to_string().as_bytes(),
-            )
+            .decrypt_or_fallback(&tokens.refresh_token_encrypted, &athlete_id.to_be_bytes())
             .await?;
 
         // Handle cross-instance race: if another Cloud Run instance already
@@ -508,10 +502,7 @@ impl StravaService {
 
         let access_token = self
             .kms
-            .decrypt_or_fallback(
-                &tokens.access_token_encrypted,
-                athlete_id.to_string().as_bytes(),
-            )
+            .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
             .await?;
 
         let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
@@ -581,7 +572,7 @@ impl StravaService {
         let tokens = UserTokens {
             access_token_encrypted: enc_access,
             refresh_token_encrypted: enc_refresh,
-            expires_at,
+            expires_at: expires_at.clone(),
             scopes: vec![
                 "activity:read_all".to_string(),
                 "activity:write".to_string(),
@@ -589,6 +580,28 @@ impl StravaService {
         };
 
         self.db.set_tokens(athlete_id, &tokens).await?;
+
+        // ─────────────────────────────────────────────────────────────
+        // Populate token cache for immediate use (e.g. backfill)
+        // ─────────────────────────────────────────────────────────────
+        if let Ok(exp) = DateTime::parse_from_rfc3339(&expires_at) {
+            self.token_cache.insert(
+                athlete_id,
+                CachedToken {
+                    access_token: token_response.access_token.clone(),
+                    expires_at: exp.with_timezone(&Utc),
+                },
+            );
+        }
+
+        // Initialize user stats for atomic increment safety
+        let stats = crate::models::UserStats {
+            updated_at: now.clone(),
+            ..Default::default()
+        };
+        if let Err(e) = self.db.set_user_stats(athlete_id, &stats).await {
+            tracing::warn!(error = %e, athlete_id, "Failed to initialize user stats");
+        }
 
         tracing::info!(
             athlete_id,

@@ -489,7 +489,10 @@ impl FirestoreDb {
             .one(&athlete_id.to_string())
             .await?;
 
-        let mut stats = current_stats.unwrap_or_default();
+        let mut stats = current_stats.unwrap_or_else(|| crate::models::UserStats {
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            ..Default::default()
+        });
 
         f(&mut stats);
         stats.updated_at = chrono::Utc::now().to_rfc3339();
@@ -619,7 +622,10 @@ impl FirestoreDb {
             .one(&athlete_id.to_string())
             .await?;
 
-        let mut stats = current_stats.unwrap_or_default();
+        let mut stats = current_stats.unwrap_or_else(|| crate::models::UserStats {
+            updated_at: now_clone.clone(),
+            ..Default::default()
+        });
 
         // 2. Decrement pending count (this task is finished processing)
         stats.pending_activities = stats.pending_activities.saturating_sub(1);
