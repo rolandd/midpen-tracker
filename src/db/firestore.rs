@@ -307,16 +307,19 @@ impl FirestoreDb {
 
     // ─── Activity-Preserve Join Operations ───────────────────────
 
-    /// Get all activities for a specific preserve and user.
+    /// Get activities for a specific preserve and user with pagination.
     pub async fn get_activities_for_preserve(
         &self,
         athlete_id: u64,
         preserve_name: &str,
         after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
     ) -> Result<Vec<ActivityPreserve>, AppError> {
         let preserve_name = preserve_name.to_string();
 
-        self.get_client()?
+        let mut query = self
+            .get_client()?
             .fluent()
             .select()
             .from(collections::ACTIVITY_PRESERVES)
@@ -331,7 +334,17 @@ impl FirestoreDb {
                 ])
             })
             // Sort by date descending
-            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)])
+            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)]);
+
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+
+        if let Some(offset) = offset {
+            query = query.offset(offset);
+        }
+
+        query
             .obj()
             .query()
             .await

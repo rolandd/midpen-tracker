@@ -116,19 +116,29 @@ impl UserStats {
         self.updated_at = now.to_string();
 
         // Update preserve counts and visit dates
+        let activity_date = format_utc_rfc3339(activity.start_date);
         for preserve_name in &activity.preserves_visited {
             *self.preserves.entry(preserve_name.clone()).or_insert(0) += 1;
 
-            // Track first visit
+            // Track first visit (update if earlier)
             self.preserve_first_visit
                 .entry(preserve_name.clone())
-                .or_insert_with(|| format_utc_rfc3339(activity.start_date));
+                .and_modify(|first| {
+                    if activity_date < *first {
+                        *first = activity_date.clone();
+                    }
+                })
+                .or_insert_with(|| activity_date.clone());
 
-            // Always update last visit (assuming activities processed in order)
-            self.preserve_last_visit.insert(
-                preserve_name.clone(),
-                format_utc_rfc3339(activity.start_date),
-            );
+            // Track last visit (update if later)
+            self.preserve_last_visit
+                .entry(preserve_name.clone())
+                .and_modify(|last| {
+                    if activity_date > *last {
+                        *last = activity_date.clone();
+                    }
+                })
+                .or_insert_with(|| activity_date.clone());
         }
 
         // Update activity totals
@@ -273,6 +283,52 @@ mod tests {
             Some(&"2024-01-20T10:00:00Z".to_string())
         );
         assert_eq!(stats.preserves.get("Rancho"), Some(&2));
+    }
+
+    #[test]
+    fn test_first_last_visit_out_of_order() {
+        let mut stats = UserStats::default();
+
+        // Process a "middle" activity first
+        let activity_mid = make_activity(2, "Run", "2024-01-20T10:00:00Z", 3000.0, vec!["Rancho"]);
+        stats.update_from_activity(&activity_mid, "now");
+
+        assert_eq!(
+            stats.preserve_first_visit.get("Rancho"),
+            Some(&"2024-01-20T10:00:00Z".to_string())
+        );
+        assert_eq!(
+            stats.preserve_last_visit.get("Rancho"),
+            Some(&"2024-01-20T10:00:00Z".to_string())
+        );
+
+        // Process an earlier activity (should update first_visit)
+        let activity_early =
+            make_activity(1, "Ride", "2024-01-10T10:00:00Z", 5000.0, vec!["Rancho"]);
+        stats.update_from_activity(&activity_early, "now");
+
+        assert_eq!(
+            stats.preserve_first_visit.get("Rancho"),
+            Some(&"2024-01-10T10:00:00Z".to_string())
+        );
+        assert_eq!(
+            stats.preserve_last_visit.get("Rancho"),
+            Some(&"2024-01-20T10:00:00Z".to_string())
+        );
+
+        // Process a later activity (should update last_visit)
+        let activity_late =
+            make_activity(3, "Hike", "2024-01-30T10:00:00Z", 2000.0, vec!["Rancho"]);
+        stats.update_from_activity(&activity_late, "now");
+
+        assert_eq!(
+            stats.preserve_first_visit.get("Rancho"),
+            Some(&"2024-01-10T10:00:00Z".to_string())
+        );
+        assert_eq!(
+            stats.preserve_last_visit.get("Rancho"),
+            Some(&"2024-01-30T10:00:00Z".to_string())
+        );
     }
 
     #[test]
