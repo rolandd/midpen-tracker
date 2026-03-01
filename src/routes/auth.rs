@@ -409,7 +409,9 @@ async fn trigger_backfill(
             .await;
 
         // Handle results based on what actually happened.
-        if let Err(e) = crate::routes::tasks::handle_backfill_result(state, athlete_id, &backfill_result).await {
+        if let Err(e) =
+            crate::routes::tasks::handle_backfill_result(state, athlete_id, &backfill_result).await
+        {
             tracing::warn!(error = %e, "Failed to update pending count for backfill page");
             queue_error = Some(e);
         } else if backfill_result.failed > 0 {
@@ -426,10 +428,31 @@ async fn trigger_backfill(
     // We do this even if some activities on the current page failed to queue,
     // to ensure the overall backfill process continues as much as possible.
     if total_fetched >= per_page {
+        // Generate a random hex scan_id (16 bytes)
+        let mut scan_id_bytes = [0u8; 16];
+        let rng = ring::rand::SystemRandom::new();
+        let scan_id = match ring::rand::SecureRandom::fill(&rng, &mut scan_id_bytes) {
+            Ok(_) => hex::encode(scan_id_bytes),
+            Err(e) => {
+                tracing::warn!(error = %e, "PRNG failed for scan_id, falling back to timestamp");
+                chrono::Utc::now()
+                    .timestamp_nanos_opt()
+                    .ok_or_else(|| {
+                        tracing::error!(
+                            "Cascading failure: PRNG failed and timestamp_nanos_opt returned None"
+                        );
+                        AppError::Internal(anyhow::anyhow!("Failed to generate scan_id"))
+                    })?
+                    .to_string()
+            }
+        };
+
         let continue_payload = ContinueBackfillPayload {
             athlete_id,
             next_page: 2,
             after_timestamp,
+            scan_id,
+            queued_count_so_far: new_count,
         };
 
         if let Err(e) = state

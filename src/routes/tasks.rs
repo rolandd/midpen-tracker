@@ -179,6 +179,18 @@ async fn continue_backfill(
             page = payload.next_page,
             "All fetched activities on this page already processed"
         );
+
+        // Self-Healing: If this is the LAST page and no new activities were found
+        // during the entire scan, reset the pending count to 0.
+        if total_fetched < per_page as usize && payload.queued_count_so_far == 0 {
+            tracing::info!(
+                athlete_id = payload.athlete_id,
+                "Self-Healing: No new activities found during entire backfill scan, resetting pending count"
+            );
+            if let Err(e) = state.db.reset_pending_count(payload.athlete_id).await {
+                tracing::warn!(error = %e, "Failed to reset pending count during self-healing");
+            }
+        }
     } else {
         // Queue activities first, then update pending count based on actual success
         let backfill_result = state
@@ -224,6 +236,8 @@ async fn continue_backfill(
             athlete_id: payload.athlete_id,
             next_page,
             after_timestamp: payload.after_timestamp,
+            scan_id: payload.scan_id.clone(),
+            queued_count_so_far: payload.queued_count_so_far + count as u32,
         };
 
         if let Err(e) = state
@@ -237,8 +251,8 @@ async fn continue_backfill(
         }
     }
 
-    // If queuing failed for some activities on this page, return an error to trigger 
-    // a Cloud Tasks retry of the current page. The next page has already been 
+    // If queuing failed for some activities on this page, return an error to trigger
+    // a Cloud Tasks retry of the current page. The next page has already been
     // queued, but retrying this page is safe due to idempotent task names.
     if queue_error {
         return StatusCode::INTERNAL_SERVER_ERROR;

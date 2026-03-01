@@ -32,6 +32,8 @@ pub struct ContinueBackfillPayload {
     pub athlete_id: u64,
     pub next_page: u32,
     pub after_timestamp: i64, // Unix timestamp for "activities after this date"
+    pub scan_id: String,
+    pub queued_count_so_far: u32,
 }
 
 /// Payload for user deletion task (GDPR compliance).
@@ -140,8 +142,18 @@ impl TasksService {
         service_url: &str,
         payload: ContinueBackfillPayload,
     ) -> Result<bool> {
-        self.queue_task(service_url, "/tasks/continue-backfill", &payload, None)
-            .await
+        // Idempotent task name using scan_id to avoid duplicate tasks on retry
+        let task_id = format!(
+            "continue-backfill-{}-{}-{}",
+            payload.athlete_id, payload.next_page, payload.scan_id
+        );
+        self.queue_task(
+            service_url,
+            "/tasks/continue-backfill",
+            &payload,
+            Some(&task_id),
+        )
+        .await
     }
 
     /// Queue a user deletion task (GDPR compliance).
