@@ -378,6 +378,8 @@ async fn trigger_backfill(
     let total_fetched = activities.len() as u32;
     let new_count = new_activity_ids.len() as u32;
 
+    let mut queue_error = None;
+
     if new_count == 0 {
         tracing::info!(
             athlete_id,
@@ -385,11 +387,12 @@ async fn trigger_backfill(
             total_fetched
         );
 
-        // Self-Healing: If the first page has no new activities, the user is likely
-        // caught up. Reset the pending count to 0 to fix any "stuck" counters
-        // from previous sessions or lost tasks.
-        if let Err(e) = state.db.reset_pending_count(athlete_id).await {
-            tracing::warn!(error = %e, "Failed to reset pending count during self-healing");
+        // Self-Healing: If this is the LAST page and no new activities were found,
+        // reset the pending count to 0 to fix any "stuck" counters.
+        if total_fetched < per_page {
+            if let Err(e) = state.db.reset_pending_count(athlete_id).await {
+                tracing::warn!(error = %e, "Failed to reset pending count during self-healing");
+            }
         }
     } else {
         tracing::info!(
@@ -406,15 +409,12 @@ async fn trigger_backfill(
             .await;
 
         // Handle results based on what actually happened.
-        // If this fails, we return an error. The caller logs it and continues login
-        // so the user isn't blocked, but the error provides better visibility.
-        crate::routes::tasks::handle_backfill_result(state, athlete_id, &backfill_result).await?;
-
-        // Return error if any activities failed to queue.
-        // The caller already swallows this with a warning so login isn't blocked,
-        // but propagating the error lets the caller decide how to handle it.
-        if backfill_result.failed > 0 {
-            return Err(AppError::Internal(anyhow::anyhow!(
+        if let Err(e) = crate::routes::tasks::handle_backfill_result(state, athlete_id, &backfill_result).await {
+            tracing::warn!(error = %e, "Failed to update pending count for backfill page");
+            queue_error = Some(e);
+        } else if backfill_result.failed > 0 {
+            // Log partial failure but don't abort the entire backfill chain
+            queue_error = Some(AppError::Internal(anyhow::anyhow!(
                 "{} of {} activities failed to queue for backfill",
                 backfill_result.failed,
                 backfill_result.requested
@@ -422,8 +422,9 @@ async fn trigger_backfill(
         }
     }
 
-    // If we got a full page, there might be more - queue continue-backfill task
-    // This spreads subsequent Strava API calls via Cloud Tasks rate limiting
+    // If we got a full page, there might be more - queue continue-backfill task.
+    // We do this even if some activities on the current page failed to queue,
+    // to ensure the overall backfill process continues as much as possible.
     if total_fetched >= per_page {
         let continue_payload = ContinueBackfillPayload {
             athlete_id,
@@ -436,8 +437,16 @@ async fn trigger_backfill(
             .queue_continue_backfill(service_url, continue_payload)
             .await
         {
-            tracing::warn!(error = %e, "Failed to queue continue-backfill task");
+            tracing::error!(error = %e, "Failed to queue continue-backfill task");
+            // If we can't even queue the next page, that's a more serious error
+            return Err(e);
         }
+    }
+
+    // Propagate queuing errors from the current page if they occurred,
+    // but only after attempting to queue the next page.
+    if let Some(e) = queue_error {
+        return Err(e);
     }
 
     Ok(())
