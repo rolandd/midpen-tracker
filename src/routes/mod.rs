@@ -41,17 +41,34 @@ async fn health_check() -> Json<HealthResponse> {
     })
 }
 
+/// Check if an origin is a localhost-like origin.
+fn is_localhost(origin: &str) -> bool {
+    if let Ok(uri) = origin.parse::<axum::http::Uri>() {
+        uri.scheme_str() == Some("http")
+            && matches!(
+                uri.host(),
+                Some("localhost") | Some("127.0.0.1") | Some("[::1]")
+            )
+    } else {
+        false
+    }
+}
+
 /// Build the complete router with all routes.
 pub fn create_router(state: Arc<AppState>) -> Router {
-    // CORS layer - allow requests from frontend URL and localhost (for dev)
+    // CORS layer - allow requests from frontend URL, and allow localhost only in dev
     let frontend_url = state.config.frontend_url.clone();
+    let is_dev = is_localhost(&frontend_url);
+
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::AllowOrigin::predicate(
             move |origin: &axum::http::HeaderValue, _request_parts: &axum::http::request::Parts| {
                 let origin_str = origin.to_str().unwrap_or("");
-                origin_str == frontend_url
-                    || origin_str.starts_with("http://localhost")
-                    || origin_str.starts_with("http://127.0.0.1")
+                if origin_str == frontend_url {
+                    return true;
+                }
+
+                is_dev && is_localhost(origin_str)
             },
         ))
         .allow_credentials(true)
@@ -91,4 +108,24 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
         )
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_localhost_logic() {
+        assert!(is_localhost("http://localhost"));
+        assert!(is_localhost("http://localhost:5173"));
+        assert!(is_localhost("http://127.0.0.1"));
+        assert!(is_localhost("http://127.0.0.1:5173"));
+        assert!(is_localhost("http://[::1]"));
+        assert!(is_localhost("http://[::1]:5173"));
+
+        assert!(!is_localhost("https://localhost")); // Must be http
+        assert!(!is_localhost("http://localhost.attacker.com"));
+        assert!(!is_localhost("http://127.0.0.1.evil.com"));
+        assert!(!is_localhost("http://example.com"));
+    }
 }
