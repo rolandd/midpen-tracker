@@ -112,6 +112,59 @@ async fn test_cors_preflight() {
 }
 
 #[tokio::test]
+async fn test_cors_bypass_attempt() {
+    let (app, _) = common::create_test_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/stats/preserves")
+                .header(header::ORIGIN, "http://localhost.attacker.com")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // If vulnerable, this will return 200 and have CORS headers.
+    // If secure, it should NOT have CORS headers or return a non-200 if the middleware rejects it.
+    // Tower-http's CorsLayer returns 200 for preflight but doesn't add headers if origin doesn't match.
+    assert!(!response
+        .headers()
+        .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        "VULNERABILITY: CORS headers were returned for malicious origin http://localhost.attacker.com");
+}
+
+#[tokio::test]
+async fn test_cors_ipv6_localhost() {
+    let (app, _) = common::create_test_app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/stats/preserves")
+                .header(header::ORIGIN, "http://[::1]:5173")
+                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .unwrap(),
+        "http://[::1]:5173"
+    );
+}
+
+#[tokio::test]
 async fn test_public_route_no_auth_required() {
     let (app, _) = common::create_test_app();
 
