@@ -532,16 +532,24 @@ impl StravaService {
         let athlete_id = token_response.athlete.id;
         let now = chrono::Utc::now().to_rfc3339();
 
+        // Check for existing user to preserve creation date and email
+        let existing_user = self.db.get_user(athlete_id).await?;
+
         // Store user profile
+        let (created_at, email, deletion_requested_at) = existing_user
+            .map_or((now.clone(), None, None), |u| {
+                (u.created_at, u.email, u.deletion_requested_at)
+            });
+
         let user = User {
             strava_athlete_id: athlete_id,
-            email: None,
+            email,
             firstname: token_response.athlete.firstname.clone(),
             lastname: token_response.athlete.lastname.clone(),
             profile_picture: token_response.athlete.profile.clone(),
-            created_at: now.clone(),
+            created_at,
             last_active: now.clone(),
-            deletion_requested_at: None,
+            deletion_requested_at,
         };
 
         if let Err(e) = self.db.upsert_user(&user).await {
@@ -594,13 +602,10 @@ impl StravaService {
             );
         }
 
-        // Initialize user stats for atomic increment safety
-        let stats = crate::models::UserStats {
-            updated_at: now.clone(),
-            ..Default::default()
-        };
-        if let Err(e) = self.db.set_user_stats(athlete_id, &stats).await {
-            tracing::warn!(error = %e, athlete_id, "Failed to initialize user stats");
+        // Initialize user stats for atomic increment safety if it doesn't exist.
+        // This uses a transaction internally to prevent race conditions during login.
+        if let Err(e) = self.db.ensure_user_stats(athlete_id).await {
+            tracing::warn!(error = %e, athlete_id, "Failed to ensure user stats document");
         }
 
         tracing::info!(
