@@ -427,6 +427,40 @@ impl FirestoreDb {
         Ok(())
     }
 
+    /// Ensure user stats document exists without overwriting existing data.
+    ///
+    /// Uses atomic insert (create-only) to avoid race conditions.
+    pub async fn ensure_user_stats(&self, athlete_id: u64) -> Result<(), AppError> {
+        let stats = crate::models::UserStats {
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            ..Default::default()
+        };
+
+        let result = self
+            .get_client()?
+            .fluent()
+            .insert()
+            .into(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .execute::<()>()
+            .await;
+
+        match result {
+            Ok(_) => {
+                tracing::info!(athlete_id, "Initialized new user stats document");
+                Ok(())
+            }
+            Err(firestore::errors::FirestoreError::DatabaseError(ref e))
+                if e.public.code == "AlreadyExists" =>
+            {
+                // Document already exists, which is fine for "ensure" logic.
+                Ok(())
+            }
+            Err(e) => Err(AppError::Firestore(e)),
+        }
+    }
+
     // ─── Atomic Pending Count Operations ────────────────────────────
 
     /// Helper to execute a transaction that updates user stats.
@@ -489,10 +523,7 @@ impl FirestoreDb {
             .one(&athlete_id.to_string())
             .await?;
 
-        let mut stats = current_stats.unwrap_or_else(|| crate::models::UserStats {
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            ..Default::default()
-        });
+        let mut stats = current_stats.unwrap_or_default();
 
         f(&mut stats);
         stats.updated_at = chrono::Utc::now().to_rfc3339();

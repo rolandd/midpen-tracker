@@ -646,3 +646,49 @@ async fn test_activity_pagination() {
 
     println!("✓ Pagination verified: athlete_id={}", athlete_id);
 }
+
+#[tokio::test]
+async fn test_ensure_user_stats_idempotency() {
+    require_emulator!();
+
+    let db = test_db().await;
+    let athlete_id = unique_athlete_id();
+
+    // Initially, stats should not exist
+    let before = db.get_user_stats(athlete_id).await.unwrap();
+    assert!(before.is_none(), "Stats should not exist initially");
+
+    // First call to ensure_user_stats should create them
+    db.ensure_user_stats(athlete_id).await.unwrap();
+
+    // Verify they exist
+    let after_first = db.get_user_stats(athlete_id).await.unwrap();
+    assert!(
+        after_first.is_some(),
+        "Stats should exist after first ensure"
+    );
+    let stats_v1 = after_first.unwrap();
+    assert_eq!(stats_v1.total_activities, 0);
+
+    // Modify stats manually to verify that ensure_user_stats doesn't overwrite
+    let mut modified_stats = stats_v1.clone();
+    modified_stats.total_activities = 42;
+    db.set_user_stats(athlete_id, &modified_stats)
+        .await
+        .unwrap();
+
+    // Second call to ensure_user_stats should do nothing (idempotent)
+    db.ensure_user_stats(athlete_id).await.unwrap();
+
+    // Verify stats were NOT overwritten
+    let after_second = db.get_user_stats(athlete_id).await.unwrap().unwrap();
+    assert_eq!(
+        after_second.total_activities, 42,
+        "ensure_user_stats should not overwrite existing data"
+    );
+
+    println!(
+        "✓ ensure_user_stats idempotency verified: athlete_id={}",
+        athlete_id
+    );
+}
