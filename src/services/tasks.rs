@@ -12,7 +12,11 @@
 use crate::error::AppError;
 use crate::error::Result;
 use futures_util::{stream, StreamExt};
+use google_cloud_tasks_v2::client::CloudTasks;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+use tokio::sync::OnceCell;
 
 const MAX_CONCURRENT_TASKS: usize = 100;
 
@@ -88,9 +92,11 @@ impl BackfillResult {
 
 /// Cloud Tasks client wrapper.
 pub struct TasksService {
-    project_id: String,
-    location: String,
-    queue_name: String,
+    queue_path: String,
+    service_account_email: String,
+    client: OnceCell<CloudTasks>,
+    enqueue_success_total: AtomicU64,
+    enqueue_failure_total: AtomicU64,
     /// Mock: Activity IDs that should fail when queued (test builds only).
     #[cfg(test)]
     mock_fail_ids: tokio::sync::Mutex<std::collections::HashSet<u64>>,
@@ -99,12 +105,75 @@ pub struct TasksService {
 impl TasksService {
     pub fn new(project_id: &str, region: &str) -> Self {
         Self {
-            project_id: project_id.to_string(),
-            location: region.to_string(),
-            queue_name: crate::config::ACTIVITY_QUEUE_NAME.to_string(),
+            queue_path: format!(
+                "projects/{}/locations/{}/queues/{}",
+                project_id,
+                region,
+                crate::config::ACTIVITY_QUEUE_NAME
+            ),
+            service_account_email: format!(
+                "midpen-tracker-api@{}.iam.gserviceaccount.com",
+                project_id
+            ),
+            client: OnceCell::new(),
+            enqueue_success_total: AtomicU64::new(0),
+            enqueue_failure_total: AtomicU64::new(0),
             #[cfg(test)]
             mock_fail_ids: tokio::sync::Mutex::new(std::collections::HashSet::new()),
         }
+    }
+
+    async fn client(&self) -> Result<&CloudTasks> {
+        self.client
+            .get_or_try_init(|| {
+                let queue_path = self.queue_path.clone();
+                async move {
+                    let started_at = Instant::now();
+                    let client = CloudTasks::builder().build().await.map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!("Cloud Tasks client error: {}", e))
+                    })?;
+
+                    tracing::info!(
+                        queue = queue_path,
+                        init_latency_ms = started_at.elapsed().as_millis(),
+                        "Cloud Tasks client initialized"
+                    );
+
+                    Ok(client)
+                }
+            })
+            .await
+    }
+
+    /// Update stats and log queueing success
+    fn record_enqueue_success(&self, endpoint: &str, enqueue_started: &std::time::Instant) {
+        let success_total = self.enqueue_success_total.fetch_add(1, Ordering::Relaxed) + 1;
+        tracing::debug!(
+            endpoint,
+            queue = %self.queue_path,
+            enqueue_latency_ms = enqueue_started.elapsed().as_millis(),
+            enqueue_success_total = success_total,
+            "Cloud Tasks enqueue succeeded"
+        );
+    }
+
+    /// Update stats and log a queueing error
+    fn record_enqueue_failure<E: std::fmt::Debug>(
+        &self,
+        endpoint: &str,
+        enqueue_started: &std::time::Instant,
+        error: E,
+        message: &str,
+    ) {
+        let failure_total = self.enqueue_failure_total.fetch_add(1, Ordering::Relaxed) + 1;
+        tracing::warn!(
+            endpoint,
+            queue = %self.queue_path,
+            enqueue_latency_ms = enqueue_started.elapsed().as_millis(),
+            enqueue_failure_total = failure_total,
+            ?error,
+            message
+        );
     }
 
     /// Set activity IDs that should fail when queued (test builds only).
@@ -190,18 +259,9 @@ impl TasksService {
         payload: &T,
         task_id: Option<&str>,
     ) -> Result<bool> {
-        use google_cloud_tasks_v2::client::CloudTasks;
         use google_cloud_tasks_v2::model::{HttpRequest, OidcToken, Task};
 
-        let client = CloudTasks::builder()
-            .build()
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Cloud Tasks client error: {}", e)))?;
-
-        let queue_path = format!(
-            "projects/{}/locations/{}/queues/{}",
-            self.project_id, self.location, self.queue_name
-        );
+        let enqueue_started = Instant::now();
 
         let body = serde_json::to_vec(payload)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("JSON error: {}", e)))?;
@@ -216,10 +276,7 @@ impl TasksService {
             )]))
             .set_oidc_token(
                 OidcToken::default()
-                    .set_service_account_email(format!(
-                        "midpen-tracker-api@{}.iam.gserviceaccount.com",
-                        self.project_id
-                    ))
+                    .set_service_account_email(self.service_account_email.as_str())
                     .set_audience(service_url.to_string()),
             );
 
@@ -227,17 +284,30 @@ impl TasksService {
 
         // Set task name if provided for idempotency
         if let Some(id) = task_id {
-            task = task.set_name(format!("{}/tasks/{}", queue_path, id));
+            task = task.set_name(format!("{}/tasks/{}", self.queue_path, id));
         }
 
-        match client
+        let client = self.client().await.inspect_err(|e| {
+            self.record_enqueue_failure(
+                endpoint,
+                &enqueue_started,
+                e,
+                "Cloud Tasks enqueue failed during client initialization",
+            );
+        })?;
+
+        let enqueue_result = client
             .create_task()
-            .set_parent(queue_path)
+            .set_parent(self.queue_path.as_str())
             .set_task(task)
             .send()
-            .await
-        {
-            Ok(_) => Ok(true),
+            .await;
+
+        match enqueue_result {
+            Ok(_) => {
+                self.record_enqueue_success(endpoint, &enqueue_started);
+                Ok(true)
+            }
             Err(e) => {
                 // Check for "AlreadyExists" error for idempotency.
                 if let Some(status) = e.status() {
@@ -247,6 +317,13 @@ impl TasksService {
                         return Ok(false);
                     }
                 }
+
+                self.record_enqueue_failure(
+                    endpoint,
+                    &enqueue_started,
+                    &e,
+                    "Cloud Tasks enqueue failed",
+                );
                 Err(AppError::Internal(anyhow::anyhow!(
                     "Cloud Tasks create error: {}",
                     e
