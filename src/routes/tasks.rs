@@ -171,6 +171,8 @@ async fn continue_backfill(
     let total_fetched = activities.len();
     let count = new_activity_ids.len();
 
+    let mut queue_error = false;
+
     if count == 0 {
         tracing::info!(
             athlete_id = payload.athlete_id,
@@ -185,30 +187,26 @@ async fn continue_backfill(
             .await;
 
         // Handle results based on what actually happened.
-        // If this fails, we return an error to trigger a retry of the whole page.
-        // Idempotent task queuing ensures we don't create duplicate tasks.
+        // Idempotent task queuing ensures we don't create duplicate tasks on retry.
         if let Err(e) = handle_backfill_result(&state, payload.athlete_id, &backfill_result).await {
             tracing::error!(error = %e, "Failed to update pending count for backfill page");
-            return StatusCode::INTERNAL_SERVER_ERROR;
-        }
-
-        // If any activities failed, return error to trigger Cloud Tasks retry.
-        // Already-queued activities will be processed idempotently on retry,
-        // and the self-healing reset at end of scan corrects any pending count drift.
-        if backfill_result.failed > 0 {
+            queue_error = true;
+        } else if backfill_result.failed > 0 {
             tracing::error!(
                 athlete_id = payload.athlete_id,
                 requested = backfill_result.requested,
                 queued = backfill_result.queued,
                 failed = backfill_result.failed,
                 failed_ids = ?&backfill_result.failed_ids.iter().take(20).collect::<Vec<_>>(),
-                "Some activities failed to queue for backfill, triggering retry (failed_ids may be truncated)"
+                "Some activities failed to queue for backfill (failed_ids may be truncated)"
             );
-            return StatusCode::INTERNAL_SERVER_ERROR;
+            queue_error = true;
         }
     }
 
-    // If we got a full page, there might be more - queue next page
+    // If we got a full page, there might be more - queue next page.
+    // We attempt to queue the next page even if the current page had partial failures,
+    // to ensure the overall backfill scan completes even if some individual tasks are lost.
     if total_fetched >= per_page as usize {
         // Fix: Use checked_add to prevent u32 overflow (infinite loop risk)
         let next_page = match payload.next_page.checked_add(1) {
@@ -234,8 +232,16 @@ async fn continue_backfill(
             .await
         {
             tracing::error!(error = %e, "Failed to queue next backfill page");
+            // If we can't queue the next page, we MUST retry this task
             return StatusCode::INTERNAL_SERVER_ERROR;
         }
+    }
+
+    // If queuing failed for some activities on this page, return an error to trigger 
+    // a Cloud Tasks retry of the current page. The next page has already been 
+    // queued, but retrying this page is safe due to idempotent task names.
+    if queue_error {
+        return StatusCode::INTERNAL_SERVER_ERROR;
     }
 
     tracing::info!(
