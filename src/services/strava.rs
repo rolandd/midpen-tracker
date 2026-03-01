@@ -736,6 +736,7 @@ impl StravaService {
 
         // 2. Delete tokens immediately
         self.db.delete_tokens(athlete_id).await?;
+        self.token_cache.remove(&athlete_id);
 
         // 3. Decrypt
         let (mut access_token, refresh_token) = match crate::services::kms::decrypt_tokens(
