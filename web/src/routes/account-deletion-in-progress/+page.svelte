@@ -4,6 +4,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { fetchMe, logout, ApiError } from '$lib/api';
+	import { uiState } from '$lib/state.svelte';
 
 	$effect(() => {
 		const controller = new AbortController();
@@ -26,7 +27,11 @@
 
 				if (e instanceof ApiError && (e.status === 401 || e.status === 404)) {
 					// Session gone -> deletion complete
-					await logout(controller.signal).catch(() => {}); // Ensure cookie is cleared, ignore errors
+					// Important: clear the global user state so the home page doesn't try to redirect us back to dashboard
+					uiState.user = null;
+
+					// Ensure cookie is cleared, ignore errors
+					await logout(controller.signal).catch(() => {});
 					if (controller.signal.aborted) return;
 					goto('/');
 				} else {
