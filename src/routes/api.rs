@@ -61,7 +61,7 @@ async fn get_me(
     Extension(user): Extension<AuthUser>,
 ) -> Result<Json<UserResponse>> {
     let user_profile = state.db.get_user(user.athlete_id).await?.ok_or_else(|| {
-        crate::error::AppError::NotFound(format!("User {} not found", user.athlete_id))
+        crate::error::AppError::NotFound(crate::error::ResourceNotFound::User(user.athlete_id))
     })?;
 
     Ok(Json(UserResponse {
