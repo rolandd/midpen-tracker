@@ -12,7 +12,7 @@ use crate::middleware::auth::require_auth;
 use crate::middleware::tasks_auth::require_tasks_auth;
 use crate::AppState;
 use axum::http::{header, Method};
-use axum::{middleware, routing::get, Json, Router};
+use axum::{extract::DefaultBodyLimit, middleware, routing::get, Json, Router};
 use serde::Serialize;
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
@@ -98,6 +98,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .layer(DefaultBodyLimit::max(64 * 1024)) // 64KB global limit
         .layer(middleware::from_fn(
             crate::middleware::security::add_security_headers,
         ))

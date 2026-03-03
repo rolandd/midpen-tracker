@@ -9,6 +9,7 @@
 //!
 //! Uses the official google-cloud-tasks-v2 SDK.
 
+use crate::config::{MAX_METADATA_LEN, MAX_PAGES, MAX_TOKEN_LEN};
 use crate::error::AppError;
 use crate::error::Result;
 use futures_util::{stream, StreamExt};
@@ -17,41 +18,47 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use tokio::sync::OnceCell;
+use validator::Validate;
 
 const MAX_CONCURRENT_TASKS: usize = 100;
 
 /// Payload sent to the activity processing task.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProcessActivityPayload {
     pub activity_id: u64,
     pub athlete_id: u64,
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     pub source: String, // "webhook" or "backfill"
 }
 
 /// Payload for continuing backfill with pagination.
 /// This allows us to spread Strava API calls over time rather than
 /// hitting the API repeatedly at login.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ContinueBackfillPayload {
     pub athlete_id: u64,
+    #[validate(range(min = 1, max = "MAX_PAGES"))]
     pub next_page: u32,
     pub after_timestamp: i64, // Unix timestamp for "activities after this date"
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     pub scan_id: String,
     pub queued_count_so_far: u32,
 }
 
 /// Payload for user deletion task (GDPR compliance).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DeleteUserPayload {
     pub athlete_id: u64,
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     pub source: String, // "webhook" or "user_request"
 }
 
 /// Payload for activity deletion task.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct DeleteActivityPayload {
     pub activity_id: u64,
     pub athlete_id: u64,
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     pub source: String, // "webhook"
 }
 

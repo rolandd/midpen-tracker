@@ -12,6 +12,25 @@ use std::env;
 /// This constant is used for both task creation and header validation.
 pub const ACTIVITY_QUEUE_NAME: &str = "activity-processing";
 
+// --- Validation Limits ---
+
+/// Maximum length for any URL or URI.
+pub const MAX_URL_LEN: u64 = 2048;
+/// Maximum length for a resource name or title (e.g. Preserve name).
+pub const MAX_NAME_LEN: u64 = 100;
+/// Maximum length for short metadata strings (e.g. "webhook", "backfill").
+pub const MAX_METADATA_LEN: u64 = 20;
+/// Maximum length for opaque tokens/cursors.
+pub const MAX_TOKEN_LEN: u64 = 256;
+/// Maximum length for large signed state parameters.
+pub const MAX_STATE_LEN: u64 = 1024;
+/// Maximum items per page in API responses.
+pub const MAX_PER_PAGE: u32 = 100;
+/// Maximum page number allowed for pagination.
+pub const MAX_PAGES: u32 = 10000;
+/// Maximum length for ISO 8601 / RFC 3339 date strings.
+pub const MAX_DATE_LEN: u64 = 50;
+
 /// Application configuration, loaded once at startup.
 /// Secrets are cached in memory after being fetched from Secret Manager.
 #[derive(Debug, Clone)]

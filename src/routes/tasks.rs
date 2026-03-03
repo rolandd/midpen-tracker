@@ -21,6 +21,16 @@ use axum::{
     Router,
 };
 use std::sync::Arc;
+use validator::Validate;
+
+macro_rules! validate_task_payload {
+    ($payload:expr, $name:literal) => {
+        if let Err(e) = $payload.validate() {
+            tracing::error!(error = %e, "Invalid {} payload - stopping Cloud Task retry", $name);
+            return StatusCode::OK;
+        }
+    };
+}
 
 /// Task handler routes (called by Cloud Tasks).
 pub fn routes() -> Router<Arc<AppState>> {
@@ -36,6 +46,8 @@ async fn process_activity(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ProcessActivityPayload>,
 ) -> StatusCode {
+    validate_task_payload!(payload, "process_activity");
+
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,
@@ -104,6 +116,8 @@ async fn continue_backfill(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ContinueBackfillPayload>,
 ) -> StatusCode {
+    validate_task_payload!(payload, "continue_backfill");
+
     tracing::info!(
         athlete_id = payload.athlete_id,
         page = payload.next_page,
@@ -323,6 +337,8 @@ async fn delete_user(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<DeleteUserPayload>,
 ) -> StatusCode {
+    validate_task_payload!(payload, "delete_user");
+
     tracing::info!(
         athlete_id = payload.athlete_id,
         source = %payload.source,
@@ -469,6 +485,8 @@ async fn delete_activity(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<DeleteActivityPayload>,
 ) -> StatusCode {
+    validate_task_payload!(payload, "delete_activity");
+
     tracing::info!(
         activity_id = payload.activity_id,
         athlete_id = payload.athlete_id,

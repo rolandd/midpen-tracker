@@ -9,3 +9,10 @@ use chrono::{DateTime, SecondsFormat, Utc};
 pub fn format_utc_rfc3339(date: DateTime<Utc>) -> String {
     date.to_rfc3339_opts(SecondsFormat::Secs, true)
 }
+
+/// Validate that a string is a valid RFC3339 date (for validator crate).
+pub fn validate_rfc3339(date: &str) -> std::result::Result<(), validator::ValidationError> {
+    chrono::DateTime::parse_from_rfc3339(date)
+        .map(|_| ())
+        .map_err(|_| validator::ValidationError::new("invalid_rfc3339"))
+}

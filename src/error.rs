@@ -31,6 +31,9 @@ pub enum AppError {
     #[error("Database error: {0}")]
     Database(String),
 
+    #[error("Validation error: {0}")]
+    Validation(#[from] validator::ValidationErrors),
+
     #[error("Firestore error: {0}")]
     Firestore(#[from] firestore::errors::FirestoreError),
 
@@ -83,6 +86,12 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", Some(msg.clone())),
             AppError::BadRequest(msg) => {
                 (StatusCode::BAD_REQUEST, "bad_request", Some(msg.clone()))
+            }
+            AppError::Validation(errs) => {
+                // Return a clean string for the simple ErrorResponse
+                // The actual field-level errors are in the 'errs' struct
+                let msg = format!("Validation failed: {}", errs);
+                (StatusCode::BAD_REQUEST, "validation_error", Some(msg))
             }
             AppError::StravaApi(msg) => {
                 (StatusCode::BAD_GATEWAY, "strava_error", Some(msg.clone()))
