@@ -62,7 +62,7 @@ impl StravaClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(e.to_string()))?;
+            .map_err(|e| AppError::StravaApi(crate::error::StravaError::Network(e.to_string())))?;
 
         self.check_response(response).await?;
         Ok(())
@@ -89,7 +89,7 @@ impl StravaClient {
             ])
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(e.to_string()))?;
+            .map_err(|e| AppError::StravaApi(crate::error::StravaError::Network(e.to_string())))?;
 
         self.check_response_json(response).await
     }
@@ -110,7 +110,12 @@ impl StravaClient {
             ])
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(format!("Token refresh request failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::StravaApi(crate::error::StravaError::Network(format!(
+                    "Token refresh request failed: {}",
+                    e
+                )))
+            })?;
 
         self.check_response_json(response).await
     }
@@ -129,7 +134,12 @@ impl StravaClient {
             .bearer_auth(access_token)
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(format!("Deauthorization request failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::StravaApi(crate::error::StravaError::Network(format!(
+                    "Deauthorization request failed: {}",
+                    e
+                )))
+            })?;
 
         self.check_response(response).await?;
         tracing::info!("Strava deauthorization successful");
@@ -154,7 +164,7 @@ impl StravaClient {
             .bearer_auth(access_token)
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(e.to_string()))?;
+            .map_err(|e| AppError::StravaApi(crate::error::StravaError::Network(e.to_string())))?;
 
         self.check_response_json(response).await
     }
@@ -171,17 +181,17 @@ impl StravaClient {
         // Rate limit - should trigger Cloud Tasks retry
         if status.as_u16() == 429 {
             tracing::warn!("Strava rate limit hit (429)");
-            return Err(AppError::StravaApi(AppError::STRAVA_RATE_LIMIT.to_string()));
+            return Err(AppError::StravaApi(crate::error::StravaError::RateLimit));
         }
 
         // Unauthorized - token may be expired
         if status.as_u16() == 401 {
-            return Err(AppError::StravaApi(
-                AppError::STRAVA_TOKEN_ERROR.to_string(),
-            ));
+            return Err(AppError::StravaApi(crate::error::StravaError::TokenInvalid));
         }
 
-        Err(AppError::StravaApi(format!("HTTP {}: {}", status, body)))
+        Err(AppError::StravaApi(crate::error::StravaError::Other(
+            format!("HTTP {}: {}", status, body),
+        )))
     }
 
     /// Check response and parse JSON body.
@@ -195,22 +205,32 @@ impl StravaClient {
 
             if status.as_u16() == 429 {
                 tracing::warn!("Strava rate limit hit (429)");
-                return Err(AppError::StravaApi(AppError::STRAVA_RATE_LIMIT.to_string()));
+                return Err(AppError::StravaApi(crate::error::StravaError::RateLimit));
             }
 
             if status.as_u16() == 401 {
-                return Err(AppError::StravaApi(
-                    AppError::STRAVA_TOKEN_ERROR.to_string(),
-                ));
+                return Err(AppError::StravaApi(crate::error::StravaError::TokenInvalid));
             }
 
-            return Err(AppError::StravaApi(format!("HTTP {}: {}", status, body)));
+            if status.as_u16() == 404 {
+                return Err(AppError::StravaApi(crate::error::StravaError::NotFound));
+            }
+
+            // The `refresh_token` call relies on detecting this specific error string
+            // to handle cross-instance race conditions.
+            if body.contains("invalid_grant") {
+                return Err(AppError::StravaApi(crate::error::StravaError::InvalidGrant));
+            }
+
+            return Err(AppError::StravaApi(crate::error::StravaError::Other(
+                format!("HTTP {}: {}", status, body),
+            )));
         }
 
         response
             .json()
             .await
-            .map_err(|e| AppError::StravaApi(format!("JSON parse error: {}", e)))
+            .map_err(|e| AppError::StravaApi(crate::error::StravaError::Parse(e.to_string())))
     }
 }
 
@@ -387,11 +407,9 @@ impl StravaService {
         // ─────────────────────────────────────────────────────────────
         // STEP 4: Fetch from Firestore and decrypt (LAZY - access only)
         // ─────────────────────────────────────────────────────────────
-        let tokens = self
-            .db
-            .get_tokens(athlete_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
+        let tokens = self.db.get_tokens(athlete_id).await?.ok_or_else(|| {
+            AppError::NotFound(crate::error::ResourceNotFound::Tokens(athlete_id))
+        })?;
 
         // LAZY DECRYPTION: Only decrypt access token first
         let access_token = self
@@ -434,7 +452,7 @@ impl StravaService {
         // In that case, fetch the winner's tokens from Firestore.
         let new_tokens = match self.client.refresh_token(&refresh_token).await {
             Ok(t) => t,
-            Err(AppError::StravaApi(ref msg)) if msg.contains("invalid_grant") => {
+            Err(AppError::StravaApi(crate::error::StravaError::InvalidGrant)) => {
                 tracing::info!(
                     athlete_id,
                     "Refresh token race detected - another instance won, fetching their tokens"
@@ -494,11 +512,9 @@ impl StravaService {
     ///
     /// Used when we detect another Cloud Run instance won the refresh race.
     async fn fetch_and_cache_from_db(&self, athlete_id: u64) -> Result<String, AppError> {
-        let tokens = self
-            .db
-            .get_tokens(athlete_id)
-            .await?
-            .ok_or_else(|| AppError::NotFound(format!("Tokens for athlete {}", athlete_id)))?;
+        let tokens = self.db.get_tokens(athlete_id).await?.ok_or_else(|| {
+            AppError::NotFound(crate::error::ResourceNotFound::Tokens(athlete_id))
+        })?;
 
         let access_token = self
             .kms
@@ -636,22 +652,26 @@ impl StravaService {
             ])
             .send()
             .await
-            .map_err(|e| AppError::StravaApi(format!("Token exchange failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::StravaApi(crate::error::StravaError::Network(format!(
+                    "Token exchange failed: {}",
+                    e
+                )))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             tracing::error!(status = %status, body = %body, "Strava token exchange failed");
-            return Err(AppError::StravaApi(format!(
-                "Token exchange failed with status {}",
-                status
+            return Err(AppError::StravaApi(crate::error::StravaError::ApiError(
+                status, body,
             )));
         }
 
         response
             .json()
             .await
-            .map_err(|e| AppError::StravaApi(format!("Failed to parse token response: {}", e)))
+            .map_err(|e| AppError::StravaApi(crate::error::StravaError::Parse(e.to_string())))
     }
 
     // ─── API Wrappers ────────────────────────────────────────────────────────

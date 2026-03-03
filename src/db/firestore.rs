@@ -51,9 +51,12 @@ impl FirestoreDb {
             return Self::create_emulator_client(project_id).await;
         }
 
-        let client = firestore::FirestoreDb::new(project_id)
-            .await
-            .map_err(|e| AppError::Database(format!("Failed to connect to Firestore: {}", e)))?;
+        let client = firestore::FirestoreDb::new(project_id).await.map_err(|e| {
+            AppError::Database(crate::error::DbError::Other(format!(
+                "Failed to connect to Firestore: {}",
+                e
+            )))
+        })?;
 
         tracing::info!(project = project_id, "Connected to Firestore");
 
@@ -89,7 +92,10 @@ impl FirestoreDb {
         )
         .await
         .map_err(|e| {
-            AppError::Database(format!("Failed to connect to Firestore Emulator: {}", e))
+            AppError::Database(crate::error::DbError::Other(format!(
+                "Failed to connect to Firestore Emulator: {}",
+                e
+            )))
         })?;
 
         tracing::info!(
@@ -111,9 +117,11 @@ impl FirestoreDb {
 
     /// Helper to get the client or return an error if offline.
     fn get_client(&self) -> Result<&firestore::FirestoreDb, AppError> {
-        self.client
-            .as_ref()
-            .ok_or_else(|| AppError::Database("Database not connected (offline mode)".to_string()))
+        self.client.as_ref().ok_or_else(|| {
+            AppError::Database(crate::error::DbError::Other(
+                "Database not connected (offline mode)".to_string(),
+            ))
+        })
     }
 
     // ─── User Operations ─────────────────────────────────────────
@@ -127,7 +135,7 @@ impl FirestoreDb {
             .obj()
             .one(&athlete_id.to_string())
             .await
-            .map_err(|e| AppError::Database(e.to_string()))
+            .map_err(AppError::from)
     }
 
     /// Create or update a user.
@@ -140,8 +148,7 @@ impl FirestoreDb {
             .document_id(user.strava_athlete_id.to_string())
             .object(user)
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 
@@ -156,7 +163,7 @@ impl FirestoreDb {
             .obj()
             .one(&athlete_id.to_string())
             .await
-            .map_err(|e| AppError::Database(e.to_string()))
+            .map_err(AppError::from)
     }
 
     /// Store encrypted tokens for a user.
@@ -169,8 +176,7 @@ impl FirestoreDb {
             .document_id(athlete_id.to_string())
             .object(tokens)
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 
@@ -182,8 +188,7 @@ impl FirestoreDb {
             .from(collections::TOKENS)
             .document_id(athlete_id.to_string())
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 
@@ -198,7 +203,7 @@ impl FirestoreDb {
             .obj()
             .one(&activity_id.to_string())
             .await
-            .map_err(|e| AppError::Database(e.to_string()))
+            .map_err(AppError::from)
     }
 
     /// Get activities for a user with pagination.
@@ -248,7 +253,7 @@ impl FirestoreDb {
             .obj()
             .query()
             .await
-            .map_err(|e| AppError::Database(e.to_string()))
+            .map_err(AppError::from)
     }
 
     /// Store a processed activity.
@@ -261,8 +266,7 @@ impl FirestoreDb {
             .document_id(activity.strava_activity_id.to_string())
             .object(activity)
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 
@@ -275,8 +279,7 @@ impl FirestoreDb {
             .from(collections::ACTIVITIES)
             .document_id(activity_id.to_string())
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
 
         // Re-calculate stats for the user to ensure consistency
         // This is expensive but infrequent (deletes are rare)
@@ -290,8 +293,7 @@ impl FirestoreDb {
             .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
             .obj::<Activity>()
             .query()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
 
         let mut new_stats = crate::models::UserStats::default();
         let now = chrono::Utc::now().to_rfc3339();
@@ -344,11 +346,7 @@ impl FirestoreDb {
             query = query.offset(offset);
         }
 
-        query
-            .obj()
-            .query()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))
+        query.obj().query().await.map_err(AppError::from)
     }
 
     /// Store multiple activity-preserve records.
@@ -373,8 +371,7 @@ impl FirestoreDb {
                     .document_id(&doc_id)
                     .object(&record)
                     .execute()
-                    .await
-                    .map_err(|e| AppError::Database(e.to_string()))?;
+                    .await?;
 
                 Ok::<_, AppError>(())
             })
@@ -403,7 +400,7 @@ impl FirestoreDb {
             .obj()
             .one(&athlete_id.to_string())
             .await
-            .map_err(|e| AppError::Database(e.to_string()))
+            .map_err(AppError::from)
     }
 
     /// Store user stats aggregate document.
@@ -422,8 +419,7 @@ impl FirestoreDb {
             .document_id(athlete_id.to_string())
             .object(stats)
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 
@@ -457,7 +453,13 @@ impl FirestoreDb {
                 // Document already exists, which is fine for "ensure" logic.
                 Ok(())
             }
-            Err(e) => Err(AppError::Firestore(e)),
+            Err(firestore::errors::FirestoreError::DataConflictError(ref e))
+                if e.public.code == "AlreadyExists" =>
+            {
+                // Document already exists, which is fine for "ensure" logic.
+                Ok(())
+            }
+            Err(e) => Err(AppError::from(e)),
         }
     }
 
@@ -745,10 +747,7 @@ impl FirestoreDb {
         let client = self.get_client()?;
 
         for chunk in items.chunks(BATCH_SIZE) {
-            let mut transaction = client
-                .begin_transaction()
-                .await
-                .map_err(|e| AppError::Database(format!("Failed to begin transaction: {}", e)))?;
+            let mut transaction = client.begin_transaction().await?;
 
             for item in chunk {
                 let doc_id = id_extractor(item);
@@ -757,18 +756,10 @@ impl FirestoreDb {
                     .delete()
                     .from(collection)
                     .document_id(&doc_id)
-                    .add_to_transaction(&mut transaction)
-                    .map_err(|e| {
-                        AppError::Database(format!(
-                            "Failed to add deletion to transaction for {}: {}",
-                            collection, e
-                        ))
-                    })?;
+                    .add_to_transaction(&mut transaction)?;
             }
 
-            transaction.commit().await.map_err(|e| {
-                AppError::Database(format!("Failed to commit batch deletion: {}", e))
-            })?;
+            transaction.commit().await?;
         }
 
         Ok(())
@@ -800,8 +791,7 @@ impl FirestoreDb {
             .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
             .obj()
             .query()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
 
         let count = preserve_records.len();
         self.batch_delete(
@@ -826,8 +816,7 @@ impl FirestoreDb {
             .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
             .obj()
             .query()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
 
         let count = activities.len();
         self.batch_delete(
@@ -847,8 +836,7 @@ impl FirestoreDb {
             .from(collections::USER_STATS)
             .document_id(athlete_id.to_string())
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         deleted_count += 1;
         tracing::debug!(athlete_id, "Deleted user stats");
 
@@ -859,8 +847,7 @@ impl FirestoreDb {
             .from(collections::USERS)
             .document_id(athlete_id.to_string())
             .execute()
-            .await
-            .map_err(|e| AppError::Database(e.to_string()))?;
+            .await?;
         deleted_count += 1;
         tracing::debug!(athlete_id, "Deleted user profile");
 

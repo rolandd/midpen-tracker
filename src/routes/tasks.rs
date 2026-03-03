@@ -76,11 +76,12 @@ async fn process_activity(
 
             StatusCode::OK
         }
-        Err(AppError::NotFound(msg)) if msg.contains("Tokens") || msg.contains("User") => {
+        Err(AppError::NotFound(crate::error::ResourceNotFound::Tokens(id)))
+        | Err(AppError::NotFound(crate::error::ResourceNotFound::User(id))) => {
             tracing::warn!(
                 activity_id = payload.activity_id,
                 athlete_id = payload.athlete_id,
-                error = %msg,
+                missing_id = %id,
                 "User/Tokens not found during processing - stopping retry (user likely deleted)"
             );
             // Decrement pending count since this task is finished (terminally failed)
@@ -517,7 +518,7 @@ async fn delete_activity(
                 "Activity not found locally - proceeding with cleanup"
             );
         }
-        Err(AppError::StravaApi(ref s)) if s.contains("404") => {
+        Err(AppError::StravaApi(crate::error::StravaError::NotFound)) => {
             // Activity not found on Strava -> Deletion is REAL -> Proceed
             tracing::info!(
                 activity_id = payload.activity_id,

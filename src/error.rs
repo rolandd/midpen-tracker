@@ -10,6 +10,72 @@ use axum::{
 };
 use serde::Serialize;
 
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum ResourceNotFound {
+    #[error("User {0} not found")]
+    User(u64),
+    #[error("Tokens for athlete {0} not found")]
+    Tokens(u64),
+    #[error("Activity {0} not found")]
+    Activity(u64),
+    #[error("{0}")]
+    Other(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StravaError {
+    #[error("Rate limit exceeded")]
+    RateLimit,
+    #[error("Token expired or invalid")]
+    TokenInvalid,
+    #[error("Invalid grant (refresh token race)")]
+    InvalidGrant,
+    #[error("Resource not found (404)")]
+    NotFound,
+    #[error("Network error: {0}")]
+    Network(String),
+    #[error("API returned {0}: {1}")]
+    ApiError(reqwest::StatusCode, String),
+    #[error("Failed to parse response: {0}")]
+    Parse(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+mod private {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct InternalSeal;
+}
+use private::InternalSeal;
+
+#[derive(Debug, thiserror::Error)]
+pub enum DbError {
+    #[error("Transaction aborted due to contention")]
+    Aborted,
+    #[error("Firestore error: {0}")]
+    Firestore(firestore::errors::FirestoreError, InternalSeal),
+    #[error("Connection error: {0}")]
+    Connection(String),
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<firestore::errors::FirestoreError> for DbError {
+    fn from(err: firestore::errors::FirestoreError) -> Self {
+        let is_aborted = match &err {
+            firestore::errors::FirestoreError::DatabaseError(e) => e.public.code == "Aborted",
+            firestore::errors::FirestoreError::DataConflictError(e) => e.public.code == "Aborted",
+            _ => false,
+        };
+
+        if is_aborted {
+            DbError::Aborted
+        } else {
+            DbError::Firestore(err, InternalSeal)
+        }
+    }
+}
+
 /// Application error type that converts to HTTP responses.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -20,25 +86,28 @@ pub enum AppError {
     InvalidToken,
 
     #[error("Resource not found: {0}")]
-    NotFound(String),
+    NotFound(#[from] ResourceNotFound),
 
     #[error("Invalid request: {0}")]
     BadRequest(String),
 
     #[error("Strava API error: {0}")]
-    StravaApi(String),
+    StravaApi(#[from] StravaError),
 
     #[error("Database error: {0}")]
-    Database(String),
+    Database(#[from] DbError),
 
     #[error("Validation error: {0}")]
     Validation(#[from] validator::ValidationErrors),
 
-    #[error("Firestore error: {0}")]
-    Firestore(#[from] firestore::errors::FirestoreError),
-
     #[error("Internal server error: {0}")]
     Internal(#[from] anyhow::Error),
+}
+
+impl From<firestore::errors::FirestoreError> for AppError {
+    fn from(err: firestore::errors::FirestoreError) -> Self {
+        AppError::Database(DbError::from(err))
+    }
 }
 
 impl AppError {
@@ -47,26 +116,12 @@ impl AppError {
 
     /// Check if this error indicates a Strava token issue (expired/revoked).
     pub fn is_strava_token_error(&self) -> bool {
-        match self {
-            AppError::StravaApi(msg) => {
-                msg.contains("Token expired") || msg.contains("invalid") || msg.contains("Invalid")
-            }
-            _ => false,
-        }
+        matches!(self, AppError::StravaApi(StravaError::TokenInvalid))
     }
 
     /// Check if this error indicates a database transaction conflict (ABORTED).
     pub fn is_db_aborted(&self) -> bool {
-        match self {
-            AppError::Firestore(firestore::errors::FirestoreError::DatabaseError(ref e)) => {
-                e.public.code == "Aborted"
-            }
-            AppError::Database(msg) => {
-                // Check for common Firestore/gRPC aborted error strings
-                msg.contains("Aborted") || msg.contains("contention") || msg.contains("ABORTED")
-            }
-            _ => false,
-        }
+        matches!(self, AppError::Database(DbError::Aborted))
     }
 }
 
@@ -83,7 +138,7 @@ impl IntoResponse for AppError {
         let (status, error, details) = match &self {
             AppError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized", None),
             AppError::InvalidToken => (StatusCode::UNAUTHORIZED, "invalid_token", None),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", Some(msg.clone())),
+            AppError::NotFound(err) => (StatusCode::NOT_FOUND, "not_found", Some(err.to_string())),
             AppError::BadRequest(msg) => {
                 (StatusCode::BAD_REQUEST, "bad_request", Some(msg.clone()))
             }
@@ -93,15 +148,13 @@ impl IntoResponse for AppError {
                 let msg = format!("Validation failed: {}", errs);
                 (StatusCode::BAD_REQUEST, "validation_error", Some(msg))
             }
-            AppError::StravaApi(msg) => {
-                (StatusCode::BAD_GATEWAY, "strava_error", Some(msg.clone()))
-            }
-            AppError::Database(msg) => {
-                tracing::error!(error = %msg, "Database error");
-                (StatusCode::INTERNAL_SERVER_ERROR, "database_error", None)
-            }
-            AppError::Firestore(err) => {
-                tracing::error!(error = ?err, "Firestore error");
+            AppError::StravaApi(err) => (
+                StatusCode::BAD_GATEWAY,
+                "strava_error",
+                Some(err.to_string()),
+            ),
+            AppError::Database(err) => {
+                tracing::error!(error = ?err, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "database_error", None)
             }
             AppError::Internal(err) => {
@@ -121,3 +174,32 @@ impl IntoResponse for AppError {
 
 /// Result type alias for handlers
 pub type Result<T> = std::result::Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_strava_token_error() {
+        assert!(AppError::StravaApi(StravaError::TokenInvalid).is_strava_token_error());
+        assert!(!AppError::StravaApi(StravaError::RateLimit).is_strava_token_error());
+        assert!(!AppError::Unauthorized.is_strava_token_error());
+    }
+
+    #[test]
+    fn test_is_db_aborted() {
+        assert!(AppError::Database(DbError::Aborted).is_db_aborted());
+        assert!(!AppError::Database(DbError::Connection("foo".to_string())).is_db_aborted());
+
+        let fs_err = firestore::errors::FirestoreError::DatabaseError(
+            firestore::errors::FirestoreDatabaseError {
+                public: firestore::errors::FirestoreErrorPublicGenericDetails {
+                    code: "Aborted".to_string(),
+                },
+                details: "test".to_string(),
+                retry_possible: false,
+            },
+        );
+        assert!(AppError::from(fs_err).is_db_aborted());
+    }
+}
