@@ -3,13 +3,14 @@
 
 //! API routes for authenticated users.
 
+use crate::config::{MAX_DATE_LEN, MAX_NAME_LEN, MAX_PAGES, MAX_PER_PAGE, MAX_TOKEN_LEN};
 use crate::db::firestore::ActivityQueryCursor;
 use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::models::preserve::PreserveSummary;
 use crate::models::ActivityPreserve;
 use crate::services::tasks::DeleteUserPayload;
-use crate::time_utils::format_utc_rfc3339;
+use crate::time_utils::{format_utc_rfc3339, validate_rfc3339};
 use crate::AppState;
 use axum::{
     extract::{Query, State},
@@ -22,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
 use ts_rs::TS;
+use validator::Validate;
 
 const STUCK_PENDING_COUNT_TIMEOUT_MINUTES: i64 = 15;
 
@@ -133,30 +135,35 @@ async fn delete_account(
 
 // ─── Activities ──────────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 struct ActivitiesQuery {
     /// Filter by preserve name
+    #[validate(length(max = "MAX_NAME_LEN"))]
     preserve: Option<String>,
     /// Filter by start date (ISO 8601)
+    #[validate(length(max = "MAX_DATE_LEN"), custom(function = validate_rfc3339))]
     after: Option<String>,
     /// Cursor for forward pagination (opaque token).
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     cursor: Option<String>,
     /// Pagination: page number (1-indexed)
     #[serde(default = "default_page")]
+    #[validate(range(min = 1, max = "MAX_PAGES"))]
     page: u32,
     /// Pagination: items per page
     #[serde(default = "default_per_page")]
+    #[validate(range(min = 1, max = "MAX_PER_PAGE"))]
     per_page: u32,
 }
 
 fn default_page() -> u32 {
     1
 }
+
 fn default_per_page() -> u32 {
     50
 }
 
-const MAX_PER_PAGE: u32 = 100;
 const CURSOR_PARTS: usize = 3;
 
 fn parse_after_timestamp(after: Option<&str>) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
@@ -251,6 +258,8 @@ async fn get_activities(
     Extension(user): Extension<AuthUser>,
     Query(params): Query<ActivitiesQuery>,
 ) -> Result<Json<ActivitiesResponse>> {
+    params.validate()?;
+
     tracing::debug!(
         athlete_id = user.athlete_id,
         preserve = ?params.preserve,
@@ -260,19 +269,7 @@ async fn get_activities(
         "Fetching activities"
     );
 
-    if params.page < 1 {
-        return Err(crate::error::AppError::BadRequest(
-            "Page must be greater than 0".to_string(),
-        ));
-    }
-
-    if params.per_page < 1 {
-        return Err(crate::error::AppError::BadRequest(
-            "per_page must be greater than 0".to_string(),
-        ));
-    }
-
-    let limit = params.per_page.min(MAX_PER_PAGE);
+    let limit = params.per_page;
     let after_timestamp = parse_after_timestamp(params.after.as_deref())?;
     let cursor = parse_cursor(params.cursor.as_deref())?;
 
@@ -394,7 +391,7 @@ async fn get_activities(
 
 // ─── Preserve Stats ──────────────────────────────────────────
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 struct PreserveStatsQuery {
     /// Include preserves with 0 visits
     #[serde(default)]
@@ -431,6 +428,7 @@ async fn get_preserve_stats(
     Extension(user): Extension<AuthUser>,
     Query(params): Query<PreserveStatsQuery>,
 ) -> Result<Json<PreserveStatsResponse>> {
+    params.validate()?;
     let all_preserves = state.preserve_service.preserves();
     let total_preserves = all_preserves.len() as u32;
 

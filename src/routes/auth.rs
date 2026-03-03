@@ -16,8 +16,10 @@ use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use subtle::ConstantTimeEq;
-use time; // Added time import for Cookie max_age
+use time; // for Cookie max_age
+use validator::Validate;
 
+use crate::config::{MAX_STATE_LEN, MAX_TOKEN_LEN, MAX_URL_LEN};
 use crate::error::{AppError, Result};
 use crate::services::strava::StravaService;
 use crate::AppState;
@@ -37,11 +39,12 @@ pub fn routes() -> Router<Arc<AppState>> {
 use crate::middleware::auth::create_jwt;
 
 /// Query parameters for starting OAuth flow.
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct AuthStartParams {
     /// Frontend URL to redirect back to after OAuth completes.
     /// If not provided, uses FRONTEND_URL env var.
     #[serde(default)]
+    #[validate(length(max = "MAX_URL_LEN"))]
     redirect_uri: Option<String>,
 }
 
@@ -59,6 +62,8 @@ async fn auth_start(
     jar: CookieJar,
     Query(params): Query<AuthStartParams>,
 ) -> Result<impl IntoResponse> {
+    params.validate()?;
+
     // Get the frontend URL from query param or fall back to config
     // Strictly validate redirect_uri to prevent open redirects
     let frontend_url = if let Some(ref uri) = params.redirect_uri {
@@ -139,11 +144,14 @@ async fn auth_start(
     Ok((jar.add(cookie), Redirect::temporary(&auth_url)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 pub struct CallbackParams {
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     code: String,
+    #[validate(length(max = "MAX_STATE_LEN"))]
     state: String,
     #[serde(default)]
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     error: Option<String>,
 }
 
@@ -153,6 +161,8 @@ async fn auth_callback(
     jar: CookieJar,
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse> {
+    params.validate()?;
+
     // Get nonce from cookie
     let nonce_cookie = jar.get(NONCE_COOKIE_NAME).map(|c| c.value().to_string());
 

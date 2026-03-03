@@ -3,12 +3,14 @@
 
 //! Webhook routes for Strava events.
 
+use crate::config::{MAX_METADATA_LEN, MAX_TOKEN_LEN};
 use crate::services::tasks::{DeleteActivityPayload, DeleteUserPayload, ProcessActivityPayload};
 use crate::AppState;
 use axum::{
     body::Bytes,
-    extract::{DefaultBodyLimit, Json, Path, Query, State},
+    extract::{DefaultBodyLimit, Json, Path, Query, Request, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::IntoResponse,
     routing::get,
     Router,
@@ -16,23 +18,35 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
+use validator::Validate;
 
 /// Webhook routes.
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/webhook/{uuid}", get(verify).post(handle_event))
+        // Limit path length to prevent allocation of huge strings in the router.
+        // MAX_TOKEN_LEN (256) is plenty for /webhook/<uuid>.
+        .layer(middleware::from_fn(|req: Request, next: Next| async move {
+            if req.uri().path().len() > MAX_TOKEN_LEN as usize {
+                return StatusCode::URI_TOO_LONG.into_response();
+            }
+            next.run(req).await
+        }))
         // Strava payloads are small (<1KB), so 16KB is a safe conservative limit
         .layer(DefaultBodyLimit::max(16384))
 }
 
 /// Strava webhook verification query params.
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 struct VerifyParams {
     #[serde(rename = "hub.mode")]
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     mode: String,
     #[serde(rename = "hub.challenge")]
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     challenge: String,
     #[serde(rename = "hub.verify_token")]
+    #[validate(length(max = "MAX_TOKEN_LEN"))]
     verify_token: String,
 }
 
@@ -49,6 +63,11 @@ async fn verify(
     Path(uuid): Path<String>,
     Query(params): Query<VerifyParams>,
 ) -> impl IntoResponse {
+    if let Err(e) = params.validate() {
+        tracing::error!(error = %e, "Invalid webhook verification params");
+        return (StatusCode::BAD_REQUEST, Json(VerifyResponse::default()));
+    }
+
     // Validate Path UUID (constant-time comparison to prevent timing attacks)
     if !bool::from(
         uuid.as_bytes()
@@ -86,10 +105,12 @@ async fn verify(
 }
 
 /// Strava webhook event payload.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Validate)]
 struct WebhookEvent {
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     object_type: String, // "activity" or "athlete"
     object_id: u64,
+    #[validate(length(max = "MAX_METADATA_LEN"))]
     aspect_type: String, // "create", "update", "delete"
     owner_id: u64,
     subscription_id: u64,
@@ -135,6 +156,11 @@ async fn handle_event(
             return StatusCode::OK; // Still return 200 to Strava to avoid retries
         }
     };
+
+    if let Err(e) = event.validate() {
+        tracing::error!(error = %e, "Invalid webhook event payload");
+        return StatusCode::OK; // Still return 200 to Strava
+    }
 
     // Validate Subscription ID
     if event.subscription_id != state.config.strava_subscription_id {
