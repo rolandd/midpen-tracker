@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 
 /// Pre-computed statistics for a user.
 ///
-/// Stored at: `users/{athlete_id}/stats/aggregates`
+/// Stored at: `user_stats/{athlete_id}`
 ///
 /// Updated atomically with activity writes via Firestore transactions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
