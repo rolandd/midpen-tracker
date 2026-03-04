@@ -18,6 +18,7 @@ const DISCOVERY_URL: &str = "https://accounts.google.com/.well-known/openid-conf
 const DEFAULT_JWKS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const DEFAULT_HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_CACHE_TTL: Duration = Duration::from_secs(300);
+const REFRESH_COOLDOWN: Duration = Duration::from_secs(60);
 const CLOCK_SKEW_SECS: u64 = 60;
 
 /// Verified Cloud Tasks principal extracted from a valid OIDC token.
@@ -66,7 +67,7 @@ pub struct GoogleOidcVerifier {
     mode: VerifierMode,
     discovery_cache: RwLock<Option<DiscoveryCacheEntry>>,
     jwks_cache: RwLock<Option<JwksCacheEntry>>,
-    refresh_lock: Mutex<()>,
+    refresh_lock: Mutex<Instant>,
 }
 
 impl GoogleOidcVerifier {
@@ -96,7 +97,7 @@ impl GoogleOidcVerifier {
             mode: VerifierMode::Google,
             discovery_cache: RwLock::new(None),
             jwks_cache: RwLock::new(None),
-            refresh_lock: Mutex::new(()),
+            refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
         })
     }
 
@@ -134,7 +135,7 @@ impl GoogleOidcVerifier {
             },
             discovery_cache: RwLock::new(None),
             jwks_cache: RwLock::new(None),
-            refresh_lock: Mutex::new(()),
+            refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
         })
     }
 
@@ -246,8 +247,9 @@ impl GoogleOidcVerifier {
             }
         }
 
-        Err(OidcError::Forbidden(format!(
-            "JWT kid not found in JWKS after refresh: {kid}"
+        // If it's still not found, return a Transient error so Cloud Tasks retries
+        Err(OidcError::Transient(format!(
+            "JWT kid not found in JWKS: {kid} after refresh (will retry later)"
         )))
     }
 
@@ -262,7 +264,7 @@ impl GoogleOidcVerifier {
     }
 
     async fn refresh_jwks(&self, force_refresh: bool) -> Result<(), OidcError> {
-        let _guard = self.refresh_lock.lock().await;
+        let mut last_refresh = self.refresh_lock.lock().await;
 
         if !force_refresh {
             let cache = self.jwks_cache.read().await;
@@ -272,6 +274,13 @@ impl GoogleOidcVerifier {
             {
                 return Ok(());
             }
+        } else if last_refresh.elapsed() < REFRESH_COOLDOWN {
+            tracing::info!(
+                elapsed = ?last_refresh.elapsed(),
+                cooldown = ?REFRESH_COOLDOWN,
+                "Skipping OIDC force refresh: last refresh was too recent"
+            );
+            return Ok(());
         }
 
         let jwks_uri = self.resolve_jwks_uri(force_refresh).await;
@@ -283,7 +292,7 @@ impl GoogleOidcVerifier {
             }
         };
 
-        tracing::debug!(jwks_uri = %jwks_uri, "Refreshing Google JWKS cache");
+        tracing::debug!(jwks_uri = %jwks_uri, force_refresh, "Refreshing Google JWKS cache");
 
         let response = self
             .http_client
@@ -351,6 +360,7 @@ impl GoogleOidcVerifier {
         };
 
         *self.jwks_cache.write().await = Some(entry);
+        *last_refresh = Instant::now();
 
         tracing::debug!(ttl_secs = ttl.as_secs(), "Google JWKS cache refreshed");
         Ok(())
