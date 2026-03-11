@@ -8,34 +8,64 @@
 	import Content from '$lib/assets/about.md';
 	import { SocialLink } from '$lib/components';
 
+	let modalRef = $state<HTMLElement>();
+	let previousActiveElement = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		previousActiveElement = document.activeElement as HTMLElement;
+		modalRef?.focus();
+
+		return () => {
+			previousActiveElement?.focus();
+		};
+	});
+
 	function close() {
 		uiState.isAboutOpen = false;
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
+			e.preventDefault();
 			close();
+			return;
+		}
+
+		if (e.key === 'Tab' && modalRef) {
+			const focusable = modalRef.querySelectorAll<HTMLElement>(
+				'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+			);
+
+			if (!focusable.length) return;
+
+			const first = focusable[0];
+			const last = focusable[focusable.length - 1];
+
+			if (e.shiftKey) {
+				if (document.activeElement === first) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else {
+				if (document.activeElement === last) {
+					e.preventDefault();
+					first.focus();
+				}
+			}
 		}
 	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div
-	class="backdrop"
-	transition:fade={{ duration: 200 }}
-	onclick={close}
-	onkeydown={(e) => {
-		if (e.key === 'Escape') close();
-	}}
-	role="button"
-	tabindex="0"
->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="backdrop" transition:fade={{ duration: 200 }} onclick={close}>
 	<div
+		bind:this={modalRef}
 		class="modal"
 		transition:fly={{ y: 20, duration: 300 }}
 		onclick={(e) => e.stopPropagation()}
-		onkeydown={(e) => e.stopPropagation()}
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
