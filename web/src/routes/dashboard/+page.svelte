@@ -257,18 +257,38 @@
 						<div class="preserve-card card" class:unvisited={preserve.count === 0}>
 							<button
 								type="button"
-								class="preserve-header-btn"
+								class="preserve-header-btn group"
 								aria-expanded={expandedPreserve === preserve.name}
+								aria-controls="preserve-content-{preserve.name.replace(/\s+/g, '-').toLowerCase()}"
 								onclick={() => togglePreserve(preserve.name)}
 							>
 								<div class="preserve-header">
 									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="flex items-center gap-2">
+										<span class="preserve-count">{preserve.count}</span>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											class="text-text-muted transition-transform duration-200 group-aria-expanded:rotate-180"
+											aria-hidden="true"
+										>
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									</div>
 								</div>
 							</button>
 
 							{#if expandedPreserve === preserve.name}
-								<ActivityList preserveName={preserve.name} />
+								<div id="preserve-content-{preserve.name.replace(/\s+/g, '-').toLowerCase()}">
+									<ActivityList preserveName={preserve.name} />
+								</div>
 							{/if}
 						</div>
 					</li>
