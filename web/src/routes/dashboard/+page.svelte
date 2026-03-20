@@ -259,17 +259,38 @@
 								type="button"
 								class="preserve-header-btn"
 								aria-expanded={expandedPreserve === preserve.name}
+								aria-controls="activities-{preserve.name.replace(/\s+/g, '-').toLowerCase()}"
 								onclick={() => togglePreserve(preserve.name)}
 							>
 								<div class="preserve-header">
 									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="preserve-header-right">
+										<span class="preserve-count">{preserve.count}</span>
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											class="preserve-chevron"
+											class:expanded={expandedPreserve === preserve.name}
+											aria-hidden="true"
+										>
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									</div>
 								</div>
 							</button>
 
-							{#if expandedPreserve === preserve.name}
-								<ActivityList preserveName={preserve.name} />
-							{/if}
+							<div id="activities-{preserve.name.replace(/\s+/g, '-').toLowerCase()}">
+								{#if expandedPreserve === preserve.name}
+									<ActivityList preserveName={preserve.name} />
+								{/if}
+							</div>
 						</div>
 					</li>
 				{/each}
@@ -581,12 +602,34 @@
 		font-weight: 500;
 	}
 
+	.preserve-header-right {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
 	.preserve-count {
 		background: var(--color-bg);
 		padding: 0.25rem 0.75rem;
 		border-radius: 999px;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.preserve-chevron {
+		color: var(--color-text-muted);
+		transition:
+			transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+			color 0.2s;
+	}
+
+	.preserve-header-btn:hover .preserve-chevron {
+		color: var(--color-text);
+	}
+
+	.preserve-chevron.expanded {
+		transform: rotate(180deg);
+		color: var(--color-primary);
 	}
 
 	/* Activity styles moved to ActivityList.svelte */

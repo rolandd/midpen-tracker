@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2024-03-20 - Ensure aria-controls targets exist in the DOM
+**Learning:** When building accordions with Svelte `{#if}` blocks, the target `div` for `aria-controls` MUST remain in the DOM permanently, even when collapsed. If the target element is conditionally rendered out, screen readers will announce broken ARIA references when reading the trigger button.
+**Action:** Place `{#if expanded}` blocks INSIDE the target container (`<div id="...">`) instead of wrapping the entire container.
