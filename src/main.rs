@@ -72,7 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db.clone(),
         kms,
         token_cache,
-    );
+    )
+    .expect("Failed to initialize Strava service");
 
     // Build shared state
     let state = Arc::new(AppState {
