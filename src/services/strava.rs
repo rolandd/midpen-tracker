@@ -27,7 +27,12 @@ impl StravaClient {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
-            .map_err(|e| crate::error::AppError::Internal(anyhow::anyhow!("Failed to build Strava HTTP client: {}", e)))?;
+            .map_err(|e| {
+                crate::error::AppError::Internal(anyhow::anyhow!(
+                    "Failed to build Strava HTTP client: {}",
+                    e
+                ))
+            })?;
 
         Ok(Self {
             http,
