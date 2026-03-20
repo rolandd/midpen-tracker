@@ -23,13 +23,23 @@ pub struct StravaClient {
 
 impl StravaClient {
     /// Create a new Strava client with OAuth credentials.
-    pub fn new(client_id: String, client_secret: String) -> Self {
-        Self {
-            http: reqwest::Client::new(),
+    pub fn new(client_id: String, client_secret: String) -> Result<Self, AppError> {
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| {
+                crate::error::AppError::Internal(anyhow::anyhow!(
+                    "Failed to build Strava HTTP client: {}",
+                    e
+                ))
+            })?;
+
+        Ok(Self {
+            http,
             base_url: "https://www.strava.com/api/v3".to_string(),
             client_id,
             client_secret,
-        }
+        })
     }
 
     /// Get a detailed activity by ID.
@@ -347,21 +357,21 @@ impl StravaService {
         db: FirestoreDb,
         kms: KmsService,
         token_cache: TokenCache,
-    ) -> Self {
+    ) -> Result<Self, AppError> {
         const {
             // make sure we don't accidentally break things
             assert!(LOCK_SHARDS > 0, "LOCK_SHARDS must be greater than 0.");
         }
         let refresh_locks = Arc::new((0..LOCK_SHARDS).map(|_| Mutex::new(())).collect());
 
-        Self {
-            client: StravaClient::new(client_id, client_secret),
+        Ok(Self {
+            client: StravaClient::new(client_id, client_secret)?,
             db,
             kms,
             token_cache,
             refresh_locks,
             hasher_builder: std::hash::RandomState::new(),
-        }
+        })
     }
 
     /// Acquire the refresh lock for a specific athlete.

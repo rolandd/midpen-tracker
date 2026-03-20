@@ -195,7 +195,8 @@ pub fn create_test_app_with_frontend_url(frontend_url: &str) -> (axum::Router, A
         db.clone(),
         kms,
         token_cache,
-    );
+    )
+    .expect("Failed to initialize Strava service for tests");
 
     let state = Arc::new(AppState {
         config,
