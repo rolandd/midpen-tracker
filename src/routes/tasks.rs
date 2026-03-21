@@ -247,12 +247,23 @@ async fn continue_backfill(
             }
         };
 
+        let queued_count_so_far = match payload.queued_count_so_far.checked_add(count as u32) {
+            Some(c) => c,
+            None => {
+                tracing::warn!(
+                    athlete_id = payload.athlete_id,
+                    "Backfill queued count limit reached (u32 overflow) - saturating"
+                );
+                u32::MAX
+            }
+        };
+
         let next_payload = ContinueBackfillPayload {
             athlete_id: payload.athlete_id,
             next_page,
             after_timestamp: payload.after_timestamp,
             scan_id: payload.scan_id.clone(),
-            queued_count_so_far: payload.queued_count_so_far + count as u32,
+            queued_count_so_far,
         };
 
         if let Err(e) = state
