@@ -271,38 +271,149 @@ impl FirestoreDb {
     }
 
     /// Delete an activity and update user stats.
+    ///
+    /// This method uses an incremental update (decrement) when possible to avoid
+    /// O(N) recalculation. It falls back to full recalculation only if the deleted
+    /// activity was a "boundary" activity (first or last visit to a preserve).
     pub async fn delete_activity(&self, activity_id: u64, athlete_id: u64) -> Result<(), AppError> {
-        // Delete the activity document
+        // 1. Fetch the activity first to know what we are deleting.
+        // If it doesn't exist, we can't do an incremental update anyway.
+        let activity = self.get_activity(activity_id).await?;
+
+        let Some(activity) = activity else {
+            tracing::warn!(activity_id, athlete_id, "Attempted to delete non-existent activity");
+            return Ok(());
+        };
+
+        // 2. Execute the deletion and stats update in a transaction.
+        let mut attempts = 0;
+        loop {
+            let result = self.execute_delete_activity_transaction(athlete_id, &activity).await;
+
+            match result {
+                Ok(()) => return Ok(()),
+                Err(e) if e.is_db_aborted() && attempts < MAX_TX_RETRIES => {
+                    attempts += 1;
+                    let delay = INITIAL_RETRY_DELAY * 2_u32.pow(attempts - 1);
+                    tracing::warn!(
+                        athlete_id,
+                        activity_id,
+                        attempt = attempts,
+                        error = %e,
+                        "Delete activity transaction aborted, retrying in {}ms",
+                        delay.as_millis()
+                    );
+                    tokio::time::sleep(delay).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Internal helper to execute a single delete activity transaction attempt.
+    async fn execute_delete_activity_transaction(
+        &self,
+        athlete_id: u64,
+        activity_to_delete: &Activity,
+    ) -> Result<(), AppError> {
+        let activity_id = activity_to_delete.strava_activity_id;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Begin transaction
+        let mut transaction = self.get_client()?.begin_transaction().await?;
+        let tx_client = self.get_client()?.clone_with_consistency_selector(
+            FirestoreConsistencySelector::Transaction(transaction.transaction_id().clone()),
+        );
+
+        // 1. Read current stats
+        let current_stats: Option<crate::models::UserStats> = tx_client
+            .fluent()
+            .select()
+            .by_id_in(collections::USER_STATS)
+            .obj()
+            .one(&athlete_id.to_string())
+            .await?;
+
+        let mut stats = current_stats.unwrap_or_default();
+
+        // 2. Determine if we can do incremental update or need full recalculation.
+        if stats.is_boundary_activity(activity_to_delete) {
+            tracing::info!(
+                athlete_id,
+                activity_id,
+                "Deleting boundary activity, performing full stats recalculation"
+            );
+
+            // Re-calculate stats for the user to ensure consistency.
+            // We read ALL activities for the user.
+            // Note: Since we are inside a transaction, we should technically read them
+            // using the transaction client to ensure consistency, but Firestore doesn't
+            // support large queries inside transactions easily (limits on number of docs).
+            // However, since we are deleting the activity in this same transaction,
+            // as long as we exclude it from the recalculation, we are fine.
+
+            // We'll perform the query OUTSIDE the transaction for safety against large sets,
+            // but then apply the update INSIDE.
+            let all_activities = self
+                .get_client()?
+                .fluent()
+                .select()
+                .from(collections::ACTIVITIES)
+                .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
+                .obj::<Activity>()
+                .query()
+                .await?;
+
+            let mut new_stats = crate::models::UserStats::default();
+            for act in all_activities {
+                if act.strava_activity_id != activity_id {
+                    new_stats.update_from_activity(&act, &now);
+                }
+            }
+            stats = new_stats;
+        } else {
+            tracing::debug!(
+                athlete_id,
+                activity_id,
+                "Performing O(1) incremental stats update for deletion"
+            );
+            stats.decrement_from_activity(activity_to_delete, &now);
+        }
+
+        // 3. Queue deletions and stats update
+
+        // Delete activity document
         self.get_client()?
             .fluent()
             .delete()
             .from(collections::ACTIVITIES)
             .document_id(activity_id.to_string())
-            .execute()
-            .await?;
+            .add_to_transaction(&mut transaction)?;
 
-        // Re-calculate stats for the user to ensure consistency
-        // This is expensive but infrequent (deletes are rare)
-        // TODO: Could optimize by decrementing, but recalculation is safer
-
-        let activities = self
-            .get_client()?
-            .fluent()
-            .select()
-            .from(collections::ACTIVITIES)
-            .filter(|q| q.for_all([q.field("athlete_id").eq(athlete_id)]))
-            .obj::<Activity>()
-            .query()
-            .await?;
-
-        let mut new_stats = crate::models::UserStats::default();
-        let now = chrono::Utc::now().to_rfc3339();
-
-        for activity in activities {
-            new_stats.update_from_activity(&activity, &now);
+        // Delete activity-preserve join records
+        // We need to know which preserves to delete.
+        for preserve_name in &activity_to_delete.preserves_visited {
+            let safe_name = urlencoding::encode(preserve_name);
+            let doc_id = format!("{}_{}", activity_id, safe_name);
+            self.get_client()?
+                .fluent()
+                .delete()
+                .from(collections::ACTIVITY_PRESERVES)
+                .document_id(&doc_id)
+                .add_to_transaction(&mut transaction)?;
         }
 
-        self.set_user_stats(athlete_id, &new_stats).await?;
+        // Update stats document
+        self.get_client()?
+            .fluent()
+            .update()
+            .in_col(collections::USER_STATS)
+            .document_id(athlete_id.to_string())
+            .object(&stats)
+            .add_to_transaction(&mut transaction)?;
+
+        // 4. Commit
+        transaction.commit().await?;
 
         Ok(())
     }
