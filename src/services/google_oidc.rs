@@ -60,14 +60,20 @@ struct JwksCacheEntry {
 }
 
 /// Verifier for Cloud Tasks-issued OIDC ID tokens.
-pub struct GoogleOidcVerifier {
+struct VerifierSharedState {
     http_client: reqwest::Client,
-    expected_audience: String,
-    expected_service_account_email: String,
-    mode: VerifierMode,
     discovery_cache: RwLock<Option<DiscoveryCacheEntry>>,
     jwks_cache: RwLock<Option<JwksCacheEntry>>,
     refresh_lock: Mutex<Instant>,
+}
+
+/// Verifier for Cloud Tasks-issued OIDC ID tokens.
+#[derive(Clone)]
+pub struct GoogleOidcVerifier {
+    state: Arc<VerifierSharedState>,
+    expected_audience: String,
+    expected_service_account_email: String,
+    mode: VerifierMode,
 }
 
 impl GoogleOidcVerifier {
@@ -91,13 +97,15 @@ impl GoogleOidcVerifier {
         );
 
         Ok(Self {
-            http_client,
+            state: Arc::new(VerifierSharedState {
+                http_client,
+                discovery_cache: RwLock::new(None),
+                jwks_cache: RwLock::new(None),
+                refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
+            }),
             expected_audience,
             expected_service_account_email,
             mode: VerifierMode::Google,
-            discovery_cache: RwLock::new(None),
-            jwks_cache: RwLock::new(None),
-            refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
         })
     }
 
@@ -126,16 +134,18 @@ impl GoogleOidcVerifier {
         );
 
         Ok(Self {
-            http_client,
+            state: Arc::new(VerifierSharedState {
+                http_client,
+                discovery_cache: RwLock::new(None),
+                jwks_cache: RwLock::new(None),
+                refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
+            }),
             expected_audience,
             expected_service_account_email,
             mode: VerifierMode::StaticKey {
                 kid,
                 decoding_key: Arc::new(decoding_key),
             },
-            discovery_cache: RwLock::new(None),
-            jwks_cache: RwLock::new(None),
-            refresh_lock: Mutex::new(Instant::now() - REFRESH_COOLDOWN),
         })
     }
 
@@ -254,7 +264,7 @@ impl GoogleOidcVerifier {
     }
 
     async fn lookup_cached_key(&self, kid: &str) -> Option<Arc<DecodingKey>> {
-        let cache = self.jwks_cache.read().await;
+        let cache = self.state.jwks_cache.read().await;
         let now = Instant::now();
         cache
             .as_ref()
@@ -264,10 +274,37 @@ impl GoogleOidcVerifier {
     }
 
     async fn refresh_jwks(&self, force_refresh: bool) -> Result<(), OidcError> {
-        let mut last_refresh = self.refresh_lock.lock().await;
+        let now = Instant::now();
 
         if !force_refresh {
-            let cache = self.jwks_cache.read().await;
+            let cache = self.state.jwks_cache.read().await;
+            if let Some(entry) = cache.as_ref() {
+                if entry.expires_at > now {
+                    // Valid cache: if getting close to expiry, trigger a background refresh
+                    if entry.expires_at.duration_since(now) < REFRESH_COOLDOWN {
+                        // Use try_lock to avoid blocking if a refresh is already in progress
+                        if let Ok(mut last_refresh) = self.state.refresh_lock.try_lock() {
+                            if last_refresh.elapsed() >= REFRESH_COOLDOWN {
+                                *last_refresh = Instant::now();
+                                let state = self.state.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) = Self::refresh_jwks_internal(&state, false).await {
+                                        tracing::warn!(error = ?e, "Background JWKS refresh failed");
+                                    }
+                                });
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
+
+        let mut last_refresh = self.state.refresh_lock.lock().await;
+
+        // Double-check cache in case another thread already refreshed it while we were waiting for the lock
+        if !force_refresh {
+            let cache = self.state.jwks_cache.read().await;
             if cache
                 .as_ref()
                 .is_some_and(|entry| entry.expires_at > Instant::now())
@@ -283,7 +320,15 @@ impl GoogleOidcVerifier {
             return Ok(());
         }
 
-        let jwks_uri = self.resolve_jwks_uri(force_refresh).await;
+        *last_refresh = Instant::now();
+        Self::refresh_jwks_internal(&self.state, force_refresh).await
+    }
+
+    async fn refresh_jwks_internal(
+        state: &VerifierSharedState,
+        force_refresh: bool,
+    ) -> Result<(), OidcError> {
+        let jwks_uri = Self::resolve_jwks_uri(state, force_refresh).await;
         let jwks_uri = match jwks_uri {
             Ok(uri) => uri,
             Err(e) => {
@@ -294,7 +339,7 @@ impl GoogleOidcVerifier {
 
         tracing::debug!(jwks_uri = %jwks_uri, force_refresh, "Refreshing Google JWKS cache");
 
-        let response = self
+        let response = state
             .http_client
             .get(&jwks_uri)
             .send()
@@ -359,16 +404,18 @@ impl GoogleOidcVerifier {
             expires_at: Instant::now() + ttl,
         };
 
-        *self.jwks_cache.write().await = Some(entry);
-        *last_refresh = Instant::now();
+        *state.jwks_cache.write().await = Some(entry);
 
         tracing::debug!(ttl_secs = ttl.as_secs(), "Google JWKS cache refreshed");
         Ok(())
     }
 
-    async fn resolve_jwks_uri(&self, force_refresh: bool) -> Result<String, OidcError> {
+    async fn resolve_jwks_uri(
+        state: &VerifierSharedState,
+        force_refresh: bool,
+    ) -> Result<String, OidcError> {
         if !force_refresh {
-            let cache = self.discovery_cache.read().await;
+            let cache = state.discovery_cache.read().await;
             if let Some(entry) = cache
                 .as_ref()
                 .filter(|entry| entry.expires_at > Instant::now())
@@ -377,14 +424,14 @@ impl GoogleOidcVerifier {
             }
         }
 
-        let cached_jwks_uri = self
+        let cached_jwks_uri = state
             .discovery_cache
             .read()
             .await
             .as_ref()
             .map(|entry| entry.jwks_uri.clone());
 
-        let response = self.http_client.get(DISCOVERY_URL).send().await;
+        let response = state.http_client.get(DISCOVERY_URL).send().await;
         match response {
             Ok(resp) if resp.status().is_success() => {
                 let ttl = cache_ttl_from_headers(resp.headers(), DEFAULT_CACHE_TTL);
@@ -393,7 +440,7 @@ impl GoogleOidcVerifier {
                     .await
                     .map_err(|e| OidcError::Transient(format!("invalid discovery JSON: {e}")))?;
 
-                *self.discovery_cache.write().await = Some(DiscoveryCacheEntry {
+                *state.discovery_cache.write().await = Some(DiscoveryCacheEntry {
                     jwks_uri: discovery.jwks_uri.clone(),
                     expires_at: Instant::now() + ttl,
                 });
