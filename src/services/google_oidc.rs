@@ -288,7 +288,8 @@ impl GoogleOidcVerifier {
                                 *last_refresh = Instant::now();
                                 let state = self.state.clone();
                                 tokio::spawn(async move {
-                                    if let Err(e) = Self::refresh_jwks_internal(&state, false).await {
+                                    if let Err(e) = Self::refresh_jwks_internal(&state, false).await
+                                    {
                                         tracing::warn!(error = ?e, "Background JWKS refresh failed");
                                     }
                                 });
