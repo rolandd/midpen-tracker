@@ -29,3 +29,6 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2024-04-03 - Replaced Text Icon with Accessible SVG and Improved Keyboard Navigation
+**Learning:** Using text characters like `↗` for external links causes accessibility issues because screen readers might read them aloud unexpectedly. Also, interactive list items often lack clear focus indicators for keyboard navigation.
+**Action:** Replaced the text character `↗` with a properly styled SVG icon containing `aria-hidden="true"`. Also added `:focus-visible` styles with a clear `outline` to interactive `.activity` items to ensure keyboard users know when the item is focused.
