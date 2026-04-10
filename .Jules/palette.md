@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-06-05 - Accessibility and Visual Consistency of External Links
+**Learning:** External links that use text characters like `↗` can be confusing for screen reader users and misalign visually with modern icons.
+**Action:** Replace text characters for external links with proper decorative SVG icons that include `aria-hidden="true"` to prevent misinterpretation by assistive technologies like screen readers, and ensure visual consistency across the app.
