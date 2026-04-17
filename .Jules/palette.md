@@ -29,3 +29,6 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2024-05-20 - Focus Management on List Items
+**Learning:** Adding `:focus-visible` pseudo-class styling to list items (like links inside a grid layout) significantly improves keyboard navigation clarity compared to relying on browser defaults.
+**Action:** Always include a distinct focus outline using existing design tokens (e.g., `outline: 2px solid var(--color-primary)`) on interactive elements that might otherwise blend into the background when tabbed to.
