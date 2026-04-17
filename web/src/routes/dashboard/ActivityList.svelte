@@ -119,7 +119,24 @@
 						<span class="emoji" title={activity.sport_type}>{getEmoji(activity.sport_type)}</span>
 						<span class="date">{formatDate(activity.start_date)}</span>
 						<span class="name">{activity.name}</span>
-						<span class="link">↗</span>
+						<span class="link">
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="14"
+								height="14"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								aria-hidden="true"
+							>
+								<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+								<polyline points="15 3 21 3 21 9"></polyline>
+								<line x1="10" y1="14" x2="21" y2="3"></line>
+							</svg>
+						</span>
 					</a>
 				</li>
 			{/each}
@@ -168,6 +185,11 @@
 		background: var(--color-bg);
 	}
 
+	.activity:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: 2px;
+	}
+
 	.emoji {
 		font-size: 1.1rem;
 		line-height: 1;
@@ -189,9 +211,14 @@
 	.link {
 		color: var(--color-text-muted);
 		opacity: 0.5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: opacity 0.2s;
 	}
 
-	.activity:hover .link {
+	.activity:hover .link,
+	.activity:focus-visible .link {
 		opacity: 1;
 	}
 
