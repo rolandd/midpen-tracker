@@ -16,7 +16,6 @@ mod common;
 use common::{parse_time, test_db};
 
 /// Generate a unique athlete ID for test isolation.
-
 fn unique_athlete_id() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     // Use last 12 digits of nanoseconds to avoid overflow if needed, but u64 fits all nanos since epoch.

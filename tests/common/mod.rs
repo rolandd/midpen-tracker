@@ -140,7 +140,7 @@ pub fn emulator_available() -> bool {
 #[macro_export]
 macro_rules! require_emulator {
     () => {
-        if !crate::common::emulator_available() {
+        if !$crate::common::emulator_available() {
             eprintln!("⚠️  Skipping: FIRESTORE_EMULATOR_HOST not set");
             return;
         }

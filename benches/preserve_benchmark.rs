@@ -1,8 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use geo::LineString;
 use midpen_tracker::services::PreserveService;
 use serde_json::Value;
 use std::fs;
+use std::hint::black_box;
 
 fn benchmark_find_intersections(c: &mut Criterion) {
     // Load the service once

@@ -50,7 +50,7 @@ fn test_preserve_service_loads() {
     let closed_preserves = ["Felton Station", "Miramontes Ridge", "Tunitas Creek"];
     for closed in closed_preserves {
         assert!(
-            !names.iter().any(|n| *n == closed),
+            !names.contains(&closed),
             "Should NOT have closed preserve: {}",
             closed
         );
