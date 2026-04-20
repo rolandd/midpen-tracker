@@ -102,10 +102,10 @@ fn test_fixture_preserve_intersections() {
         let activity_id = filename.strip_prefix("activity_").unwrap();
 
         // Load activity fixture
-        let activity_json =
-            fs::read_to_string(&path).expect(&format!("Failed to read fixture: {:?}", path));
+        let activity_json = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("Failed to read fixture: {:?}: {}", path, e));
         let activity: FixtureActivity = serde_json::from_str(&activity_json)
-            .expect(&format!("Failed to parse fixture: {:?}", path));
+            .unwrap_or_else(|e| panic!("Failed to parse fixture: {:?}: {}", path, e));
 
         // Get expected preserves for this activity
         let expected_for_activity = expected.activities.get(activity_id);
