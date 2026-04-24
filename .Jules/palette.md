@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-04-24 - External Links and Focus States
+**Learning:** External links utilizing plain text arrows (e.g. `↗`) can result in visually disjointed UI elements that also present confusing auditory labels for screen reader users (e.g. "North East Arrow"). Furthermore, interactive list items, like links inside mapped rows, frequently lack clear focus styles.
+**Action:** Always utilize standard standard icons (like Feather SVG's) for visual consistency, apply `aria-hidden="true"` to hide decorative SVG images from screen readers, and include `:focus-visible` pseudo-class styling (such as `outline: 2px solid var(--color-primary); outline-offset: 2px;`) to ensure full keyboard navigability.
