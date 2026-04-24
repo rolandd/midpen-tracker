@@ -24,14 +24,8 @@ pub struct StravaClient {
 impl StravaClient {
     /// Create a new Strava client with OAuth credentials.
     pub fn new(client_id: String, client_secret: String) -> Self {
-        // Sentinel: Added explicit timeout to prevent resource exhaustion / DoS
-        let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .build()
-            .expect("Failed to build Strava HTTP client");
-
         Self {
-            http,
+            http: reqwest::Client::new(),
             base_url: "https://www.strava.com/api/v3".to_string(),
             client_id,
             client_secret,
