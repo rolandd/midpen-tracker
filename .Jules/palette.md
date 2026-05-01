@@ -29,3 +29,4 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2026-05-01 - Add aria-hidden to purely decorative SVGs\n**Learning:** When using inline SVGs for icons alongside text (like in links or buttons), they often act purely decoratively and shouldn't be announced by screen readers. Omitting `aria-hidden="true"` can cause screen readers to announce unhelpful graphic information.\n**Action:** Always add `aria-hidden="true"` to SVG icons that do not convey unique information and are accompanied by text or have a parent element with a clear `aria-label`.
