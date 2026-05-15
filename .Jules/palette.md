@@ -29,3 +29,4 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2026-06-05 - Focus Indication on List Items\n**Learning:** Interactive list items (like activity links) can be difficult to navigate via keyboard if they lack a clear focus state, even if they have hover styles.\n**Action:** Always ensure that interactive elements have a `:focus-visible` style defined (e.g., an outline) that provides a distinct visual indicator for keyboard navigation.\n
