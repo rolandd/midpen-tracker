@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2026-06-12 - Dependency Vulnerabilities in quinn-proto, rustls-webpki, and rand
+**Vulnerability:** Found multiple vulnerabilities during CI check `cargo audit`, including a DoS vulnerability in `quinn-proto` (RUSTSEC-2026-0037), name constraints/CRLs validation issues in `rustls-webpki` (RUSTSEC-2026-0098, RUSTSEC-2026-0049, RUSTSEC-2026-0104, RUSTSEC-2026-0099), and unsoundness issues in multiple versions of `rand` (RUSTSEC-2026-0097).
+**Learning:** Outdated dependencies in the `Cargo.lock` file exposed the application to documented security flaws. CI caught these via `cargo audit`.
+**Prevention:** Regularly run `cargo audit` locally before pushing code, and promptly update affected crates using `cargo update -p <crate_name>`.
