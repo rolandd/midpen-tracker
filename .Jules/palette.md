@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-06-03 - External Link Accessibility & Focus Visibility
+**Learning:** Text characters like `↗` are often mispronounced or confusing for screen readers. Furthermore, adding interactive elements like lists or links without explicit `:focus-visible` states creates an accessibility barrier for keyboard users.
+**Action:** Use SVG icons for external links with `aria-hidden="true"` (when a comprehensive `aria-label` exists) and always explicitly define `:focus-visible` with a distinct outline (e.g. 2px solid primary color) for interactive list items.
