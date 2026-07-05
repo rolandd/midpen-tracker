@@ -17,7 +17,7 @@ pub struct KmsService {
     key_path: String,
 
     /// GCP KMS client
-    client: Option<std::sync::Arc<google_cloud_kms::client::Client>>,
+    client: Option<google_cloud_kms_v1::client::KeyManagementService>,
 }
 
 impl KmsService {
@@ -35,14 +35,8 @@ impl KmsService {
             key_name
         );
 
-        let config = google_cloud_kms::client::ClientConfig::default()
-            .with_auth()
-            .await
-            .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!("Failed to create KMS auth config: {}", e))
-            })?;
-
-        let client = google_cloud_kms::client::Client::new(config)
+        let client = google_cloud_kms_v1::client::KeyManagementService::builder()
+            .build()
             .await
             .map_err(|e| {
                 AppError::Internal(anyhow::anyhow!("Failed to create KMS client: {}", e))
@@ -50,7 +44,7 @@ impl KmsService {
 
         Ok(Self {
             key_path,
-            client: Some(std::sync::Arc::new(client)),
+            client: Some(client),
         })
     }
 
@@ -76,23 +70,23 @@ impl KmsService {
             ));
         }
 
-        use google_cloud_googleapis::cloud::kms::v1::EncryptRequest;
-
         if let Some(client) = &self.client {
-            let req = EncryptRequest {
-                name: self.key_path.clone(),
-                plaintext: plaintext.as_bytes().to_vec(),
-                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-                ..Default::default()
-            };
+            let mut req = client
+                .encrypt()
+                .set_name(self.key_path.clone())
+                .set_plaintext(plaintext.as_bytes().to_vec());
 
-            let response = client
-                .encrypt(req, None)
+            if let Some(aad_bytes) = aad {
+                req = req.set_additional_authenticated_data(aad_bytes.to_vec());
+            }
+
+            let response = req
+                .send()
                 .await
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS encrypt failed: {}", e)))?;
 
-            let ciphertext = response.ciphertext; // Vec<u8>
-            Ok(BASE64.encode(ciphertext))
+            let ciphertext = response.ciphertext;
+            Ok(BASE64.encode(&ciphertext))
         } else {
             Err(AppError::Internal(anyhow::anyhow!(
                 "KMS client not connected"
@@ -139,27 +133,26 @@ impl KmsService {
             }
         }
 
-        use google_cloud_googleapis::cloud::kms::v1::DecryptRequest;
-
         if let Some(client) = &self.client {
             let ciphertext = BASE64.decode(ciphertext_b64).map_err(|e| {
                 AppError::Internal(anyhow::anyhow!("Base64 output decode failed: {}", e))
             })?;
 
-            let req = DecryptRequest {
-                name: self.key_path.clone(),
-                ciphertext,
-                additional_authenticated_data: aad.unwrap_or(b"").to_vec(),
-                ..Default::default()
-            };
+            let mut req = client
+                .decrypt()
+                .set_name(self.key_path.clone())
+                .set_ciphertext(ciphertext);
 
-            let response = client
-                .decrypt(req, None)
+            if let Some(aad_bytes) = aad {
+                req = req.set_additional_authenticated_data(aad_bytes.to_vec());
+            }
+
+            let response = req
+                .send()
                 .await
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("KMS decrypt failed: {}", e)))?;
 
-            // response.plaintext is Vec<u8>
-            String::from_utf8(response.plaintext)
+            String::from_utf8(response.plaintext.to_vec())
                 .map_err(|e| AppError::Internal(anyhow::anyhow!("UTF-8 decode failed: {}", e)))
         } else {
             Err(AppError::Internal(anyhow::anyhow!(
