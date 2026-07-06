@@ -50,7 +50,7 @@ pub struct AuthStartParams {
 
 /// Start OAuth flow - redirect to Strava authorization.
 // ... imports ...
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 // Type alias for HMAC-SHA256
