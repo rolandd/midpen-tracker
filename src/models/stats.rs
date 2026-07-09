@@ -170,6 +170,109 @@ impl UserStats {
 
         true
     }
+
+    /// Check if an activity is the first or last visit for any of the preserves it covers.
+    ///
+    /// If it is a boundary activity, O(1) decrement is not possible because we wouldn't
+    /// know the new first/last visit date without a full recalculation.
+    pub fn is_boundary_activity(&self, activity: &Activity) -> bool {
+        let activity_date = format_utc_rfc3339(activity.start_date);
+        for preserve_name in &activity.preserves_visited {
+            if let Some(first) = self.preserve_first_visit.get(preserve_name) {
+                if &activity_date == first {
+                    return true;
+                }
+            }
+            if let Some(last) = self.preserve_last_visit.get(preserve_name) {
+                if &activity_date == last {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Update stats by removing an activity (incremental decrement).
+    ///
+    /// Returns `true` if the activity was found and removed.
+    ///
+    /// NOTE: This should only be used if `is_boundary_activity` returns `false`
+    /// for this activity, otherwise first/last visit dates will become incorrect.
+    pub fn decrement_from_activity(&mut self, activity: &Activity, now: &str) -> bool {
+        // Idempotency check: skip if not processed
+        if !self
+            .processed_activity_ids
+            .remove(&activity.strava_activity_id)
+        {
+            return false;
+        }
+
+        self.updated_at = now.to_string();
+
+        // Update preserve counts
+        for preserve_name in &activity.preserves_visited {
+            if let Some(count) = self.preserves.get_mut(preserve_name) {
+                *count = count.saturating_sub(1);
+                if *count == 0 {
+                    self.preserves.remove(preserve_name);
+                    self.preserve_first_visit.remove(preserve_name);
+                    self.preserve_last_visit.remove(preserve_name);
+                }
+            }
+        }
+
+        // Update activity totals
+        self.total_activities = self.total_activities.saturating_sub(1);
+        self.total_distance_meters = (self.total_distance_meters - activity.distance_meters).max(0.0);
+
+        // Update sport type stats
+        if let Some(count) = self.activities_by_sport.get_mut(&activity.sport_type) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.activities_by_sport.remove(&activity.sport_type);
+            }
+        }
+        if let Some(dist) = self.distance_by_sport.get_mut(&activity.sport_type) {
+            *dist = (*dist - activity.distance_meters).max(0.0);
+            if *dist <= 0.0 {
+                self.distance_by_sport.remove(&activity.sport_type);
+            }
+        }
+
+        // Update time series
+        let month_key = extract_month_key(activity.start_date);
+        if let Some(count) = self.activities_by_month.get_mut(&month_key) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.activities_by_month.remove(&month_key);
+            }
+        }
+
+        let year_key = extract_year_key(activity.start_date);
+        if let Some(count) = self.activities_by_year.get_mut(&year_key) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.activities_by_year.remove(&year_key);
+            }
+        }
+
+        // Update preserves_by_year
+        if let Some(year_preserves) = self.preserves_by_year.get_mut(&year_key) {
+            for preserve_name in &activity.preserves_visited {
+                if let Some(count) = year_preserves.get_mut(preserve_name) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        year_preserves.remove(preserve_name);
+                    }
+                }
+            }
+            if year_preserves.is_empty() {
+                self.preserves_by_year.remove(&year_key);
+            }
+        }
+
+        true
+    }
 }
 
 /// Extract "YYYY-MM" from a UTC timestamp.
@@ -370,5 +473,45 @@ mod tests {
 
         // Total preserves (across all years) still works
         assert_eq!(stats.preserves.get("Rancho"), Some(&3));
+    }
+
+    #[test]
+    fn test_decrement_from_activity() {
+        let mut stats = UserStats::default();
+        let activity = make_activity(1, "Ride", "2024-01-15T10:00:00Z", 10000.0, vec!["Rancho"]);
+
+        stats.update_from_activity(&activity, "now");
+        assert_eq!(stats.total_activities, 1);
+
+        let removed = stats.decrement_from_activity(&activity, "later");
+        assert!(removed);
+        assert_eq!(stats.total_activities, 0);
+        assert_eq!(stats.total_distance_meters, 0.0);
+        assert!(stats.preserves.is_empty());
+        assert!(stats.processed_activity_ids.is_empty());
+        assert!(stats.activities_by_sport.is_empty());
+        assert!(stats.activities_by_month.is_empty());
+        assert!(stats.activities_by_year.is_empty());
+        assert!(stats.preserves_by_year.is_empty());
+    }
+
+    #[test]
+    fn test_is_boundary_activity() {
+        let mut stats = UserStats::default();
+
+        let activity1 = make_activity(1, "Ride", "2024-01-10T10:00:00Z", 5000.0, vec!["Rancho"]);
+        let activity2 = make_activity(2, "Ride", "2024-01-15T10:00:00Z", 5000.0, vec!["Rancho"]);
+        let activity3 = make_activity(3, "Ride", "2024-01-20T10:00:00Z", 5000.0, vec!["Rancho"]);
+
+        stats.update_from_activity(&activity1, "now");
+        stats.update_from_activity(&activity2, "now");
+        stats.update_from_activity(&activity3, "now");
+
+        // activity1 is first visit
+        assert!(stats.is_boundary_activity(&activity1));
+        // activity3 is last visit
+        assert!(stats.is_boundary_activity(&activity3));
+        // activity2 is neither
+        assert!(!stats.is_boundary_activity(&activity2));
     }
 }
