@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2024-07-25 - HTTP Client Default No Timeout
+**Vulnerability:** External HTTP client (reqwest) was initialized using `reqwest::Client::new()` which has no default timeout. This leaves the server vulnerable to resource exhaustion and DoS if the external API hangs or responds very slowly.
+**Learning:** `reqwest::Client::new()` does not set a timeout by default.
+**Prevention:** Always initialize external HTTP clients using the builder pattern with an explicit timeout: `reqwest::Client::builder().timeout(...)`.
