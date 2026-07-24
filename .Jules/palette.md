@@ -29,3 +29,11 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-07-24 - Accessibility of Interactive List Items
+**Learning:** Interactive list items (like activity links) lack visual focus state when navigating via keyboard, making it hard for keyboard-only users to track their position.
+**Action:** Always add explicit `:focus-visible` styles with a distinct outline (e.g., `outline: 2px solid var(--color-primary); outline-offset: 2px;`) to interactive elements, especially complex list items.
+
+## 2026-07-24 - Consistent iconography for external links
+**Learning:** Using simple unicode characters (like `↗`) for external links creates an inconsistent visual language and can be confusing if not explicitly hidden from screen readers.
+**Action:** Use standardized SVG icons for common UI elements (like external links) and always ensure decorative or redundant icons include `aria-hidden="true"`.
