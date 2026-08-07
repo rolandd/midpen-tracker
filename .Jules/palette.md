@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-08-07 - Interactive List Item Accessibility
+**Learning:** List items containing interactive anchors without distinct focus states are difficult for keyboard users to navigate. Furthermore, decorative characters like emoji and ASCII arrows (e.g., `↗`) are announced literally by screen readers (e.g., "North East Arrow"), adding noise.
+**Action:** Always add `:focus-visible` outlines (using theme colors like `var(--color-primary)`) to interactive row elements. Additionally, wrap all decorative ASCII characters and emojis in spans with `aria-hidden="true"` when the parent element already provides an adequate `aria-label`.
