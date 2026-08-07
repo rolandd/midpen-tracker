@@ -42,3 +42,8 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+
+## 2024-03-24 - Missing Explicit Timeout on reqwest::Client
+**Vulnerability:** The `reqwest::Client` used by `StravaClient` in `src/services/strava.rs` was initialized with `reqwest::Client::new()` without an explicit timeout.
+**Learning:** `reqwest::Client::new()` does not have a default timeout, meaning HTTP requests could hang indefinitely if the remote server (Strava) is unresponsive, leading to resource exhaustion (Denial of Service) via locked connections or active tasks.
+**Prevention:** Always use the builder pattern `reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build().expect(...)` when making external HTTP requests.
