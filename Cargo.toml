@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ring = "0.17"
+aws-lc-rs = "1"
 # Web framework
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
@@ -49,8 +49,8 @@ chrono = { version = "0.4", features = ["serde"] }
 time = "0.3"
 
 # GCP SDK
-firestore = { version = "0.48", default-features = false }
-gcloud-sdk = { version = "0.29", default-features = false, features = ["tls-webpki-roots"] }
+firestore = { version = "0.50", default-features = false }
+gcloud-sdk = { version = "0.30", default-features = false, features = ["tls-webpki-roots"] }
 google-cloud-tasks-v2 = { version = "1", default-features = false }
 futures-util = "0.3.31"
 
@@ -61,15 +61,14 @@ dashmap = "6"
 validator = { version = "0.20", features = ["derive"] }
 
 # TypeScript bindings generation
-# TypeScript bindings generation
 ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }
 hmac = "0.13.0"
 sha2 = "0.11.0"
 hex = "0.4.3"
 hkdf = "0.13.0"
 subtle = "2"
-google-cloud-gax = "1.7.0"
-google-cloud-kms-v1 = "1.11.0"
+google-cloud-gax = "1"
+google-cloud-kms-v1 = "1"
 
 [features]
 binding-generation = ["ts-rs"]

@@ -11,7 +11,6 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite}; // Added axum-extra
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use ring::rand::SecureRandom;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -83,9 +82,8 @@ async fn auth_start(
 
     // Generate random nonce (16 bytes)
     let mut nonce_bytes = [0u8; 16];
-    let rng = ring::rand::SystemRandom::new();
-    rng.fill(&mut nonce_bytes).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Random number generation failed: {}", e))
+    aws_lc_rs::rand::fill(&mut nonce_bytes).map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Random number generation failed: {:?}", e))
     })?;
     let nonce_hex = hex::encode(nonce_bytes);
 
@@ -440,11 +438,10 @@ async fn trigger_backfill(
     if total_fetched >= per_page {
         // Generate a random hex scan_id (16 bytes)
         let mut scan_id_bytes = [0u8; 16];
-        let rng = ring::rand::SystemRandom::new();
-        let scan_id = match ring::rand::SecureRandom::fill(&rng, &mut scan_id_bytes) {
+        let scan_id = match aws_lc_rs::rand::fill(&mut scan_id_bytes) {
             Ok(_) => hex::encode(scan_id_bytes),
             Err(e) => {
-                tracing::warn!(error = %e, "PRNG failed for scan_id, falling back to timestamp");
+                tracing::warn!(error = ?e, "PRNG failed for scan_id, falling back to timestamp");
                 chrono::Utc::now()
                     .timestamp_nanos_opt()
                     .ok_or_else(|| {
