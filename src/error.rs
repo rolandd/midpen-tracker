@@ -148,11 +148,10 @@ impl IntoResponse for AppError {
                 let msg = format!("Validation failed: {}", errs);
                 (StatusCode::BAD_REQUEST, "validation_error", Some(msg))
             }
-            AppError::StravaApi(err) => (
-                StatusCode::BAD_GATEWAY,
-                "strava_error",
-                Some(err.to_string()),
-            ),
+            AppError::StravaApi(err) => {
+                tracing::error!(error = %err, "Strava API error");
+                (StatusCode::BAD_GATEWAY, "strava_error", None)
+            }
             AppError::Database(err) => {
                 tracing::error!(error = ?err, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "database_error", None)
