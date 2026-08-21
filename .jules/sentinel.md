@@ -42,3 +42,7 @@
 **Vulnerability:** The webhook endpoint parsed JSON payloads before validating the path secret, allowing attackers to trigger CPU-intensive parsing on invalid requests.
 **Learning:** Axum extractors run before the handler body. Using `Json<T>` as an argument implicitly parses the body, exposing the application to DoS attacks on public endpoints.
 **Prevention:** For endpoints protected by path secrets or headers, accept the raw body (e.g., `Bytes`), validate the secret first, and then parse the payload manually.
+## 2026-08-21 - Prevent StravaError Details Leakage
+**Vulnerability:** Internal `StravaError` details were leaked in the `details` field of `AppError::StravaApi` API responses.
+**Learning:** Returning raw internal error messages (`err.to_string()`) to external clients exposes implementation details and upstream error specifics, which violates secure error handling principles.
+**Prevention:** In the application error boundary layer (e.g., `IntoResponse`), always intercept external/internal errors, log the specifics internally using `tracing::error!`, and return a sanitized, generic error message (or `None` for details) to the client.
