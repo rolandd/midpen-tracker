@@ -46,3 +46,8 @@
 **Vulnerability:** Internal `StravaError` details were leaked in the `details` field of `AppError::StravaApi` API responses.
 **Learning:** Returning raw internal error messages (`err.to_string()`) to external clients exposes implementation details and upstream error specifics, which violates secure error handling principles.
 **Prevention:** In the application error boundary layer (e.g., `IntoResponse`), always intercept external/internal errors, log the specifics internally using `tracing::error!`, and return a sanitized, generic error message (or `None` for details) to the client.
+
+## 2026-08-21 - Fix h2 Vulnerability
+**Vulnerability:** A vulnerability was discovered in the `h2` crate (`RUSTSEC-2026-0258`) regarding unbounded empty DATA frames, exposing the server to DoS attacks.
+**Learning:** Dependency auditing is crucial for security since upstream crates might contain newly discovered security flaws that impact our service.
+**Prevention:** Keep security audit checks in the CI and regularly run `cargo audit` and update vulnerable crates.
