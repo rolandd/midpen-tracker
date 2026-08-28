@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2025-02-28 - ActivityList and Accordion UX Enhancements
+**Learning:** Purely decorative emojis and external link indicators (like `↗`) can create redundant noise for screen reader users when the parent interactive element already has a comprehensive `aria-label`. Additionally, accordions lacking visual state indicators (like animated chevrons) fail to provide clear affordance of their expanded/collapsed state, while custom list items functioning as links require explicit `:focus-visible` styling for robust keyboard accessibility.
+**Action:** Always apply `aria-hidden="true"` to visual-only elements within properly labeled interactive containers. Ensure accordion toggles include visual cues mapped to their `aria-expanded` state, and explicitly style `:focus-visible` states for interactive items to support keyboard navigation.
