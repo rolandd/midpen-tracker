@@ -11,6 +11,10 @@
 
 use crate::error::AppError;
 use serde::Deserialize;
+use std::time::Duration;
+
+/// Default HTTP request timeout for Strava API requests.
+const DEFAULT_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Strava API client.
 #[derive(Clone)]
@@ -24,8 +28,13 @@ pub struct StravaClient {
 impl StravaClient {
     /// Create a new Strava client with OAuth credentials.
     pub fn new(client_id: String, client_secret: String) -> Self {
+        let http = reqwest::Client::builder()
+            .timeout(DEFAULT_HTTP_TIMEOUT)
+            .build()
+            .expect("Failed to build Strava HTTP client");
+
         Self {
-            http: reqwest::Client::new(),
+            http,
             base_url: "https://www.strava.com/api/v3".to_string(),
             client_id,
             client_secret,
@@ -289,7 +298,7 @@ pub struct StravaActivitySummary {
 use crate::db::FirestoreDb;
 use crate::models::{User, UserTokens};
 use crate::services::KmsService;
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use dashmap::DashMap;
 use serde::Serialize;
 use std::hash::{BuildHasher, Hasher};
@@ -390,7 +399,7 @@ impl StravaService {
     /// 7. Handle cross-instance races via retry on invalid_grant
     pub async fn get_valid_access_token(&self, athlete_id: u64) -> Result<String, AppError> {
         let now = Utc::now();
-        let margin = Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
+        let margin = chrono::Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
 
         // ─────────────────────────────────────────────────────────────
         // STEP 1: Check cache (fast path - no I/O)
@@ -858,4 +867,22 @@ pub struct OAuthResult {
     pub firstname: String,
     pub lastname: String,
     pub access_token: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strava_client_new() {
+        let client = StravaClient::new("test_id".to_string(), "test_secret".to_string());
+        assert_eq!(client.base_url, "https://www.strava.com/api/v3");
+        assert_eq!(client.client_id, "test_id");
+        assert_eq!(client.client_secret, "test_secret");
+    }
+
+    #[test]
+    fn test_default_http_timeout() {
+        assert_eq!(DEFAULT_HTTP_TIMEOUT, Duration::from_secs(10));
+    }
 }
