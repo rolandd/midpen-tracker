@@ -1,5 +1,5 @@
 # Build stage - use Rust with musl for static binary
-FROM rust:1.92-alpine AS dependencies
+FROM rust:1.98.1-alpine AS dependencies
 
 # Install build dependencies for musl
 RUN apk add --no-cache musl-dev
