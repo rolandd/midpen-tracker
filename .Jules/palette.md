@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-09-04 - Accordion Visual Affordances
+**Learning:** While `aria-expanded` handles state for screen readers, accordion toggles without a visual indicator (like a chevron) lack discoverability for visual users, leading to a poor perceived affordance.
+**Action:** Always include an animated visual cue (e.g., a chevron linked to the `expanded` state) on interactive accordion headers to clearly communicate their togglable nature to all users.
