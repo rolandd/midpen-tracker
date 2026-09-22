@@ -29,3 +29,6 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2024-08-14 - Accessible List Item Links
+**Learning:** Decorative emojis and arbitrary icons (like external link arrows `↗`) within list links create unnecessary noise for screen readers, especially when the link already has a comprehensive `aria-label`. Without explicit `:focus-visible` styles, keyboard users often struggle to track their location within long lists.
+**Action:** Always add `aria-hidden="true"` to visual-only elements inside interactive components. Consistently apply explicit `:focus-visible` outlines (`outline: 2px solid var(--color-primary); outline-offset: 2px;`) to list items/cards, and ensure hover effects (like opacity changes on icons) also trigger on `:focus-visible`.
