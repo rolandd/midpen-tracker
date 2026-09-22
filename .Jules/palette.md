@@ -29,3 +29,6 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+## 2024-03-20 - Decorative SVGs and Focus States on Interactive Lists
+**Learning:** Interactive list items (like activity links) require explicit `:focus-visible` styles with sufficient contrast (e.g. `2px solid var(--color-primary)`) since default browser outlines are often suppressed or insufficient. Additionally, standard decorative SVGs used as icons (like the Feather external link icon) must explicitly include `aria-hidden="true"` to prevent screen readers from attempting to parse or announce them as meaningful content.
+**Action:** Always audit interactive elements for explicit `:focus-visible` states, especially inside custom list items, and ensure all purely decorative SVGs receive `aria-hidden="true"` when swapping out text characters.
