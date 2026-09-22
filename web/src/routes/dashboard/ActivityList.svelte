@@ -116,10 +116,12 @@
 						onclick={(e) => e.stopPropagation()}
 						aria-label={getAriaLabel(activity)}
 					>
-						<span class="emoji" title={activity.sport_type}>{getEmoji(activity.sport_type)}</span>
+						<span class="emoji" title={activity.sport_type} aria-hidden="true"
+							>{getEmoji(activity.sport_type)}</span
+						>
 						<span class="date">{formatDate(activity.start_date)}</span>
 						<span class="name">{activity.name}</span>
-						<span class="link">↗</span>
+						<span class="link" aria-hidden="true">↗</span>
 					</a>
 				</li>
 			{/each}
@@ -166,6 +168,11 @@
 
 	.activity:hover {
 		background: var(--color-bg);
+	}
+
+	.activity:focus-visible {
+		outline: 2px solid var(--color-primary);
+		outline-offset: 2px;
 	}
 
 	.emoji {
