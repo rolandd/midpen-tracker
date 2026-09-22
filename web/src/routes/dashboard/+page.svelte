@@ -263,7 +263,24 @@
 							>
 								<div class="preserve-header">
 									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="preserve-header-right">
+										<span class="preserve-count">{preserve.count}</span>
+										<svg
+											class="chevron"
+											aria-hidden="true"
+											xmlns="http://www.w3.org/2000/svg"
+											width="20"
+											height="20"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+										>
+											<polyline points="6 9 12 15 18 9"></polyline>
+										</svg>
+									</div>
 								</div>
 							</button>
 
@@ -581,12 +598,27 @@
 		font-weight: 500;
 	}
 
+	.preserve-header-right {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
 	.preserve-count {
 		background: var(--color-bg);
 		padding: 0.25rem 0.75rem;
 		border-radius: 999px;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.chevron {
+		transition: transform 0.2s ease;
+		color: var(--color-text-muted);
+	}
+
+	.preserve-header-btn[aria-expanded='true'] .chevron {
+		transform: rotate(180deg);
 	}
 
 	/* Activity styles moved to ActivityList.svelte */

@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-06-25 - Accessibility of Accordion Patterns (Update)
+**Learning:** Even when `aria-expanded` is present on an accordion toggle, users benefit significantly from a visual affordance (like an animated chevron) linked to that state to aid discoverability.
+**Action:** Always include a visual indicator (with `aria-hidden="true"`) that visually changes based on the button's `aria-expanded` state.
