@@ -89,17 +89,16 @@ impl ActivityProcessor {
             };
 
         // 4. Build activity record and preserve join records
-        let start_date = chrono::DateTime::parse_from_rfc3339(&strava_activity.start_date)
-            .map_err(|e| {
+        let start_date =
+            crate::time_utils::parse_rfc3339(&strava_activity.start_date).map_err(|e| {
                 AppError::Internal(anyhow::anyhow!(
                     "Invalid Strava start_date for activity {}: {}",
                     activity_id,
                     e
                 ))
-            })?
-            .with_timezone(&chrono::Utc);
+            })?;
 
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = jiff::Timestamp::now().to_string();
         let activity = Activity {
             strava_activity_id: activity_id,
             athlete_id,

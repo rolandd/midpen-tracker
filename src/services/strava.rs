@@ -298,8 +298,8 @@ pub struct StravaActivitySummary {
 use crate::db::FirestoreDb;
 use crate::models::{User, UserTokens};
 use crate::services::KmsService;
-use chrono::{DateTime, TimeZone, Utc};
 use dashmap::DashMap;
+use jiff::Timestamp;
 use serde::Serialize;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::Arc;
@@ -307,6 +307,11 @@ use tokio::sync::Mutex;
 
 /// Margin before token expiration when we proactively refresh (5 minutes).
 const TOKEN_REFRESH_MARGIN_SECS: i64 = 5 * 60;
+
+/// Returns true when `expires_at` is already past or within the refresh margin.
+fn expires_within_margin(now: Timestamp, expires_at: Timestamp) -> bool {
+    expires_at.as_second() - now.as_second() <= TOKEN_REFRESH_MARGIN_SECS
+}
 
 /// Number of shards for refresh locks.
 /// 64 is sufficient to minimize contention for thousands of concurrent users.
@@ -316,7 +321,7 @@ const LOCK_SHARDS: usize = 64;
 #[derive(Clone)]
 pub struct CachedToken {
     access_token: String,
-    expires_at: DateTime<Utc>,
+    expires_at: Timestamp,
 }
 
 /// Shared token cache type for use in AppState.
@@ -398,14 +403,13 @@ impl StravaService {
     /// 6. If expired, decrypt refresh token and refresh with Strava
     /// 7. Handle cross-instance races via retry on invalid_grant
     pub async fn get_valid_access_token(&self, athlete_id: u64) -> Result<String, AppError> {
-        let now = Utc::now();
-        let margin = chrono::Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
+        let now = Timestamp::now();
 
         // ─────────────────────────────────────────────────────────────
         // STEP 1: Check cache (fast path - no I/O)
         // ─────────────────────────────────────────────────────────────
         if let Some(cached) = self.token_cache.get(&athlete_id) {
-            if now + margin < cached.expires_at {
+            if !expires_within_margin(now, cached.expires_at) {
                 // Cache hit, token still valid
                 return Ok(cached.access_token.clone());
             }
@@ -424,7 +428,7 @@ impl StravaService {
         // ─────────────────────────────────────────────────────────────
         // Another task may have refreshed while we were waiting.
         if let Some(cached) = self.token_cache.get(&athlete_id) {
-            if now + margin < cached.expires_at {
+            if !expires_within_margin(now, cached.expires_at) {
                 // Another task already refreshed - use cached token
                 return Ok(cached.access_token.clone());
             }
@@ -443,14 +447,13 @@ impl StravaService {
             .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
             .await?;
 
-        let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
-            .with_timezone(&Utc);
+        let expires_at = crate::time_utils::parse_rfc3339(&tokens.expires_at)
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?;
 
         // ─────────────────────────────────────────────────────────────
         // STEP 5: Check if refresh is needed
         // ─────────────────────────────────────────────────────────────
-        if now + margin < expires_at {
+        if !expires_within_margin(now, expires_at) {
             // Token is still valid - cache and return
             self.token_cache.insert(
                 athlete_id,
@@ -499,21 +502,18 @@ impl StravaService {
         )
         .await?;
 
-        let new_expires_at = Utc
-            .timestamp_opt(new_tokens.expires_at, 0)
-            .single()
-            .unwrap_or_else(|| {
-                tracing::warn!(
-                    expires_at = new_tokens.expires_at,
-                    "Invalid expires_at timestamp from Strava during token refresh; defaulting to epoch"
-                );
-                Default::default()
-            });
+        let new_expires_at = Timestamp::from_second(new_tokens.expires_at).unwrap_or_else(|_| {
+            tracing::warn!(
+                expires_at = new_tokens.expires_at,
+                "Invalid expires_at timestamp from Strava during token refresh; defaulting to epoch"
+            );
+            Timestamp::UNIX_EPOCH
+        });
 
         let updated_tokens = UserTokens {
             access_token_encrypted: new_enc_access,
             refresh_token_encrypted: new_enc_refresh,
-            expires_at: new_expires_at.to_rfc3339(),
+            expires_at: new_expires_at.to_string(),
             scopes: tokens.scopes.clone(),
         };
 
@@ -547,9 +547,8 @@ impl StravaService {
             .decrypt_or_fallback(&tokens.access_token_encrypted, &athlete_id.to_be_bytes())
             .await?;
 
-        let expires_at = DateTime::parse_from_rfc3339(&tokens.expires_at)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?
-            .with_timezone(&Utc);
+        let expires_at = crate::time_utils::parse_rfc3339(&tokens.expires_at)
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse expiry: {}", e)))?;
 
         self.token_cache.insert(
             athlete_id,
@@ -572,7 +571,7 @@ impl StravaService {
         let token_response = self.exchange_code(code).await?;
 
         let athlete_id = token_response.athlete.id;
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = Timestamp::now().to_string();
 
         // Check for existing user to preserve creation date and email
         let existing_user = self.db.get_user(athlete_id).await?;
@@ -599,11 +598,9 @@ impl StravaService {
         }
 
         // Encrypt and store tokens
-        let expires_at = Utc
-            .timestamp_opt(token_response.expires_at, 0)
-            .single()
-            .map(|dt| dt.to_rfc3339())
-            .unwrap_or_else(|| {
+        let expires_at = Timestamp::from_second(token_response.expires_at)
+            .map(|ts| ts.to_string())
+            .unwrap_or_else(|_| {
                 tracing::warn!(
                     expires_at = token_response.expires_at,
                     "Invalid expires_at timestamp from Strava during OAuth; defaulting to now"
@@ -634,12 +631,12 @@ impl StravaService {
         // ─────────────────────────────────────────────────────────────
         // Populate token cache for immediate use (e.g. backfill)
         // ─────────────────────────────────────────────────────────────
-        if let Ok(exp) = DateTime::parse_from_rfc3339(&expires_at) {
+        if let Ok(exp) = crate::time_utils::parse_rfc3339(&expires_at) {
             self.token_cache.insert(
                 athlete_id,
                 CachedToken {
                     access_token: token_response.access_token.clone(),
-                    expires_at: exp.with_timezone(&Utc),
+                    expires_at: exp,
                 },
             );
         }
@@ -812,14 +809,12 @@ impl StravaService {
         };
 
         // 4. Check expiration & Refresh in-memory
-        let expires_at = chrono::DateTime::parse_from_rfc3339(&tokens.expires_at)
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .unwrap_or_else(|_| chrono::Utc::now());
+        let expires_at = crate::time_utils::parse_rfc3339(&tokens.expires_at)
+            .unwrap_or_else(|_| Timestamp::now());
 
-        let now = chrono::Utc::now();
-        let margin = chrono::Duration::seconds(TOKEN_REFRESH_MARGIN_SECS);
+        let now = Timestamp::now();
 
-        if now + margin >= expires_at {
+        if expires_within_margin(now, expires_at) {
             tracing::info!(
                 athlete_id,
                 "Token expired during deletion, refreshing in-memory"

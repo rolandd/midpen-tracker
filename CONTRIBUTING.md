@@ -131,6 +131,23 @@ Enable the pre-commit hook for automatic regeneration:
 just setup-hooks
 ```
 
+### Dependencies
+
+- **Dates/times** use [`jiff`](https://docs.rs/jiff), the same library the
+  Firestore client uses. Convert with `Timestamp` (`as_second()`,
+  `subsec_nanosecond()`, `strftime()`), not `chrono` — `chrono` is not a
+  dependency of this project.
+- **Firestore/gRPC** go through the `firestore` crate only; `gcloud-sdk` is not
+  a direct dependency (the `google-cloud-*` crates pull it in transitively).
+  TLS is rustls with bundled roots (`tls-webpki-roots`), so no OpenSSL and no
+  host certificate store are needed on distroless.
+- **Firestore emulator**: the client picks up `FIRESTORE_EMULATOR_HOST` by
+  itself, so `FirestoreDb::new()` needs no emulator-specific code path.
+- Run `cargo audit` (also part of CI) and `pnpm audit` in `web/` when changing
+  dependencies.
+- Frontend settings (`overrides`, `allowBuilds`) live in
+  `web/pnpm-workspace.yaml`, not `package.json` — pnpm 11 reads them from there.
+
 ## Environment Variables
 
 | Variable | Required | Description |

@@ -36,21 +36,17 @@ pub struct FirestoreDb {
 /// Cursor for paging activities in descending `(start_date, strava_activity_id)` order.
 #[derive(Debug, Clone, Copy)]
 pub struct ActivityQueryCursor {
-    pub start_date: chrono::DateTime<chrono::Utc>,
+    pub start_date: jiff::Timestamp,
     pub activity_id: u64,
 }
 
 impl FirestoreDb {
     /// Create a new Firestore client.
     ///
-    /// For local development with emulator, set FIRESTORE_EMULATOR_HOST.
+    /// For local development with emulator, set FIRESTORE_EMULATOR_HOST; the
+    /// client detects it and authenticates with a stub token instead of
+    /// looking up credentials.
     pub async fn new(project_id: &str) -> Result<Self, AppError> {
-        // If the emulator environment variable is set, use unauthenticated connection
-        // to avoid local credential warnings and leakage.
-        if std::env::var("FIRESTORE_EMULATOR_HOST").is_ok() {
-            return Self::create_emulator_client(project_id).await;
-        }
-
         let client = firestore::FirestoreDb::new(project_id).await.map_err(|e| {
             AppError::Database(crate::error::DbError::Other(format!(
                 "Failed to connect to Firestore: {}",
@@ -59,49 +55,6 @@ impl FirestoreDb {
         })?;
 
         tracing::info!(project = project_id, "Connected to Firestore");
-
-        Ok(Self {
-            client: Some(client),
-        })
-    }
-
-    /// Create a Firestore client for the emulator with unauthenticated access.
-    async fn create_emulator_client(project_id: &str) -> Result<Self, AppError> {
-        tracing::info!("Using unauthenticated connection for Firestore Emulator");
-
-        // Use ExternalJwtFunctionSource to provide a dummy token without needing async-trait
-        // or a custom TokenSource implementation struct.
-        let token_source = gcloud_sdk::ExternalJwtFunctionSource::new(|| async {
-            Ok(gcloud_sdk::Token {
-                token_type: "Bearer".to_string(),
-                token: gcloud_sdk::SecretValue::new(
-                    "eyJhbGciOiJub25lIn0.eyJ1aWQiOiJ0ZXN0In0."
-                        .to_string()
-                        .into(),
-                ),
-                expiry: chrono::Utc::now() + chrono::Duration::hours(1),
-            })
-        });
-
-        let options = firestore::FirestoreDbOptions::new(project_id.to_string());
-
-        let client = firestore::FirestoreDb::with_options_token_source(
-            options,
-            gcloud_sdk::GCP_DEFAULT_SCOPES.clone(),
-            gcloud_sdk::TokenSourceType::ExternalSource(Box::new(token_source)),
-        )
-        .await
-        .map_err(|e| {
-            AppError::Database(crate::error::DbError::Other(format!(
-                "Failed to connect to Firestore Emulator: {}",
-                e
-            )))
-        })?;
-
-        tracing::info!(
-            project = project_id,
-            "Connected to Firestore (Emulator/Unauthenticated)"
-        );
 
         Ok(Self {
             client: Some(client),
@@ -210,7 +163,7 @@ impl FirestoreDb {
     pub async fn get_activities_for_user(
         &self,
         athlete_id: u64,
-        after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        after_timestamp: Option<jiff::Timestamp>,
         cursor: Option<ActivityQueryCursor>,
         limit: u32,
     ) -> Result<Vec<Activity>, AppError> {
@@ -242,13 +195,12 @@ impl FirestoreDb {
         });
 
         query
-            .order_by([
-                ("start_date", firestore::FirestoreQueryDirection::Descending),
-                (
-                    "strava_activity_id",
-                    firestore::FirestoreQueryDirection::Descending,
-                ),
-            ])
+            .order(|o| {
+                o.fields([
+                    o.field("start_date").descending(),
+                    o.field("strava_activity_id").descending(),
+                ])
+            })
             .limit(limit)
             .obj()
             .query()
@@ -296,7 +248,7 @@ impl FirestoreDb {
             .await?;
 
         let mut new_stats = crate::models::UserStats::default();
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = jiff::Timestamp::now().to_string();
 
         for activity in activities {
             new_stats.update_from_activity(&activity, &now);
@@ -314,7 +266,7 @@ impl FirestoreDb {
         &self,
         athlete_id: u64,
         preserve_name: &str,
-        after_timestamp: Option<chrono::DateTime<chrono::Utc>>,
+        after_timestamp: Option<jiff::Timestamp>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<ActivityPreserve>, AppError> {
@@ -336,7 +288,7 @@ impl FirestoreDb {
                 ])
             })
             // Sort by date descending
-            .order_by([("start_date", firestore::FirestoreQueryDirection::Descending)]);
+            .order(|o| o.fields([o.field("start_date").descending()]));
 
         if let Some(limit) = limit {
             query = query.limit(limit);
@@ -428,7 +380,7 @@ impl FirestoreDb {
     /// Uses atomic insert (create-only) to avoid race conditions.
     pub async fn ensure_user_stats(&self, athlete_id: u64) -> Result<(), AppError> {
         let stats = crate::models::UserStats {
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: jiff::Timestamp::now().to_string(),
             ..Default::default()
         };
 
@@ -528,7 +480,7 @@ impl FirestoreDb {
         let mut stats = current_stats.unwrap_or_default();
 
         f(&mut stats);
-        stats.updated_at = chrono::Utc::now().to_rfc3339();
+        stats.updated_at = jiff::Timestamp::now().to_string();
 
         self.get_client()?
             .fluent()
@@ -618,7 +570,7 @@ impl FirestoreDb {
     ) -> Result<bool, AppError> {
         let athlete_id = activity.athlete_id;
         let activity_id = activity.strava_activity_id;
-        let now = chrono::Utc::now().to_rfc3339();
+        let now = jiff::Timestamp::now().to_string();
 
         // Safety Check: Ensure user still exists before writing.
         // This mitigates "zombie data" if deletion happened during processing.

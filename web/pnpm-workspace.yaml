@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MIT
+# Copyright 2026 Roland Dreier <roland@rolandd.dev>
+
+# pnpm 11 keeps settings (including overrides) here rather than in package.json.
+overrides:
+  # `@sveltejs/kit` 2.x still pins cookie@^0.6.0, which is affected by
+  # GHSA-pxg6-pf52-xh8x (low). 0.7 keeps the same parse()/serialize() API.
+  cookie@<0.7.0: ^0.7.0
+
+# pnpm 11 refuses to run dependency install scripts unless allow-listed, and
+# exits non-zero while one is pending. esbuild ships its platform binary as an
+# optional dependency, so its install script is not needed.
+allowBuilds:
+  esbuild: false

@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::models::Activity;
 use crate::time_utils::format_utc_rfc3339;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 
 /// Pre-computed statistics for a user.
 ///
@@ -173,13 +173,13 @@ impl UserStats {
 }
 
 /// Extract "YYYY-MM" from a UTC timestamp.
-fn extract_month_key(date: DateTime<Utc>) -> String {
-    date.format("%Y-%m").to_string()
+fn extract_month_key(date: Timestamp) -> String {
+    date.strftime("%Y-%m").to_string()
 }
 
 /// Extract "YYYY" from a UTC timestamp.
-fn extract_year_key(date: DateTime<Utc>) -> String {
-    date.format("%Y").to_string()
+fn extract_year_key(date: Timestamp) -> String {
+    date.strftime("%Y").to_string()
 }
 
 #[cfg(test)]
@@ -193,9 +193,7 @@ mod tests {
         distance: f64,
         preserves: Vec<&str>,
     ) -> Activity {
-        let start_date = chrono::DateTime::parse_from_rfc3339(date)
-            .unwrap()
-            .with_timezone(&chrono::Utc);
+        let start_date = date.parse::<Timestamp>().unwrap();
 
         Activity {
             strava_activity_id: id,

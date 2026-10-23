@@ -350,13 +350,9 @@ async fn trigger_backfill(
     use crate::models::UserStats;
     use crate::services::tasks::ContinueBackfillPayload;
 
-    // Backfill activities since 2025-01-01
-    let after_timestamp = chrono::NaiveDate::from_ymd_opt(2025, 1, 1)
-        .unwrap()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_utc()
-        .timestamp();
+    // Backfill activities since 2025-01-01T00:00:00Z
+    const BACKFILL_START_EPOCH_SECS: i64 = 1_735_689_600;
+    let after_timestamp = BACKFILL_START_EPOCH_SECS;
 
     // Fetch ONLY the first page at login (100 activities max)
     let per_page = 100u32;
@@ -442,15 +438,11 @@ async fn trigger_backfill(
             Ok(_) => hex::encode(scan_id_bytes),
             Err(e) => {
                 tracing::warn!(error = ?e, "PRNG failed for scan_id, falling back to timestamp");
-                chrono::Utc::now()
-                    .timestamp_nanos_opt()
-                    .ok_or_else(|| {
-                        tracing::error!(
-                            "Cascading failure: PRNG failed and timestamp_nanos_opt returned None"
-                        );
-                        AppError::Internal(anyhow::anyhow!("Failed to generate scan_id"))
-                    })?
-                    .to_string()
+                // Task names allow only [A-Za-z0-9_-], so build a digits-only
+                // id. `as_second()`/`subsec_nanosecond()` never panic, unlike
+                // `as_nanosecond()` outside 1677-2262.
+                let now = jiff::Timestamp::now();
+                format!("{}{:09}", now.as_second(), now.subsec_nanosecond())
             }
         };
 

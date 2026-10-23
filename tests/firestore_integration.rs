@@ -8,7 +8,6 @@
 //!
 //! The emulator provides a clean state for each test run.
 
-use chrono::TimeZone;
 use midpen_tracker::models::user::{User, UserTokens};
 use midpen_tracker::models::{Activity, ActivityPreserve};
 
@@ -33,8 +32,8 @@ fn test_user(athlete_id: u64) -> User {
         firstname: "Test".to_string(),
         lastname: "User".to_string(),
         profile_picture: None,
-        created_at: chrono::Utc::now().to_rfc3339(),
-        last_active: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
+        last_active: jiff::Timestamp::now().to_string(),
         deletion_requested_at: None,
     }
 }
@@ -551,11 +550,8 @@ async fn test_activity_pagination() {
 
     for i in 1..=total_activities {
         let timestamp = 1704103200 + (i * 60); // Base + i minutes
-        let dt = chrono::Utc
-            .timestamp_opt(timestamp as i64, 0)
-            .single()
-            .unwrap();
-        let processed_at = dt.to_rfc3339();
+        let dt = jiff::Timestamp::from_second(timestamp as i64).unwrap();
+        let processed_at = dt.to_string();
 
         let activity = Activity {
             strava_activity_id: athlete_id + i,
@@ -633,7 +629,7 @@ async fn test_activity_pagination() {
     let filtered = db
         .get_activities_for_user(
             athlete_id,
-            chrono::Utc.timestamp_opt(split_time as i64, 0).single(),
+            jiff::Timestamp::from_second(split_time as i64).ok(),
             None,
             20,
         )
