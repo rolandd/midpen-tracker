@@ -18,7 +18,7 @@ use axum::{
     Extension, Json, Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use chrono::TimeZone;
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[cfg(feature = "binding-generation")]
@@ -106,7 +106,7 @@ async fn delete_account(
     // Mark user as pending deletion (for UI feedback)
     // We fetch-modify-write to preserve other fields
     if let Some(mut user_profile) = state.db.get_user(user.athlete_id).await? {
-        user_profile.deletion_requested_at = Some(chrono::Utc::now().to_rfc3339());
+        user_profile.deletion_requested_at = Some(jiff::Timestamp::now().to_string());
         state.db.upsert_user(&user_profile).await?;
     } else {
         // User already gone? Rare but possible. Proceed to queue task just in case tokens remain.
@@ -166,16 +166,14 @@ fn default_per_page() -> u32 {
 
 const CURSOR_PARTS: usize = 3;
 
-fn parse_after_timestamp(after: Option<&str>) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+fn parse_after_timestamp(after: Option<&str>) -> Result<Option<Timestamp>> {
     after
         .map(|raw| {
-            chrono::DateTime::parse_from_rfc3339(raw)
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-                .map_err(|_| {
-                    crate::error::AppError::BadRequest(
-                        "Invalid 'after' parameter: must be RFC3339 datetime".to_string(),
-                    )
-                })
+            crate::time_utils::parse_rfc3339(raw).map_err(|_| {
+                crate::error::AppError::BadRequest(
+                    "Invalid 'after' parameter: must be RFC3339 datetime".to_string(),
+                )
+            })
         })
         .transpose()
 }
@@ -195,12 +193,9 @@ fn parse_cursor(cursor: Option<&str>) -> Result<Option<ActivityQueryCursor>> {
             }
 
             let seconds = parts[0].parse::<i64>().map_err(|_| invalid_cursor())?;
-            let nanos = parts[1].parse::<u32>().map_err(|_| invalid_cursor())?;
+            let nanos = parts[1].parse::<i32>().map_err(|_| invalid_cursor())?;
             let activity_id = parts[2].parse::<u64>().map_err(|_| invalid_cursor())?;
-            let start_date = chrono::Utc
-                .timestamp_opt(seconds, nanos)
-                .single()
-                .ok_or_else(invalid_cursor)?;
+            let start_date = Timestamp::new(seconds, nanos).map_err(|_| invalid_cursor())?;
 
             Ok(ActivityQueryCursor {
                 start_date,
@@ -213,8 +208,8 @@ fn parse_cursor(cursor: Option<&str>) -> Result<Option<ActivityQueryCursor>> {
 fn encode_cursor(cursor: ActivityQueryCursor) -> String {
     let payload = format!(
         "{}:{}:{}",
-        cursor.start_date.timestamp(),
-        cursor.start_date.timestamp_subsec_nanos(),
+        cursor.start_date.as_second(),
+        cursor.start_date.subsec_nanosecond(),
         cursor.activity_id
     );
     URL_SAFE_NO_PAD.encode(payload)
@@ -451,16 +446,16 @@ async fn get_preserve_stats(
     // This fixes "stuck" counters for users without requiring a re-login.
     let mut pending_activities = stats.pending_activities;
     if pending_activities > 0 {
-        if let Ok(updated_at) = chrono::DateTime::parse_from_rfc3339(&stats.updated_at) {
-            let now = chrono::Utc::now();
-            let elapsed = now.signed_duration_since(updated_at.with_timezone(&chrono::Utc));
+        if let Ok(updated_at) = crate::time_utils::parse_rfc3339(&stats.updated_at) {
+            let now = Timestamp::now();
+            let elapsed_mins = now.duration_since(updated_at).as_secs() / 60;
 
-            if elapsed.num_minutes() >= STUCK_PENDING_COUNT_TIMEOUT_MINUTES {
+            if elapsed_mins >= STUCK_PENDING_COUNT_TIMEOUT_MINUTES {
                 tracing::info!(
                     athlete_id = user.athlete_id,
                     pending = pending_activities,
                     last_update = %stats.updated_at,
-                    elapsed_mins = elapsed.num_minutes(),
+                    elapsed_mins,
                     "Self-healing: Resetting stuck pending count after inactivity"
                 );
 
@@ -528,10 +523,7 @@ mod tests {
     #[test]
     fn test_cursor_round_trip() {
         let cursor = ActivityQueryCursor {
-            start_date: chrono::Utc
-                .timestamp_opt(1_704_103_200, 123)
-                .single()
-                .unwrap(),
+            start_date: Timestamp::new(1_704_103_200, 123).unwrap(),
             activity_id: 42,
         };
 

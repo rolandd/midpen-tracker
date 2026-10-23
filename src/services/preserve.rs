@@ -71,7 +71,7 @@ impl PreserveService {
     }
 
     /// Convert GeoJSON geometry to our internal format.
-    fn convert_geometry(value: geojson::Value) -> Result<PreserveGeometry, PreserveError> {
+    fn convert_geometry(value: geojson::GeometryValue) -> Result<PreserveGeometry, PreserveError> {
         use std::convert::TryInto;
 
         // Try as Polygon first

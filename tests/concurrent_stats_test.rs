@@ -27,8 +27,8 @@ async fn test_concurrent_activity_processing_race_condition() {
         firstname: "Race".to_string(),
         lastname: "Condition".to_string(),
         profile_picture: None,
-        created_at: chrono::Utc::now().to_rfc3339(),
-        last_active: chrono::Utc::now().to_rfc3339(),
+        created_at: jiff::Timestamp::now().to_string(),
+        last_active: jiff::Timestamp::now().to_string(),
         deletion_requested_at: None,
     };
     db.upsert_user(&user)
@@ -51,7 +51,7 @@ async fn test_concurrent_activity_processing_race_condition() {
                 preserves_visited: vec![],
                 source: "test".to_string(),
                 annotation_added: false,
-                processed_at: chrono::Utc::now().to_rfc3339(),
+                processed_at: jiff::Timestamp::now().to_string(),
                 device_name: None,
             };
 

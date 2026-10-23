@@ -12,7 +12,7 @@ export type PreserveStatsResponse = {
 	/**
 	 * Preserve visits broken down by year: { "2025": { "Rancho": 5 } }
 	 */
-	preserves_by_year: { [key in string]?: { [key in string]?: number } };
+	preserves_by_year: { [key in string]: { [key in string]: number } };
 	total_preserves_visited: number;
 	total_preserves: number;
 	/**

@@ -102,6 +102,8 @@ just generate-bindings
 - **DO** run integration tests with emulator after DB changes: `./scripts/test-with-emulator.sh`
 - **DO** regenerate TypeScript bindings after modifying Rust DTOs: `just generate-bindings`
 - **DO** use `Config::test_default()` for unit tests, not `Config::from_env()`
+- **DO** use `jiff::Timestamp` for dates/times (it is the Firestore client's
+  date type); `src/time_utils.rs` has the shared format/parse helpers
 - **DO** validate security-sensitive inputs (OAuth state, webhook signatures, JWT claims)
 - **DO** use HMAC signatures for state parameters to prevent CSRF
 - **DO** prefer environment variables over runtime API calls for secrets (Cloud Run injects them)
@@ -116,6 +118,7 @@ just generate-bindings
 - **DON'T** call Strava APIs directly in request handlers — use Cloud Tasks to respect [rate limits](https://developers.strava.com/docs/rate-limits/)
 - **DON'T** add dependencies that require OpenSSL — backend runs on distroless, use `rustls` instead
 - **DON'T** use raw JavaScript — use type-safe TypeScript for all frontend code
+- **DON'T** add `chrono` (or a second date/time library) — use `jiff`
 - **DON'T** use the `Host` header to construct URLs — use explicit `API_URL` env var instead
 - **DON'T** mix GET/POST for auth routes — logout is POST, OAuth callback is GET
 - **DON'T** trust webhook payloads without validating the verify token

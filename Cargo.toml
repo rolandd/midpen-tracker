@@ -9,15 +9,15 @@ aws-lc-rs = "1"
 axum = "0.8"
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
 axum-extra = { version = "0.12.5", features = ["cookie"] }
 
 # Auth & JWT
-jsonwebtoken = { version = "10.4.0", features = ["aws_lc_rs"] }
+jsonwebtoken = { version = "11.1.0", features = ["aws_lc_rs"] }
 
 # Geo processing
 geo = "0.33"
-geojson = "0.24"
+geojson = "1.0"
 polyline = "0.11"
 
 # Serialization
@@ -36,7 +36,7 @@ thiserror = "2"
 anyhow = "1"
 
 # Base64 encoding
-base64 = "0.22"
+base64 = "0.23"
 
 # URL encoding
 urlencoding = "2"
@@ -45,12 +45,16 @@ urlencoding = "2"
 dotenvy = "0.15"
 
 # Date/time handling
-chrono = { version = "0.4", features = ["serde"] }
+# jiff is the date/time library used by the Firestore client, so we use it
+# throughout instead of keeping a second implementation (chrono) around.
+jiff = { version = "0.2", features = ["serde"] }
+# `time` is required by the cookie handling in axum-extra.
 time = "0.3"
 
 # GCP SDK
-firestore = { version = "0.50", default-features = false }
-gcloud-sdk = { version = "0.30", default-features = false, features = ["tls-webpki-roots"] }
+# `tls-webpki-roots` gives the gRPC client rustls with bundled Mozilla roots,
+# so no OpenSSL or host certificate store is needed (distroless runtime).
+firestore = { version = "0.61", default-features = false, features = ["tls-webpki-roots"] }
 google-cloud-tasks-v2 = { version = "1", default-features = false }
 futures-util = "0.3.31"
 
@@ -58,10 +62,10 @@ futures-util = "0.3.31"
 dashmap = "6"
 
 # Validation
-validator = { version = "0.20", features = ["derive"] }
+validator = { version = "0.21", features = ["derive"] }
 
 # TypeScript bindings generation
-ts-rs = { version = "11.1", features = ["serde-compat"], optional = true }
+ts-rs = { version = "12.0", features = ["serde-compat"], optional = true }
 hmac = "0.13.0"
 sha2 = "0.11.0"
 hex = "0.4.3"

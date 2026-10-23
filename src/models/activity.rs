@@ -3,7 +3,7 @@
 
 //! Strava activity model for storage and API.
 
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 /// Stored activity record in Firestore.
@@ -20,7 +20,7 @@ pub struct Activity {
     /// Start date/time.
     /// Serialized to Firestore as native Timestamp and to JSON as RFC3339.
     #[serde(with = "firestore::serialize_as_timestamp")]
-    pub start_date: DateTime<Utc>,
+    pub start_date: Timestamp,
     /// Distance in meters
     pub distance_meters: f64,
     /// List of preserve names that were visited
@@ -47,7 +47,7 @@ pub struct ActivityPreserve {
     /// Activity start date (for sorting)
     /// Serialized to Firestore as native Timestamp and to JSON as RFC3339.
     #[serde(with = "firestore::serialize_as_timestamp")]
-    pub start_date: DateTime<Utc>,
+    pub start_date: Timestamp,
     /// Activity name
     pub activity_name: String,
     /// Sport type
