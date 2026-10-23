@@ -262,7 +262,24 @@
 								onclick={() => togglePreserve(preserve.name)}
 							>
 								<div class="preserve-header">
-									<span class="preserve-name">{preserve.name}</span>
+									<div class="preserve-name-wrapper">
+										<svg
+											class="chevron-icon"
+											xmlns="http://www.w3.org/2000/svg"
+											width="16"
+											height="16"
+											viewBox="0 0 24 24"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
+											<polyline points="9 18 15 12 9 6"></polyline>
+										</svg>
+										<span class="preserve-name">{preserve.name}</span>
+									</div>
 									<span class="preserve-count">{preserve.count}</span>
 								</div>
 							</button>
@@ -575,6 +592,21 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+	}
+
+	.preserve-name-wrapper {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	.chevron-icon {
+		color: var(--color-text-muted);
+		transition: transform 0.2s ease;
+	}
+
+	.preserve-header-btn[aria-expanded='true'] .chevron-icon {
+		transform: rotate(90deg);
 	}
 
 	.preserve-name {
