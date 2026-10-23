@@ -75,8 +75,21 @@ lint:
 fmt:
     cargo fmt
 
-# Check all (compile, test, lint, format check)
-check-all: lint
+# Check frontend (types, lint, format, unit tests, build output contract)
+check-web:
+    cd web && pnpm check
+    cd web && pnpm lint
+    cd web && pnpm check-format
+    cd web && pnpm test:unit
+    cd web && PUBLIC_BASE_URL=https://example.com PUBLIC_API_URL=https://api.example.com pnpm build
+    cd web && pnpm test:build
+
+# Browser smoke tests (first run: cd web && pnpm exec playwright install chromium)
+check-e2e:
+    cd web && pnpm test:e2e
+
+# Check all (backend compile/test/lint/format + frontend checks)
+check-all: lint check-web
     cargo test
     cargo fmt -- --check
     @echo "✅ All checks passed"
