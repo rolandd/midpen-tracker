@@ -40,7 +40,8 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`
 
-**Scopes**: `api`, `web`, `auth`, `db`, `infra`, `webhook`, `tasks`, `strava`
+**Scopes**: `api`, `web`, `auth`, `db`, `infra`, `webhook`, `tasks`, `strava`,
+`deps`
 
 Examples:
 ```
@@ -59,14 +60,22 @@ docs: update README with new deploy instructions
 
 ### Frontend (Svelte/TypeScript)
 - **Strictly use TypeScript**, never raw JavaScript
-- Run `npm run format`, `npm run lint`, and `npm run check` in `web/` — all must pass cleanly
+- Run `pnpm format`, `pnpm lint`, and `pnpm check` in `web/` — all must pass cleanly
+- Add unit tests (vitest) for new logic in `web/src/lib/`: `pnpm test:unit`
 - Use generated types from `web/src/lib/generated/`
 
 ## Before Committing
 
-Run the full check:
+Run the full check (backend clippy/tests/format **and** frontend types, lint,
+format, unit tests and build-output contract):
 ```bash
 just check-all
+```
+
+After changing routes, components, or the build config, also run the browser
+smoke tests (catches hydration/routing regressions that type-checking cannot):
+```bash
+just check-e2e   # first run: cd web && pnpm exec playwright install chromium
 ```
 
 If you modified Rust DTOs in `src/models/` or `src/routes/api.rs`:
@@ -93,12 +102,16 @@ just generate-bindings
 | Preserve detection | `src/services/preserve.rs` |
 | Infrastructure | `infra/*.tf` |
 | Build/deploy | `justfile`, `cloudbuild.yaml` |
+| Frontend tests | `web/src/lib/*.test.ts`, `web/e2e/*.spec.ts`, `web/scripts/verify-build.mjs` |
+| Frontend upgrade plan | `docs/specs/web-major-upgrades.md` |
 
 ## DOs and DON'Ts
 
 ### DOs
 
-- **DO** run `just check-all` before considering work complete
+- **DO** run `just check-all` before considering work complete (includes frontend checks)
+- **DO** run `just check-e2e` after route/component/build-config changes
+- **DO** keep the frontend build contract passing (`pnpm test:build`) when touching `svelte.config.js`, `vite.config.ts`, `web/static/`, or the adapter
 - **DO** run integration tests with emulator after DB changes: `./scripts/test-with-emulator.sh`
 - **DO** regenerate TypeScript bindings after modifying Rust DTOs: `just generate-bindings`
 - **DO** use `Config::test_default()` for unit tests, not `Config::from_env()`
@@ -118,6 +131,7 @@ just generate-bindings
 - **DON'T** call Strava APIs directly in request handlers — use Cloud Tasks to respect [rate limits](https://developers.strava.com/docs/rate-limits/)
 - **DON'T** add dependencies that require OpenSSL — backend runs on distroless, use `rustls` instead
 - **DON'T** use raw JavaScript — use type-safe TypeScript for all frontend code
+- **DON'T** add frontend tests outside the three existing layers (vitest units, build contract, Playwright smoke) without updating `docs/specs/web-major-upgrades.md`
 - **DON'T** add `chrono` (or a second date/time library) — use `jiff`
 - **DON'T** use the `Host` header to construct URLs — use explicit `API_URL` env var instead
 - **DON'T** mix GET/POST for auth routes — logout is POST, OAuth callback is GET

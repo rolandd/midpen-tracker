@@ -100,7 +100,9 @@ infra/                # Terraform configuration
 |------|---------|
 | Run backend | `just dev-api` |
 | Run frontend | `cd web && npm run dev` |
-| Run all checks | `just check-all` |
+| Run all checks | `just check-all` (backend + frontend) |
+| Run frontend checks only | `just check-web` |
+| Run browser smoke tests | `just check-e2e` |
 | Generate TS bindings | `just generate-bindings` |
 | Deploy | `just deploy` |
 
@@ -109,15 +111,32 @@ infra/                # Terraform configuration
 ```bash
 cargo test                              # Unit tests
 ./scripts/test-with-emulator.sh         # Integration tests (requires Firestore emulator)
-cd web && npm run check && npm run lint # Frontend checks
+cd web && pnpm check && pnpm lint       # Frontend types + lint
+cd web && pnpm test:unit                # Frontend unit tests (vitest)
+cd web && pnpm test:build               # Build output contract (run pnpm build first)
+cd web && pnpm test:e2e                 # Browser smoke tests (Playwright, demo-mode build)
 ```
 
 > **Note**: Many tests in `tests/` require the Firestore emulator. They will fail without it.
 
+The frontend test layers exist to catch framework/toolchain regressions (see
+`docs/specs/web-major-upgrades.md`):
+
+| Layer | Command | Catches |
+|-------|---------|---------|
+| Types | `pnpm check` | SvelteKit/TypeScript API changes, stale generated bindings |
+| Unit | `pnpm test:unit` | `src/lib/api.ts` contract, demo mode, cache/mock logic |
+| Build contract | `pnpm test:build` | adapter output layout, precompression, Cloudflare `_headers`/`_routes.json` |
+| Browser smoke | `pnpm test:e2e` | hydration errors, routing, demo-mode dashboard rendering |
+
+`pnpm test:e2e` builds with `PUBLIC_DEMO_MODE=true` and serves `build/` through
+`web/scripts/serve-build.mjs`, which mimics Cloudflare Pages' SPA fallback. The
+first run needs `pnpm exec playwright install chromium`.
+
 ### Code Style
 
 - **Rust**: `cargo fmt` and `cargo clippy -- -D warnings`
-- **Frontend**: `npm run format` and `npm run lint` in `web/`
+- **Frontend**: `pnpm format`, `pnpm lint`, `pnpm check` and `pnpm test:unit` in `web/`
 
 ### TypeScript Bindings
 
