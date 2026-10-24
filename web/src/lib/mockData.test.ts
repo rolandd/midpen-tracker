@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
+import * as fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import { DEMO_MODE, getMockActivitiesForPreserve, mockPreserveStats, mockUser } from './mockData';
 
@@ -92,5 +93,105 @@ describe('getMockActivitiesForPreserve', () => {
 		// Pages must not overlap.
 		const firstIds = new Set(first.activities.map((a) => a.id));
 		expect(second.activities.every((a) => !firstIds.has(a.id))).toBe(true);
+	});
+});
+
+/**
+ * The demo build is the only mode the shipped static site can be exercised in
+ * without a backend, so its pagination has to behave like the real endpoint:
+ * pages partition the activity list, never overlap, and never repeat an id.
+ */
+const KNOWN_PRESERVE = 'Rancho San Antonio';
+
+describe('getMockActivitiesForPreserve (property-based)', () => {
+	const pageArgs = fc.record({
+		page: fc.integer({ min: 1, max: 60 }),
+		per_page: fc.integer({ min: 1, max: 120 })
+	});
+
+	function allActivityIds(preserveName: string): number[] {
+		const preserve = mockPreserveStats.preserves.find((p) => p.name === preserveName)!;
+		return preserve.activities.map((a) => a.id);
+	}
+
+	it('returns exactly the slice the page parameters ask for', () => {
+		fc.assert(
+			fc.property(pageArgs, ({ page, per_page }) => {
+				const ids = allActivityIds(KNOWN_PRESERVE);
+				const response = getMockActivitiesForPreserve(KNOWN_PRESERVE, page, per_page);
+
+				const expectedIds = ids.slice((page - 1) * per_page, page * per_page);
+
+				expect(response.activities.map((a) => a.id)).toEqual(expectedIds);
+				expect(response.total).toBe(ids.length);
+				expect(response.page).toBe(page);
+				expect(response.per_page).toBe(per_page);
+				expect(response.next_cursor).toBeNull();
+			})
+		);
+	});
+
+	it('never repeats an activity across pages', () => {
+		fc.assert(
+			fc.property(
+				fc.integer({ min: 1, max: 59 }),
+				fc.integer({ min: 1, max: 120 }),
+				(page, per) => {
+					const first = getMockActivitiesForPreserve(KNOWN_PRESERVE, page, per);
+					const second = getMockActivitiesForPreserve(KNOWN_PRESERVE, page + 1, per);
+
+					const firstIds = new Set(first.activities.map((a) => a.id));
+					expect(firstIds.size).toBe(first.activities.length);
+					expect(second.activities.every((a) => !firstIds.has(a.id))).toBe(true);
+				}
+			)
+		);
+	});
+
+	it('serves every activity exactly once when the pages are concatenated', () => {
+		fc.assert(
+			fc.property(fc.integer({ min: 1, max: 25 }), (per_page) => {
+				const expected = allActivityIds(KNOWN_PRESERVE);
+				const collected: number[] = [];
+
+				for (let page = 1; page <= Math.ceil(expected.length / per_page); page++) {
+					collected.push(
+						...getMockActivitiesForPreserve(KNOWN_PRESERVE, page, per_page).activities.map(
+							(a) => a.id
+						)
+					);
+				}
+
+				expect(collected).toEqual(expected);
+			})
+		);
+	});
+
+	it('sorts each page newest first', () => {
+		fc.assert(
+			fc.property(pageArgs, ({ page, per_page }) => {
+				const times = getMockActivitiesForPreserve(KNOWN_PRESERVE, page, per_page).activities.map(
+					(a) => Date.parse(a.start_date)
+				);
+
+				expect([...times].sort((a, b) => b - a)).toEqual(times);
+			})
+		);
+	});
+
+	it('is empty for preserve names that do not exist', () => {
+		fc.assert(
+			fc.property(
+				fc.string().filter((name) => !mockPreserveStats.preserves.some((p) => p.name === name)),
+				pageArgs,
+				(name, { page, per_page }) => {
+					const response = getMockActivitiesForPreserve(name, page, per_page);
+
+					expect(response.activities).toEqual([]);
+					expect(response.total).toBe(0);
+					expect(response.page).toBe(page);
+				}
+			)
+		);
 	});
 });

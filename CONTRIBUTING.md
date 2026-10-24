@@ -104,7 +104,7 @@ infra/                # Terraform configuration
 | Task | Command |
 |------|---------|
 | Run backend | `just dev-api` |
-| Run frontend | `cd web && npm run dev` |
+| Run frontend | `cd web && pnpm dev` |
 | Run all checks | `just check-all` (backend + frontend) |
 | Run frontend checks only | `just check-web` |
 | Run browser smoke tests | `just check-e2e` |
@@ -131,12 +131,35 @@ The frontend test layers exist to catch framework/toolchain regressions (see
 |-------|---------|---------|
 | Types | `pnpm check` | SvelteKit/TypeScript API changes, stale generated bindings |
 | Unit | `pnpm test:unit` | `src/lib/api.ts` contract, demo mode, cache/mock logic |
+| Property | `pnpm test:unit` | invariants of pure helpers (see below) |
 | Build contract | `pnpm test:build` | adapter output layout, precompression, Cloudflare `_headers`/`_routes.json` |
 | Browser smoke | `pnpm test:e2e` | hydration errors, routing, demo-mode dashboard rendering |
 
 `pnpm test:e2e` builds with `PUBLIC_DEMO_MODE=true` and serves `build/` through
 `web/scripts/serve-build.mjs`, which mimics Cloudflare Pages' SPA fallback. The
 first run needs `pnpm exec playwright install chromium`.
+
+**Property-based tests** use [fast-check](https://fast-check.dev) and live next
+to the example-based tests (`*.test.ts`). They are the right tool when the code
+under test is a pure function with invariants rather than a handful of known
+cases — pagination partitions, URL round-trips, ordering/dedup, and keyed stores
+checked against a `Map` model. Shared arbitraries live in
+`web/src/lib/testing/arbitraries.ts` (test-only; never imported by app code).
+When a property test fails, fast-check prints a shrunk counterexample and a seed
+that reproduces it — no need to add that case by hand, but do add an
+example-based test for the bug once it is fixed.
+
+Run a single file with `pnpm exec vitest run src/lib/preserves.test.ts`, or use
+`pnpm test:unit:watch`.
+
+Notable properties already covered:
+
+| Subject | File | Invariant |
+|---------|------|-----------|
+| `selectPreserves` (dashboard filtering) | `src/lib/preserves.test.ts` | unique names, deterministic ordering, visit counts conserved, year view is the union of that year and all known preserves |
+| `activityCache` | `src/lib/cache.test.ts` | agrees with a `Map` model for arbitrary read/write/append/clear sequences |
+| `fetchActivities` | `src/lib/api.test.ts` | arbitrary preserve names round-trip through URL parsing |
+| `getMockActivitiesForPreserve` | `src/lib/mockData.test.ts` | pages partition the activity list, never overlap, newest first |
 
 ### Code Style
 
