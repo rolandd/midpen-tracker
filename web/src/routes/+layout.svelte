@@ -3,19 +3,22 @@
 
 <script lang="ts">
 	import '../app.css';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { uiState } from '$lib/state.svelte';
-	import { AboutModal } from '$lib/components';
-	import { PUBLIC_BASE_URL } from '$env/static/public';
-	import { fetchHealth, fetchMe, ApiError } from '$lib/api';
+	import { uiState } from '#lib/state.svelte.ts';
+	import { AboutModal } from '#lib/components/index.ts';
+	import { fetchHealth, fetchMe, ApiError } from '#lib/api.ts';
+
+	// Injected at build time by `define` in vite.config.ts (SvelteKit 3 replaced
+	// `$env/static/public` with the explicit `$app/env/public` API).
+	const PUBLIC_BASE_URL: string = import.meta.env.PUBLIC_BASE_URL ?? '';
 
 	let { children } = $props();
 
 	// Reactively remove auth-pending when navigating away from landing page.
 	// The landing page (/) handles its own class removal after auth check.
 	$effect(() => {
-		if ($page.url.pathname !== '/') {
+		if (page.url.pathname !== '/') {
 			document.documentElement.classList.remove('auth-pending');
 		}
 	});

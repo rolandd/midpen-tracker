@@ -5,9 +5,9 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { UserResponse } from '../generated';
-	import { DeleteAccountModal } from '$lib/components';
-	import { deleteAccount } from '$lib/api';
-	import { uiState } from '$lib/state.svelte';
+	import { DeleteAccountModal } from '#lib/components/index.ts';
+	import { deleteAccount } from '#lib/api.ts';
+	import { uiState } from '#lib/state.svelte.ts';
 
 	interface Props {
 		user: UserResponse | null;

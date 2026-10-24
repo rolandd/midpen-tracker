@@ -3,9 +3,9 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { fetchActivities, type ActivitySummary } from '$lib/api';
-	import { Spinner, Button, EmptyState } from '$lib/components';
-	import { activityCache } from '$lib/cache.svelte';
+	import { fetchActivities, type ActivitySummary } from '#lib/api.ts';
+	import { Spinner, Button, EmptyState } from '#lib/components/index.ts';
+	import { activityCache } from '#lib/cache.svelte.ts';
 
 	let { preserveName } = $props();
 

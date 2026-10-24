@@ -103,6 +103,7 @@ just generate-bindings
 | Infrastructure | `infra/*.tf` |
 | Build/deploy | `justfile`, `cloudbuild.yaml` |
 | Frontend tests | `web/src/lib/*.test.ts`, `web/e2e/*.spec.ts`, `web/scripts/verify-build.mjs` |
+| Frontend build config | `web/vite.config.ts` (SvelteKit 3 config lives here, not `svelte.config.js`) |
 | Frontend upgrade plan | `docs/specs/web-major-upgrades.md` |
 
 ## DOs and DON'Ts
@@ -111,7 +112,7 @@ just generate-bindings
 
 - **DO** run `just check-all` before considering work complete (includes frontend checks)
 - **DO** run `just check-e2e` after route/component/build-config changes
-- **DO** keep the frontend build contract passing (`pnpm test:build`) when touching `svelte.config.js`, `vite.config.ts`, `web/static/`, or the adapter
+- **DO** keep the frontend build contract passing (`pnpm test:build`) when touching `vite.config.ts`, `web/static/`, or the adapter
 - **DO** run integration tests with emulator after DB changes: `./scripts/test-with-emulator.sh`
 - **DO** regenerate TypeScript bindings after modifying Rust DTOs: `just generate-bindings`
 - **DO** use `Config::test_default()` for unit tests, not `Config::from_env()`
@@ -121,7 +122,9 @@ just generate-bindings
 - **DO** use HMAC signatures for state parameters to prevent CSRF
 - **DO** prefer environment variables over runtime API calls for secrets (Cloud Run injects them)
 - **DO** use `futures_util::stream::buffer_unordered` for concurrent Firestore operations
-- **DO** ensure `npm run check` and `npm run lint` pass cleanly for frontend code
+- **DO** ensure `pnpm check` and `pnpm lint` pass cleanly for frontend code
+- **DO** import app-internal modules through `#lib/...` (SvelteKit 3 dropped the `$lib` alias) and keep the explicit extension (`#lib/api.ts`) — TypeScript does not infer extensions for package-import patterns
+- **DO** read public build-time config from `import.meta.env.PUBLIC_*` (defined in `web/vite.config.ts`); `$env/static/public` no longer exists in SvelteKit 3
 - **DO** check `just check-webhooks` after deploying to verify webhook registration
 - **DO** consider race conditions when multiple requests can modify the same data
 - **DO** use Firestore transactions for read-modify-write operations to ensure consistency

@@ -45,11 +45,16 @@ src/
 ├── routes/           # HTTP handlers (api, auth, tasks, webhook)
 └── services/         # Business logic (Strava API, preserve detection, tasks)
 
-web/src/
-├── lib/components/   # Reusable UI components
-├── lib/generated/    # TypeScript types from Rust (ts-rs)
-├── lib/api.ts        # Backend API client
-└── routes/           # SvelteKit pages
+web/
+├── vite.config.ts    # SvelteKit config + adapter + build-time PUBLIC_* defines
+├── functions/        # Cloudflare Pages middleware (CSP nonces)
+├── e2e/              # Playwright smoke tests against a demo-mode build
+├── scripts/          # Build verifier and static file server
+└── src/
+    ├── lib/components/   # Reusable UI components (import as `#lib/components/index.ts`)
+    ├── lib/generated/    # TypeScript types from Rust (ts-rs)
+    ├── lib/api.ts        # Backend API client
+    └── routes/           # SvelteKit pages
 
 tests/                # Integration tests (many require Firestore emulator)
 scripts/              # Utility scripts (emulator, data fetching)
@@ -89,7 +94,7 @@ infra/                # Terraform configuration
 4.  **Run locally**:
     ```bash
     just dev-api          # Backend on :8080
-    cd web && npm run dev # Frontend on :5173
+    cd web && pnpm dev    # Frontend on :5173
     ```
 
 ## Development Workflow
@@ -166,6 +171,13 @@ just setup-hooks
   dependencies.
 - Frontend settings (`overrides`, `allowBuilds`) live in
   `web/pnpm-workspace.yaml`, not `package.json` — pnpm 11 reads them from there.
+- **SvelteKit 3 config lives in `web/vite.config.ts`** (`sveltekit({...})` plugin
+  options); `svelte.config.js` is no longer read. Public build-time variables are
+  injected there via Vite `define` as `import.meta.env.PUBLIC_*`.
+- App-internal imports use the `#lib/*` package-import map (SvelteKit 3 dropped
+  `$lib`) and need explicit extensions: `#lib/api.ts`,
+  `#lib/state.svelte.ts`, `#lib/components/index.ts`. See
+  `docs/specs/web-major-upgrades.md` for the full upgrade rationale.
 
 ## Environment Variables
 

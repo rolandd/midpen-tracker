@@ -8,11 +8,11 @@
 		logout as apiLogout,
 		type PreserveSummary,
 		type PreserveStatsResponse
-	} from '$lib/api';
+	} from '#lib/api.ts';
 	import ActivityList from './ActivityList.svelte';
-	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
-	import { Spinner, EmptyState, Button } from '$lib/components';
-	import { uiState } from '$lib/state.svelte';
+	import ProfileDropdown from '#lib/components/ProfileDropdown.svelte';
+	import { Spinner, EmptyState, Button } from '#lib/components/index.ts';
+	import { uiState } from '#lib/state.svelte.ts';
 	import Toggle from 'svelte-switcher';
 
 	let loading = $state(true);
