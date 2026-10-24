@@ -87,7 +87,22 @@ just generate-bindings
 
 - Unit tests: `cargo test`
 - Integration tests require Firestore emulator: `./scripts/test-with-emulator.sh`
-- Frontend: `cd web && npm run check`
+- Geometry property tests (no emulator): `cargo test --test preserve_property_tests`
+- Frontend: `cd web && pnpm check && pnpm test:unit`
+
+Both sides use property-based tests for logic with invariants, because the
+example tests cannot cover the input space:
+
+- Rust: `proptest` in `tests/preserve_property_tests.rs` (bounding-box prefilter
+  matches brute force, translation/subdivision invariance, polyline round-trip,
+  loader/bbox fidelity). `PROPTEST_CASES=2000 cargo test --test
+  preserve_property_tests` hammers it locally.
+- Frontend: `fast-check` in `web/src/lib/*.test.ts` (see `CONTRIBUTING.md` for
+  the inventory).
+
+When a property test fails it prints a shrunk counterexample; add an
+example-based regression test for the fixed bug rather than relying on the
+property alone.
 
 ## Key Files Reference
 
@@ -103,6 +118,7 @@ just generate-bindings
 | Infrastructure | `infra/*.tf` |
 | Build/deploy | `justfile`, `cloudbuild.yaml` |
 | Frontend tests | `web/src/lib/*.test.ts`, `web/e2e/*.spec.ts`, `web/scripts/verify-build.mjs` |
+| Geometry property tests | `tests/preserve_property_tests.rs` |
 | Property-test arbitraries | `web/src/lib/testing/arbitraries.ts` |
 | Frontend build config | `web/vite.config.ts` (SvelteKit 3 config lives here, not `svelte.config.js`) |
 | Frontend upgrade plan | `docs/specs/web-major-upgrades.md` |
@@ -128,6 +144,10 @@ just generate-bindings
   logic with invariants — pagination slices, URL round-trips, ordering/dedupe,
   keyed stores modelled against a `Map`. Keep example tests for the contract and
   for cases a shrinking counterexample uncovered
+- **DO** use `proptest` for geometry invariants (`tests/preserve_property_tests.rs`)
+  when touching `src/services/preserve.rs` or `src/models/preserve.rs` — the
+  bounding-box prefilter must stay equivalent to running the expensive
+  intersection check unconditionally
 - **DO** import app-internal modules through `#lib/...` (SvelteKit 3 dropped the `$lib` alias) and keep the explicit extension (`#lib/api.ts`) — TypeScript does not infer extensions for package-import patterns
 - **DO** read public build-time config from `import.meta.env.PUBLIC_*` (defined in `web/vite.config.ts`); `$env/static/public` no longer exists in SvelteKit 3
 - **DO** check `just check-webhooks` after deploying to verify webhook registration

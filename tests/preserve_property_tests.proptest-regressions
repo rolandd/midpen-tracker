@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 0715a36b4bdc0b283056073ac9ee43c679e5c52cda40ba51e16cb6d9ca8cf3bc # shrinks to rect = Rect { x0: 0, y0: 0, x1: 1, y1: 1 }, fractions = [(0.05, 0.05)]
+cc 6a6a6af112f0e0045e4cbb4fa1b3b1c32fe1967afdcddda21ddd099b96054c52 # shrinks to rect = Rect { x0: 0, y0: 0, x1: 1, y1: 1 }, fractions = [(0.05, 0.05)]
+cc f9dacb1aa50a001832bb3794eebcac84366e22b81f2b8fdc046b6fd213f475f9 # shrinks to left = Rect { x0: 0, y0: 0, x1: 1, y1: 1 }, offset = 1, in_left = false, fractions = [(0.05, 0.05)]

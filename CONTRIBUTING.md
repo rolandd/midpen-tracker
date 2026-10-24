@@ -115,6 +115,7 @@ infra/                # Terraform configuration
 
 ```bash
 cargo test                              # Unit tests
+cargo test --test preserve_property_tests  # Geometry property tests (proptest)
 ./scripts/test-with-emulator.sh         # Integration tests (requires Firestore emulator)
 cd web && pnpm check && pnpm lint       # Frontend types + lint
 cd web && pnpm test:unit                # Frontend unit tests (vitest)
@@ -139,7 +140,22 @@ The frontend test layers exist to catch framework/toolchain regressions (see
 `web/scripts/serve-build.mjs`, which mimics Cloudflare Pages' SPA fallback. The
 first run needs `pnpm exec playwright install chromium`.
 
-**Property-based tests** use [fast-check](https://fast-check.dev) and live next
+**Property-based tests (Rust)** use [proptest](https://proptest-rs.github.io/proptest/)
+in `tests/preserve_property_tests.rs`. They cover the geometry pipeline, where a
+handful of fixtures cannot represent the input space:
+
+| Subject | Invariant |
+|---------|-----------|
+| `find_intersections` | equals the brute-force "always run the expensive check" definition, so the bounding-box prefilter can only ever be an optimisation |
+| detection | invariant under translating preserve + activity, and under inserting redundant vertices into the activity line |
+| encoded polylines | `decode(encode(line))` round-trips and the Strava pipeline agrees with the raw coordinates |
+| containment / crossing | a line inside a preserve, or spanning one, is always reported (so "always return nothing" cannot pass) |
+| loader | cached bounding rectangle equals the geometry's, closed preserves (no URL) are skipped, unsupported geometry is rejected |
+
+Run more cases locally with `PROPTEST_CASES=2000 cargo test --test
+preserve_property_tests`.
+
+**Property-based tests (frontend)** use [fast-check](https://fast-check.dev) and live next
 to the example-based tests (`*.test.ts`). They are the right tool when the code
 under test is a pure function with invariants rather than a handful of known
 cases — pagination partitions, URL round-trips, ordering/dedup, and keyed stores
