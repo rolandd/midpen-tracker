@@ -24,11 +24,15 @@ export default defineConfig(({ mode }) => {
 					assets: 'build',
 					fallback: 'index.html', // SPA fallback
 					precompress: true
-				}),
-				prerender: {
-					entries: ['/', '/legal', '/dashboard', '/callback', '/account-deletion-in-progress']
-				}
-				// Note: CSP is handled by the Cloudflare Pages middleware
+				})
+				// This is a client-rendered SPA: pages do not export
+				// `prerender = true`, so the build emits only the `index.html`
+				// fallback (Cloudflare Pages serves it for deep links). A previous
+				// `prerender.entries` list here was dead config. Enabling real
+				// prerendering changes the deploy output and needs a Pages/CSP
+				// check — see docs/specs/web-major-upgrades.md.
+				//
+				// CSP is handled by the Cloudflare Pages middleware
 				// (functions/_middleware.ts), which injects nonces per-request to
 				// support Cloudflare's injected scripts.
 			})
