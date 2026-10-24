@@ -45,11 +45,57 @@ jobs:
       - name: Check Formatting
         run: pnpm check-format
 
+      - name: Unit Tests
+        run: pnpm test:unit
+
       - name: Build
         run: pnpm build
         env:
           PUBLIC_BASE_URL: "https://example.com"
           PUBLIC_API_URL: "https://api.example.com"
+
+      - name: Verify Build Output
+        run: pnpm test:build
+
+  frontend_e2e:
+    name: Frontend (Browser Smoke Tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build and run browser smoke tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7
 
   backend:
     name: Backend (Test & Check)

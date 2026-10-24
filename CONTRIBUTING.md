@@ -45,11 +45,16 @@ src/
 ├── routes/           # HTTP handlers (api, auth, tasks, webhook)
 └── services/         # Business logic (Strava API, preserve detection, tasks)
 
-web/src/
-├── lib/components/   # Reusable UI components
-├── lib/generated/    # TypeScript types from Rust (ts-rs)
-├── lib/api.ts        # Backend API client
-└── routes/           # SvelteKit pages
+web/
+├── vite.config.ts    # SvelteKit config + adapter + build-time PUBLIC_* defines
+├── functions/        # Cloudflare Pages middleware (CSP nonces)
+├── e2e/              # Playwright smoke tests against a demo-mode build
+├── scripts/          # Build verifier and static file server
+└── src/
+    ├── lib/components/   # Reusable UI components (import as `#lib/components/index.ts`)
+    ├── lib/generated/    # TypeScript types from Rust (ts-rs)
+    ├── lib/api.ts        # Backend API client
+    └── routes/           # SvelteKit pages
 
 tests/                # Integration tests (many require Firestore emulator)
 scripts/              # Utility scripts (emulator, data fetching)
@@ -89,7 +94,7 @@ infra/                # Terraform configuration
 4.  **Run locally**:
     ```bash
     just dev-api          # Backend on :8080
-    cd web && npm run dev # Frontend on :5173
+    cd web && pnpm dev    # Frontend on :5173
     ```
 
 ## Development Workflow
@@ -99,8 +104,10 @@ infra/                # Terraform configuration
 | Task | Command |
 |------|---------|
 | Run backend | `just dev-api` |
-| Run frontend | `cd web && npm run dev` |
-| Run all checks | `just check-all` |
+| Run frontend | `cd web && pnpm dev` |
+| Run all checks | `just check-all` (backend + frontend) |
+| Run frontend checks only | `just check-web` |
+| Run browser smoke tests | `just check-e2e` |
 | Generate TS bindings | `just generate-bindings` |
 | Deploy | `just deploy` |
 
@@ -108,16 +115,72 @@ infra/                # Terraform configuration
 
 ```bash
 cargo test                              # Unit tests
+cargo test --test preserve_property_tests  # Geometry property tests (proptest)
 ./scripts/test-with-emulator.sh         # Integration tests (requires Firestore emulator)
-cd web && npm run check && npm run lint # Frontend checks
+cd web && pnpm check && pnpm lint       # Frontend types + lint
+cd web && pnpm test:unit                # Frontend unit tests (vitest)
+cd web && pnpm test:build               # Build output contract (run pnpm build first)
+cd web && pnpm test:e2e                 # Browser smoke tests (Playwright, demo-mode build)
 ```
 
 > **Note**: Many tests in `tests/` require the Firestore emulator. They will fail without it.
 
+The frontend test layers exist to catch framework/toolchain regressions (see
+`docs/specs/web-major-upgrades.md`):
+
+| Layer | Command | Catches |
+|-------|---------|---------|
+| Types | `pnpm check` | SvelteKit/TypeScript API changes, stale generated bindings |
+| Unit | `pnpm test:unit` | `src/lib/api.ts` contract, demo mode, cache/mock logic |
+| Property | `pnpm test:unit` | invariants of pure helpers (see below) |
+| Build contract | `pnpm test:build` | adapter output layout, precompression, Cloudflare `_headers`/`_routes.json` |
+| Browser smoke | `pnpm test:e2e` | hydration errors, routing, demo-mode dashboard rendering |
+
+`pnpm test:e2e` builds with `PUBLIC_DEMO_MODE=true` and serves `build/` through
+`web/scripts/serve-build.mjs`, which mimics Cloudflare Pages' SPA fallback. The
+first run needs `pnpm exec playwright install chromium`.
+
+**Property-based tests (Rust)** use [proptest](https://proptest-rs.github.io/proptest/)
+in `tests/preserve_property_tests.rs`. They cover the geometry pipeline, where a
+handful of fixtures cannot represent the input space:
+
+| Subject | Invariant |
+|---------|-----------|
+| `find_intersections` | equals the brute-force "always run the expensive check" definition, so the bounding-box prefilter can only ever be an optimisation |
+| detection | invariant under translating preserve + activity, and under inserting redundant vertices into the activity line |
+| encoded polylines | `decode(encode(line))` round-trips and the Strava pipeline agrees with the raw coordinates |
+| containment / crossing | a line inside a preserve, or spanning one, is always reported (so "always return nothing" cannot pass) |
+| loader | cached bounding rectangle equals the geometry's, closed preserves (no URL) are skipped, unsupported geometry is rejected |
+
+Run more cases locally with `PROPTEST_CASES=2000 cargo test --test
+preserve_property_tests`.
+
+**Property-based tests (frontend)** use [fast-check](https://fast-check.dev) and live next
+to the example-based tests (`*.test.ts`). They are the right tool when the code
+under test is a pure function with invariants rather than a handful of known
+cases — pagination partitions, URL round-trips, ordering/dedup, and keyed stores
+checked against a `Map` model. Shared arbitraries live in
+`web/src/lib/testing/arbitraries.ts` (test-only; never imported by app code).
+When a property test fails, fast-check prints a shrunk counterexample and a seed
+that reproduces it — no need to add that case by hand, but do add an
+example-based test for the bug once it is fixed.
+
+Run a single file with `pnpm exec vitest run src/lib/preserves.test.ts`, or use
+`pnpm test:unit:watch`.
+
+Notable properties already covered:
+
+| Subject | File | Invariant |
+|---------|------|-----------|
+| `selectPreserves` (dashboard filtering) | `src/lib/preserves.test.ts` | unique names, deterministic ordering, visit counts conserved, year view is the union of that year and all known preserves |
+| `activityCache` | `src/lib/cache.test.ts` | agrees with a `Map` model for arbitrary read/write/append/clear sequences |
+| `fetchActivities` | `src/lib/api.test.ts` | arbitrary preserve names round-trip through URL parsing |
+| `getMockActivitiesForPreserve` | `src/lib/mockData.test.ts` | pages partition the activity list, never overlap, newest first |
+
 ### Code Style
 
 - **Rust**: `cargo fmt` and `cargo clippy -- -D warnings`
-- **Frontend**: `npm run format` and `npm run lint` in `web/`
+- **Frontend**: `pnpm format`, `pnpm lint`, `pnpm check` and `pnpm test:unit` in `web/`
 
 ### TypeScript Bindings
 
@@ -147,6 +210,13 @@ just setup-hooks
   dependencies.
 - Frontend settings (`overrides`, `allowBuilds`) live in
   `web/pnpm-workspace.yaml`, not `package.json` — pnpm 11 reads them from there.
+- **SvelteKit 3 config lives in `web/vite.config.ts`** (`sveltekit({...})` plugin
+  options); `svelte.config.js` is no longer read. Public build-time variables are
+  injected there via Vite `define` as `import.meta.env.PUBLIC_*`.
+- App-internal imports use the `#lib/*` package-import map (SvelteKit 3 dropped
+  `$lib`) and need explicit extensions: `#lib/api.ts`,
+  `#lib/state.svelte.ts`, `#lib/components/index.ts`. See
+  `docs/specs/web-major-upgrades.md` for the full upgrade rationale.
 
 ## Environment Variables
 

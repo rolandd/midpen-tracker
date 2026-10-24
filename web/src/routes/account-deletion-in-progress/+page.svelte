@@ -3,8 +3,8 @@
 
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { fetchMe, logout, ApiError } from '$lib/api';
-	import { uiState } from '$lib/state.svelte';
+	import { fetchMe, logout, ApiError } from '#lib/api.ts';
+	import { uiState } from '#lib/state.svelte.ts';
 
 	$effect(() => {
 		const controller = new AbortController();

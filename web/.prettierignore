@@ -7,3 +7,6 @@ dist
 package-lock.json
 build/
 .svelte-kit/
+
+test-results/
+playwright-report/

@@ -3,8 +3,8 @@
 
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { API_BASE_URL } from '$lib/api';
-	import { uiState } from '$lib/state.svelte';
+	import { API_BASE_URL } from '#lib/api.ts';
+	import { uiState } from '#lib/state.svelte.ts';
 
 	let isConnecting = $state(false);
 

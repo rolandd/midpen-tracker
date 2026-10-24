@@ -8,11 +8,12 @@
 		logout as apiLogout,
 		type PreserveSummary,
 		type PreserveStatsResponse
-	} from '$lib/api';
+	} from '#lib/api.ts';
 	import ActivityList from './ActivityList.svelte';
-	import ProfileDropdown from '$lib/components/ProfileDropdown.svelte';
-	import { Spinner, EmptyState, Button } from '$lib/components';
-	import { uiState } from '$lib/state.svelte';
+	import ProfileDropdown from '#lib/components/ProfileDropdown.svelte';
+	import { Spinner, EmptyState, Button } from '#lib/components/index.ts';
+	import { selectPreserves, countVisited } from '#lib/preserves.ts';
+	import { uiState } from '#lib/state.svelte.ts';
 	import Toggle from 'svelte-switcher';
 
 	let loading = $state(true);
@@ -30,34 +31,17 @@
 	let isLoggingOut = $state(false);
 	let hasLoadedInitialStats = false;
 
-	// Computed: get preserves filtered by selected year
-	let preserves = $derived.by(() => {
-		if (!selectedYear) {
-			// All time
-			return showUnvisited ? allTimePreserves : allTimePreserves.filter((p) => p.count > 0);
-		}
-		// Filter to selected year
-		const yearData = preservesByYear[selectedYear] ?? {};
-		const yearPreserves: PreserveSummary[] = Object.entries(yearData)
-			.filter(([, count]) => count !== undefined)
-			.map(([name, count]) => ({ name, count: count ?? 0, activities: [] }))
-			.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+	// Computed: get preserves filtered by selected year (see #lib/preserves.ts)
+	let preserves = $derived(
+		selectPreserves({
+			allTime: allTimePreserves,
+			byYear: preservesByYear,
+			year: selectedYear,
+			showUnvisited
+		})
+	);
 
-		if (showUnvisited) {
-			// Add unvisited preserves with count 0
-			const visitedNames = new Set(yearPreserves.map((p) => p.name));
-			const allNames = allTimePreserves.map((p) => p.name);
-			for (const name of allNames) {
-				if (!visitedNames.has(name)) {
-					yearPreserves.push({ name, count: 0, activities: [] });
-				}
-			}
-			yearPreserves.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-		}
-		return yearPreserves;
-	});
-
-	let totalVisited = $derived(preserves.filter((p) => p.count > 0).length);
+	let totalVisited = $derived(countVisited(preserves));
 
 	$effect(() => {
 		if (!uiState.isUserLoading && !uiState.user) {
