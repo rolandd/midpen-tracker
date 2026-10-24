@@ -3,10 +3,10 @@
 
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
-	import { uiState } from '$lib/state.svelte';
+	import { uiState } from '#lib/state.svelte.ts';
 
-	import Content from '$lib/assets/about.md';
-	import { SocialLink } from '$lib/components';
+	import Content from '#lib/assets/about.md';
+	import { SocialLink } from '#lib/components/index.ts';
 
 	function close() {
 		uiState.isAboutOpen = false;

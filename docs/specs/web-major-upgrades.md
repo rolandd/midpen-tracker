@@ -1,6 +1,6 @@
 # Spec: Frontend major-version upgrades (web/)
 
-Status: in progress
+Status: stages 0-2 complete; stage 3 (cleanup) tracked below
 Last updated: 2026-02-06
 Owner: web
 
@@ -54,7 +54,13 @@ Local/CI runtime is Node 24 (`.nvmrc`), which satisfies every engine range above
 4. **Kit 3 removes the `$lib` alias.** Two options:
    - new idiomatic form: `package.json#imports` with `#lib/*` (Node import map);
    - escape hatch: `alias: { $lib: 'src/lib' }` in the kit config.
-   Decision: use `#lib` (upstream direction), keep the change mechanical.
+   Decision: use `#lib` (upstream direction). Constraint discovered while
+   migrating: TypeScript does **not** infer extensions for package-import
+   patterns, so every subpath import needs an explicit extension
+   (`#lib/api.ts`, `#lib/state.svelte.ts`, `#lib/components/index.ts`) plus
+   `allowImportingTsExtensions`. `rewriteRelativeImportExtensions` had to be
+   dropped from `tsconfig.json`: it rejects non-relative `.ts` specifiers.
+   Vitest/Mock-free unit tests kept relative imports, so they were untouched.
 5. **`@types/node`**: pin to `^24` (the runtime and CI Node version) instead of
    `26`, so type-level APIs cannot drift ahead of what production runs.
 6. **Latent bug found during recon (pre-existing, not caused by the upgrade):**
@@ -66,6 +72,27 @@ Local/CI runtime is Node 24 (`.nvmrc`), which satisfies every engine range above
    silently change it. The build verifier asserts the *current* contract
    (fallback shell + assets + Cloudflare files) and will be revisited if
    prerendering is enabled.
+
+7. **Kit 3 replaces `$env/static/public`.** Env access is now the explicit
+   `$app/env/*` API backed by `src/env.ts` + `defineEnvVars`. This app injects
+   its public variables at build time through Vite `define`
+   (`import.meta.env.PUBLIC_*`), so `+layout.svelte` was switched to
+   `import.meta.env.PUBLIC_BASE_URL` (now also defined in `vite.config.ts`) and
+   the `$env` import was dropped rather than introducing a second env mechanism.
+8. **Vite 8 + bundled postcss-import + SSR.** Vite 8 externalizes packages
+   during the SSR build, so its built-in postcss-import received the bare
+   specifier `tailwindcss`, resolved it as `./tailwindcss`, and failed with
+   `ENOENT`. Mitigated with `ssr: { noExternal: ['tailwindcss'] }` and a note
+   in `vite.config.ts`. A follow-up could move to `@tailwindcss/vite` (Tailwind's
+   recommended Vite integration) instead of PostCSS.
+9. **`cookie` override removed.** `cookie@<0.7.0 -> ^0.7.0` existed only for
+   kit 2's `cookie@^0.6` pin (GHSA-pxg6-pf52-xh8x). Kit 3 depends on cookie 2
+   and imports ESM named exports, so the override produced a CJS/ESM mismatch;
+   it is deleted. A stale hoisted `node_modules/cookie` 0.6.0 directory had to
+   be removed manually.
+10. **tsconfig shape changed by kit 3.** `tsconfig.json` now extends the virtual
+    `$app/tsconfig` and must list `$app/types` in `types` (kit validates this);
+    `functions/` keeps its own `tsconfig.functions.json`.
 
 ## Test strategy (the safety net, added before any major bump)
 
@@ -89,23 +116,30 @@ behaviour (unknown paths fall back to `index.html`). The Cloudflare `_middleware
 CSP path is **not** covered (needs the Pages runtime); a future
 `wrangler pages dev` job could close that gap.
 
-All gates must pass on the current (kit 2 / vite 7) tree before any bump, and
-again after every stage.
+The gates were green on the old kit 2 / vite 7 tree before any bump, and were
+re-run after each stage. Stage 2 was the moment this paid off: it caught the
+`$env/static/public` removal, the `#lib` extension requirement, the cookie
+override conflict and the Vite 8 SSR/postcss-import failure before deploy.
 
 ## Stages
 
 Each stage is one revertable commit; `just check-all` (backend) is unaffected,
 frontend gates are the six layers above.
 
-- **Stage 0 — safety net.** vitest + unit tests, build verifier, Playwright
-  smoke suite, static file server, CI jobs, doc updates. No dependency bumps.
-- **Stage 1 — independent majors.** `eslint`/`@eslint/js` 10,
-  `prettier-plugin-svelte` 4, `@types/node` 24, `@cloudflare/workers-types` 5.
-- **Stage 2 — coupled cluster.** `typescript` 6 → `vite` 8 →
+- **Stage 0 — safety net** (done, `test(web): add frontend test layers…`).
+  vitest + unit tests, build verifier, Playwright smoke suite, static file
+  server, CI jobs, doc updates. No dependency bumps.
+- **Stage 1 — independent majors** (done,
+  `build(web): upgrade eslint 10, prettier-plugin-svelte 4, Node/Workers
+  types`): `eslint`/`@eslint/js` 10, `prettier-plugin-svelte` 4,
+  `@types/node` 24, `@cloudflare/workers-types` 5, plus the new
+  `functions/` type-check that had no gate before.
+- **Stage 2 — coupled cluster** (done, this commit). `typescript` 6 → `vite` 8 →
   `vite-plugin-svelte` 7 → `kit` 3 → `adapter-static` 4, plus config move into
   `vite.config.ts`, `$app/stores` → `$app/state`, `$lib` → `#lib`.
-- **Stage 3 — cleanup.** Delete `svelte.config.js`, refresh docs/AGENTS.md,
-  re-run `pnpm audit` / `pnpm outdated`, resolve the prerender question.
+- **Stage 3 — cleanup.** `svelte.config.js` and the `svelte.config.js` doc
+  references are already gone; remaining: optional `@tailwindcss/vite`
+  follow-up, and resolving the prerender question below.
 
 ## Risks
 
@@ -124,5 +158,9 @@ frontend gates are the six layers above.
 1. Should prerendering be enabled (fixing the dead `prerender.entries`)? If yes,
    `/dashboard` etc. must be prerenderable and the deploy output changes;
    verify against Cloudflare Pages routing first.
-2. Migrate `$lib` → `#lib` in Stage 2 or keep `alias` for one release and do the
-   mechanical rename later? (Plan: do it in Stage 2.)
+2. ~~Migrate `$lib` → `#lib` in Stage 2 or keep `alias`?~~ Resolved: `#lib` with
+   explicit extensions (see decision 4).
+3. Should the Tailwind integration move from `@tailwindcss/postcss` to
+   `@tailwindcss/vite`? This would delete `postcss.config.js`,
+   `@tailwindcss/postcss`, `postcss` and `autoprefixer`, and may remove the
+   need for the `ssr.noExternal` workaround.
