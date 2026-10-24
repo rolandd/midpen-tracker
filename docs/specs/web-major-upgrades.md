@@ -1,6 +1,6 @@
 # Spec: Frontend major-version upgrades (web/)
 
-Status: stages 0-2 complete; stage 3 (cleanup) tracked below
+Status: complete (all stages landed); follow-ups listed at the end
 Last updated: 2026-02-06
 Owner: web
 
@@ -137,9 +137,11 @@ frontend gates are the six layers above.
 - **Stage 2 — coupled cluster** (done, this commit). `typescript` 6 → `vite` 8 →
   `vite-plugin-svelte` 7 → `kit` 3 → `adapter-static` 4, plus config move into
   `vite.config.ts`, `$app/stores` → `$app/state`, `$lib` → `#lib`.
-- **Stage 3 — cleanup.** `svelte.config.js` and the `svelte.config.js` doc
-  references are already gone; remaining: optional `@tailwindcss/vite`
-  follow-up, and resolving the prerender question below.
+- **Stage 3 — cleanup** (done). `svelte.config.js` deleted together with its
+  references in `AGENTS.md`/`CONTRIBUTING.md`; the inert `prerender.entries`
+  block was replaced by a comment explaining the SPA contract and why enabling
+  prerendering needs a Pages/CSP check; `pnpm audit`/`pnpm outdated` re-run;
+  docs updated (`#lib`, `vite.config.ts` config, test commands).
 
 ## Risks
 
@@ -155,9 +157,10 @@ frontend gates are the six layers above.
 
 ## Open questions
 
-1. Should prerendering be enabled (fixing the dead `prerender.entries`)? If yes,
-   `/dashboard` etc. must be prerenderable and the deploy output changes;
-   verify against Cloudflare Pages routing first.
+1. Should prerendering be enabled? It would emit real HTML per route instead of
+   a single SPA fallback. Deploy output, Cloudflare Pages 404/deep-link routing
+   and the middleware CSP nonce path must be validated first; deliberately out
+   of scope for a dependency-upgrade branch.
 2. ~~Migrate `$lib` → `#lib` in Stage 2 or keep `alias`?~~ Resolved: `#lib` with
    explicit extensions (see decision 4).
 3. Should the Tailwind integration move from `@tailwindcss/postcss` to
