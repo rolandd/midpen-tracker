@@ -103,6 +103,7 @@ just generate-bindings
 | Infrastructure | `infra/*.tf` |
 | Build/deploy | `justfile`, `cloudbuild.yaml` |
 | Frontend tests | `web/src/lib/*.test.ts`, `web/e2e/*.spec.ts`, `web/scripts/verify-build.mjs` |
+| Property-test arbitraries | `web/src/lib/testing/arbitraries.ts` |
 | Frontend build config | `web/vite.config.ts` (SvelteKit 3 config lives here, not `svelte.config.js`) |
 | Frontend upgrade plan | `docs/specs/web-major-upgrades.md` |
 
@@ -123,6 +124,10 @@ just generate-bindings
 - **DO** prefer environment variables over runtime API calls for secrets (Cloud Run injects them)
 - **DO** use `futures_util::stream::buffer_unordered` for concurrent Firestore operations
 - **DO** ensure `pnpm check` and `pnpm lint` pass cleanly for frontend code
+- **DO** use `fast-check` property tests (`*.test.ts` next to the code) for pure
+  logic with invariants — pagination slices, URL round-trips, ordering/dedupe,
+  keyed stores modelled against a `Map`. Keep example tests for the contract and
+  for cases a shrinking counterexample uncovered
 - **DO** import app-internal modules through `#lib/...` (SvelteKit 3 dropped the `$lib` alias) and keep the explicit extension (`#lib/api.ts`) — TypeScript does not infer extensions for package-import patterns
 - **DO** read public build-time config from `import.meta.env.PUBLIC_*` (defined in `web/vite.config.ts`); `$env/static/public` no longer exists in SvelteKit 3
 - **DO** check `just check-webhooks` after deploying to verify webhook registration
@@ -134,6 +139,9 @@ just generate-bindings
 - **DON'T** call Strava APIs directly in request handlers — use Cloud Tasks to respect [rate limits](https://developers.strava.com/docs/rate-limits/)
 - **DON'T** add dependencies that require OpenSSL — backend runs on distroless, use `rustls` instead
 - **DON'T** use raw JavaScript — use type-safe TypeScript for all frontend code
+- **DON'T** put business logic in `.svelte` components that cannot be tested —
+  extract it into a pure module in `web/src/lib/` (e.g. `preserves.ts`) and test
+  that
 - **DON'T** add frontend tests outside the three existing layers (vitest units, build contract, Playwright smoke) without updating `docs/specs/web-major-upgrades.md`
 - **DON'T** add `chrono` (or a second date/time library) — use `jiff`
 - **DON'T** use the `Host` header to construct URLs — use explicit `API_URL` env var instead

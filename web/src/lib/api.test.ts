@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
+import * as fc from 'fast-check';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	API_BASE_URL,
@@ -144,5 +145,37 @@ describe('endpoint helpers', () => {
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(url).toBe('http://api.test/auth/logout');
 		expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+	});
+});
+
+/**
+ * Preserve names come from Strava activity data, so they can contain anything:
+ * spaces, `&`, `#`, `%`, `+`, emoji, CJK. The generated request must always
+ * round-trip through URL parsing, otherwise a name silently selects the wrong
+ * preserve (or drops the `page` parameter).
+ */
+describe('fetchActivities URL building (property-based)', () => {
+	it('round-trips arbitrary preserve names and page numbers', async () => {
+		await fc.assert(
+			fc.asyncProperty(
+				fc.string({ minLength: 1 }),
+				fc.integer({ min: 0, max: 10_000 }),
+				async (preserve, page) => {
+					fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({ activities: [] })));
+
+					await fetchActivities(preserve, page);
+
+					// Shrinking re-runs the predicate, so the call list grows: always
+					// inspect the request this run just made.
+					const requested = new URL(fetchMock.mock.calls.at(-1)![0]);
+
+					expect(requested.origin).toBe('http://api.test');
+					expect(requested.pathname).toBe('/api/activities');
+					expect(requested.searchParams.get('preserve')).toBe(preserve);
+					expect(requested.searchParams.get('page')).toBe(String(page));
+					expect(requested.searchParams.has('next_cursor')).toBe(false);
+				}
+			)
+		);
 	});
 });

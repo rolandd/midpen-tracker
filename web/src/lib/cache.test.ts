@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright 2026 Roland Dreier <roland@rolandd.dev>
 
+import * as fc from 'fast-check';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { activityCache } from './cache.svelte';
 import type { ActivitySummary } from './generated';
@@ -66,5 +67,107 @@ describe('activityCache', () => {
 		activityCache.clear();
 
 		expect(activityCache.get('A')).toBeUndefined();
+	});
+});
+
+/**
+ * Model-based test: `activityCache` is a small keyed store, so the strongest
+ * check is that it agrees with a plain `Map` model for arbitrary operation
+ * sequences — including reads, re-sets, appends and clears.
+ */
+type Op =
+	| { kind: 'read'; preserve: string }
+	| { kind: 'clear' }
+	| {
+			kind: 'write';
+			preserve: string;
+			ids: number[];
+			total: number;
+			page: number;
+			append: boolean;
+	  };
+
+type Entry = { ids: number[]; total: number; page: number };
+
+const preserveArb = fc.constantFrom('Rancho San Antonio', 'Windy Hill', 'Teague Hill');
+
+const writeArb: fc.Arbitrary<Op> = fc.record({
+	kind: fc.constant('write' as const),
+	preserve: preserveArb,
+	ids: fc.array(fc.integer({ min: 1, max: 40 }), { maxLength: 5 }),
+	total: fc.integer({ min: 0, max: 100 }),
+	page: fc.integer({ min: 1, max: 10 }),
+	append: fc.boolean()
+});
+
+const opArb: fc.Arbitrary<Op> = fc.oneof(
+	writeArb,
+	fc.record({ kind: fc.constant('read' as const), preserve: preserveArb }),
+	fc.record({ kind: fc.constant('clear' as const) })
+);
+
+function expectMatchesModel(model: Map<string, Entry>) {
+	for (const [preserve, entry] of model) {
+		const cached = activityCache.get(preserve);
+		expect(cached, preserve).toBeDefined();
+		expect(cached!.activities.map((a) => a.id)).toEqual(entry.ids);
+		expect(cached!.total).toBe(entry.total);
+		expect(cached!.page).toBe(entry.page);
+		expect(cached!.timestamp).toBeGreaterThan(0);
+	}
+}
+
+describe('activityCache (model-based)', () => {
+	it('behaves like a Map of activity pages for arbitrary operations', () => {
+		fc.assert(
+			fc.property(fc.array(opArb, { maxLength: 20 }), (ops) => {
+				activityCache.clear();
+				const model = new Map<string, Entry>();
+
+				for (const op of ops) {
+					if (op.kind === 'clear') {
+						activityCache.clear();
+						model.clear();
+						continue;
+					}
+
+					if (op.kind === 'read') {
+						const cached = activityCache.get(op.preserve);
+						const expected = model.get(op.preserve);
+						if (expected === undefined) {
+							expect(cached).toBeUndefined();
+						} else {
+							expect(cached?.activities.map((a) => a.id)).toEqual(expected.ids);
+						}
+						continue;
+					}
+
+					const previous = model.get(op.preserve);
+					const entry: Entry = {
+						ids: [...(op.append && previous ? previous.ids : []), ...op.ids],
+						total: op.total,
+						page: op.page
+					};
+
+					// Appending must not rewrite the array handed out earlier.
+					const before = previous ? [...previous.ids] : undefined;
+
+					if (op.append) {
+						activityCache.append(op.preserve, op.ids.map(activity), op.total, op.page);
+					} else {
+						activityCache.set(op.preserve, op.ids.map(activity), op.total, op.page);
+					}
+
+					model.set(op.preserve, entry);
+					if (before) expect(previous!.ids).toEqual(before);
+
+					expectMatchesModel(model);
+				}
+
+				// Clearing really empties the store.
+				activityCache.clear();
+				expect(activityCache.get('Rancho San Antonio')).toBeUndefined();
+			})
+		);
 	});
 });

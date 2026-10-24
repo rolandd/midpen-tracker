@@ -104,6 +104,8 @@ Layered, each layer catching a distinct regression class:
 | Lint                  | `pnpm lint`           | eslint 10 migration issues                     |
 | Format                | `pnpm check-format`   | prettier-plugin-svelte 4 output changes        |
 | Unit (vitest)         | `pnpm test:unit`      | `api.ts` contract, demo mode, cache/mock logic |
+| Property (fast-check) | `pnpm test:unit`      | invariants of pure helpers (`preserves.ts`,    |
+|                       |                       | cache model, URL round-trips, pagination)      |
 | Build contract        | `pnpm test:build`     | adapter/kit output layout, precompression,      |
 |                       |                       | Cloudflare `_headers`/`_routes.json` emission   |
 | Browser smoke (e2e)   | `pnpm test:e2e`       | hydration errors, `$app/state` migration,      |
@@ -142,6 +144,18 @@ frontend gates are the six layers above.
   block was replaced by a comment explaining the SPA contract and why enabling
   prerendering needs a Pages/CSP check; `pnpm audit`/`pnpm outdated` re-run;
   docs updated (`#lib`, `vite.config.ts` config, test commands).
+
+### Follow-up landed: property-based tests
+
+Once the safety net existed, the next useful increment was fast-check property
+tests for the pure logic that the example tests could only sample — pagination
+partitions, `encodeURIComponent` round-trips for arbitrary preserve names, and
+the keyed activity cache against a `Map` model. That also motivated extracting
+the dashboard's year/all-time filtering out of `routes/dashboard/+page.svelte`
+into `web/src/lib/preserves.ts`, where it can be tested at all; the extraction
+fixed one inconsistency on the way (a year bucket containing an explicit `0`
+was rendered even with "show unvisited" off). See `CONTRIBUTING.md` for the
+current property-test inventory.
 
 ## Risks
 
