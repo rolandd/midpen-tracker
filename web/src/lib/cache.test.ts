@@ -149,8 +149,10 @@ describe('activityCache (model-based)', () => {
 						page: op.page
 					};
 
-					// Appending must not rewrite the array handed out earlier.
-					const before = previous ? [...previous.ids] : undefined;
+					// Appending must not rewrite an array handed out earlier by
+					// `get()` — snapshot the cached array itself, not the model.
+					const handedOut = activityCache.get(op.preserve)?.activities;
+					const before = handedOut?.map((a) => a.id);
 
 					if (op.append) {
 						activityCache.append(op.preserve, op.ids.map(activity), op.total, op.page);
@@ -159,7 +161,7 @@ describe('activityCache (model-based)', () => {
 					}
 
 					model.set(op.preserve, entry);
-					if (before) expect(previous!.ids).toEqual(before);
+					if (handedOut && before) expect(handedOut.map((a) => a.id)).toEqual(before);
 
 					expectMatchesModel(model);
 				}
