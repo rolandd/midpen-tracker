@@ -47,6 +47,22 @@ const preserveNames = [
 	"Devil's Slide"
 ];
 
+// Deterministic PRNG (mulberry32) so demo fixtures are stable across runs.
+// Bare Math.random() made the fixture counts non-deterministic, so tests that
+// need e.g. a preserve with more than 50 activities could flake.
+function mulberry32(seed: number): () => number {
+	let a = seed;
+	return () => {
+		a |= 0;
+		a = (a + 0x6d2b79f5) | 0;
+		let t = Math.imul(a ^ (a >>> 15), 1 | a);
+		t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+const rand = mulberry32(0x20260101);
+
 // Generate mock activities for a preserve
 function generateMockActivities(
 	preserveName: string,
@@ -57,13 +73,13 @@ function generateMockActivities(
 
 	for (let i = 0; i < count; i++) {
 		const date = new Date();
-		date.setDate(date.getDate() - Math.floor(Math.random() * 365 * 2)); // Random date within 2 years
+		date.setDate(date.getDate() - Math.floor(rand() * 365 * 2)); // Date within 2 years
 
 		activities.push({
-			id: 1000000000 + Math.floor(Math.random() * 999999999),
+			id: 1000000000 + Math.floor(rand() * 999999999),
 			date: date.toISOString(),
-			sport_type: sportTypes[Math.floor(Math.random() * sportTypes.length)],
-			name: `${preserveName} ${sportTypes[Math.floor(Math.random() * sportTypes.length)]}`
+			sport_type: sportTypes[Math.floor(rand() * sportTypes.length)],
+			name: `${preserveName} ${sportTypes[Math.floor(rand() * sportTypes.length)]}`
 		});
 	}
 
@@ -76,7 +92,9 @@ function generatePreserves() {
 		// Give earlier preserves more visits for realistic distribution
 		// Increase max visits to allow testing pagination (e.g., > 50)
 		const maxVisits = Math.max(1, 120 - idx * 5);
-		const count = idx < 15 ? Math.floor(Math.random() * maxVisits) + 1 : 0;
+		// The busiest preserve always exceeds the pagination page size so the
+		// pagination contract is always exercisable; the rest keep a varied spread.
+		const count = idx === 0 ? maxVisits : idx < 15 ? Math.floor(rand() * maxVisits) + 1 : 0;
 		// Keep up to 200 activities in mock data storage
 		return {
 			name,
@@ -94,7 +112,7 @@ function generatePreservesByYear(): Record<string, Record<string, number>> {
 	for (let year = currentYear; year >= currentYear - 2; year--) {
 		years[year.toString()] = {};
 		preserveNames.slice(0, 15).forEach((name, idx) => {
-			const visits = Math.floor(Math.random() * (10 - idx / 2)) + (idx < 8 ? 1 : 0);
+			const visits = Math.floor(rand() * (10 - idx / 2)) + (idx < 8 ? 1 : 0);
 			if (visits > 0) {
 				years[year.toString()][name] = visits;
 			}

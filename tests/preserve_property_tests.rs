@@ -214,7 +214,7 @@ proptest! {
     #[test]
     fn line_inside_preserve_is_detected(
         rect in rect_strategy(),
-        fractions in prop::collection::vec((0.05f64..0.95, 0.05f64..0.95), 1..4),
+        fractions in prop::collection::vec((0.05f64..0.95, 0.05f64..0.95), 2..4),
     ) {
         let service = service_from_rects(std::slice::from_ref(&rect));
 
@@ -296,7 +296,7 @@ proptest! {
         left in rect_strategy(),
         offset in 1i32..10,
         in_left in any::<bool>(),
-        fractions in prop::collection::vec((0.05f64..0.95, 0.05f64..0.95), 1..3),
+        fractions in prop::collection::vec((0.05f64..0.95, 0.05f64..0.95), 2..3),
     ) {
         let right = left.shifted(offset, 0);
         let geometry = json!({

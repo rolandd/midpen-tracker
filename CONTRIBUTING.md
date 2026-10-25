@@ -117,10 +117,10 @@ infra/                # Terraform configuration
 cargo test                              # Unit tests
 cargo test --test preserve_property_tests  # Geometry property tests (proptest)
 ./scripts/test-with-emulator.sh         # Integration tests (requires Firestore emulator)
-cd web && pnpm check && pnpm lint       # Frontend types + lint
-cd web && pnpm test:unit                # Frontend unit tests (vitest)
-cd web && pnpm test:build               # Build output contract (run pnpm build first)
-cd web && pnpm test:e2e                 # Browser smoke tests (Playwright, demo-mode build)
+(cd web && pnpm check && pnpm lint)         # Frontend types + lint
+(cd web && pnpm test:unit)                  # Frontend unit tests (vitest)
+(cd web && pnpm build && pnpm test:build)   # Build output contract
+(cd web && pnpm test:e2e)                   # Browser smoke tests (Playwright, demo-mode build)
 ```
 
 > **Note**: Many tests in `tests/` require the Firestore emulator. They will fail without it.
