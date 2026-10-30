@@ -246,8 +246,25 @@
 								onclick={() => togglePreserve(preserve.name)}
 							>
 								<div class="preserve-header">
-									<span class="preserve-name">{preserve.name}</span>
-									<span class="preserve-count">{preserve.count}</span>
+									<div class="preserve-info">
+										<span class="preserve-name">{preserve.name}</span>
+										<span class="preserve-count">{preserve.count}</span>
+									</div>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="20"
+										height="20"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="chevron-icon"
+										aria-hidden="true"
+									>
+										<path d="m6 9 6 6 6-6" />
+									</svg>
 								</div>
 							</button>
 
@@ -561,6 +578,12 @@
 		align-items: center;
 	}
 
+	.preserve-info {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+
 	.preserve-name {
 		font-weight: 500;
 	}
@@ -571,6 +594,15 @@
 		border-radius: 999px;
 		font-size: 0.875rem;
 		font-weight: 600;
+	}
+
+	.chevron-icon {
+		color: var(--color-text-muted);
+		transition: transform 0.2s ease;
+	}
+
+	.preserve-header-btn[aria-expanded='true'] .chevron-icon {
+		transform: rotate(180deg);
 	}
 
 	/* Activity styles moved to ActivityList.svelte */

@@ -29,3 +29,7 @@
 2. Rely on `svelte:window` for global `Escape` handling.
 3. Explicitly suppress `a11y_click_events_have_key_events` on the backdrop if the keyboard interaction is handled globally, or add a dummy handler if preferred.
 4. Always implement a focus trap using `bind:this` and `keydown` interception for Tab/Shift+Tab.
+
+## 2026-10-30 - Accordion Affordance
+**Learning:** Users might not realize that a list item header is clickable unless there is a clear visual cue. While `aria-expanded` is necessary for screen readers, visual users need an icon like a chevron to indicate an accordion pattern.
+**Action:** Always include a visual indicator (like an animated chevron) for expandable elements, ensuring it has `aria-hidden="true"` to prevent redundant screen reader announcements.
